@@ -700,43 +700,36 @@ public sealed class RegexCaptureEngineTests()
             @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)");
         byte[] haystack = "xx struct Foo yy"u8.ToArray();
         int[] captureSlots = new int[automaton.CaptureSlotCount];
-        RegexCaptureRunner runner = automaton.RentCaptureRunner();
-        try
+        using RegexCaptureRunner runner = automaton.RentCaptureRunner();
+        for (int index = 0; index < 32; index++)
         {
-            for (int index = 0; index < 32; index++)
+            Assert.True(runner.TryReplayCaptures(haystack, 3, 13, captureSlots));
+        }
+
+        const int ReplayCount = 1_024;
+        const int MeasurementSampleCount = 4;
+        _ = GC.GetAllocatedBytesForCurrentThread();
+
+        bool replayed = true;
+        int checksum = 0;
+        long minimumAllocated = long.MaxValue;
+        for (int sample = 0; sample < MeasurementSampleCount; sample++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int index = 0; index < ReplayCount; index++)
             {
-                Assert.True(runner.TryReplayCaptures(haystack, 3, 13, captureSlots));
+                replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
+                checksum += captureSlots[5];
             }
 
-            const int ReplayCount = 1_024;
-            const int MeasurementSampleCount = 4;
-            _ = GC.GetAllocatedBytesForCurrentThread();
-
-            bool replayed = true;
-            int checksum = 0;
-            long minimumAllocated = long.MaxValue;
-            for (int sample = 0; sample < MeasurementSampleCount; sample++)
-            {
-                long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int index = 0; index < ReplayCount; index++)
-                {
-                    replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
-                    checksum += captureSlots[5];
-                }
-
-                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-                minimumAllocated = Math.Min(minimumAllocated, allocated);
-            }
-
-            Assert.True(replayed);
-            Assert.Equal(13 * ReplayCount * MeasurementSampleCount, checksum);
-            Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
-            Assert.Equal(0, minimumAllocated);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            minimumAllocated = Math.Min(minimumAllocated, allocated);
         }
-        finally
-        {
-            runner.Dispose();
-        }
+
+        Assert.True(replayed);
+        Assert.Equal(13 * ReplayCount * MeasurementSampleCount, checksum);
+        Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
+        Assert.Equal(0, minimumAllocated);
     }
 
     /// <summary>
@@ -746,8 +739,8 @@ public sealed class RegexCaptureEngineTests()
     public void CopiedCaptureRunnerLeaseReturnsPooledStateOnce()
     {
         RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
-        RegexCaptureRunner runner = automaton.RentCaptureRunner();
-        RegexCaptureRunner copy = runner;
+        using RegexCaptureRunner runner = automaton.RentCaptureRunner();
+        using RegexCaptureRunner copy = runner;
         long leaseVersion = runner.LeaseVersion;
 
         Assert.True(runner.IsInitialized);
@@ -761,17 +754,10 @@ public sealed class RegexCaptureEngineTests()
             copy.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
         copy.Dispose();
 
-        RegexCaptureRunner reused = automaton.RentCaptureRunner();
-        try
-        {
-            Assert.True(reused.IsInitialized);
-            Assert.True(reused.LeaseVersion > leaseVersion);
-            Assert.True(reused.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
-        }
-        finally
-        {
-            reused.Dispose();
-        }
+        using RegexCaptureRunner reused = automaton.RentCaptureRunner();
+        Assert.True(reused.IsInitialized);
+        Assert.True(reused.LeaseVersion > leaseVersion);
+        Assert.True(reused.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
     }
 
     /// <summary>
@@ -781,19 +767,11 @@ public sealed class RegexCaptureEngineTests()
     public void ConcurrentCaptureRunnerLeasesUseIndependentState()
     {
         RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
-        RegexCaptureRunner first = automaton.RentCaptureRunner();
-        RegexCaptureRunner second = automaton.RentCaptureRunner();
-        try
-        {
-            Assert.False(first.SharesPooledStateWith(in second));
-            Assert.True(first.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
-            Assert.True(second.TryReplayCaptures("aab"u8, 0, 3, new int[6]));
-        }
-        finally
-        {
-            first.Dispose();
-            second.Dispose();
-        }
+        using RegexCaptureRunner first = automaton.RentCaptureRunner();
+        using RegexCaptureRunner second = automaton.RentCaptureRunner();
+        Assert.False(first.SharesPooledStateWith(in second));
+        Assert.True(first.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
+        Assert.True(second.TryReplayCaptures("aab"u8, 0, 3, new int[6]));
     }
 
     /// <summary>
@@ -803,24 +781,16 @@ public sealed class RegexCaptureEngineTests()
     public async Task ConcurrentCaptureRunnerLeasesReplaySimultaneouslyAsync()
     {
         RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
-        RegexCaptureRunner first = automaton.RentCaptureRunner();
-        RegexCaptureRunner second = automaton.RentCaptureRunner();
+        using RegexCaptureRunner first = automaton.RentCaptureRunner();
+        using RegexCaptureRunner second = automaton.RentCaptureRunner();
         using var barrier = new Barrier(participantCount: 2);
-        try
-        {
-            Task<int[]> firstTask = Task.Run(() => Replay(first, "aaab"u8.ToArray()));
-            Task<int[]> secondTask = Task.Run(() => Replay(second, "aab"u8.ToArray()));
+        Task<int[]> firstTask = Task.Run(() => Replay(first, "aaab"u8.ToArray()));
+        Task<int[]> secondTask = Task.Run(() => Replay(second, "aab"u8.ToArray()));
 
-            int[][] results = await Task.WhenAll(firstTask, secondTask).ConfigureAwait(true);
+        int[][] results = await Task.WhenAll(firstTask, secondTask).ConfigureAwait(true);
 
-            Assert.Equal([0, 4, 0, 3, 3, 4], results[0]);
-            Assert.Equal([0, 3, 0, 2, 2, 3], results[1]);
-        }
-        finally
-        {
-            first.Dispose();
-            second.Dispose();
-        }
+        Assert.Equal([0, 4, 0, 3, 3, 4], results[0]);
+        Assert.Equal([0, 3, 0, 2, 2, 3], results[1]);
 
         int[] Replay(RegexCaptureRunner runner, byte[] haystack)
         {

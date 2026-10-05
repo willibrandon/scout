@@ -16,6 +16,7 @@ public static class CliByteEscape
     public static string Escape(ReadOnlySpan<byte> bytes)
     {
         var builder = new StringBuilder(bytes.Length);
+        Span<char> scalar = stackalloc char[2];
         int index = 0;
         while (index < bytes.Length)
         {
@@ -30,7 +31,7 @@ public static class CliByteEscape
             OperationStatus status = Rune.DecodeFromUtf8(bytes[index..], out Rune rune, out int consumed);
             if (status == OperationStatus.Done && consumed > 1)
             {
-                builder.Append(rune.ToString());
+                builder.Append(scalar[..rune.EncodeToUtf16(scalar)]);
                 index += consumed;
                 continue;
             }

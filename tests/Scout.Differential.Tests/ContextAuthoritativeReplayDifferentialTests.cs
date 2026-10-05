@@ -16,7 +16,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
         directory.CreateFile(
             "haystack.txt",
             "before\nab12 ------- ab34 ------- ab56\nafter\nmiss\nzz\ntail\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
         string[] expressions =
             ["(?<word>ab)(?<digits>[0-9]+)", "(?<zed>z+)"];
         DifferentialCase[] cases =
@@ -80,8 +80,8 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
         directory.CreateBytes(
             "nul.bin",
             "before\0ab12 ab34\0after\0"u8.ToArray());
-        string crlf = Path.Combine(directory.RootPath, "crlf.txt");
-        string nul = Path.Combine(directory.RootPath, "nul.bin");
+        string crlf = Path.Join(directory.RootPath, "crlf.txt");
+        string nul = Path.Join(directory.RootPath, "nul.bin");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact(
             "--crlf",
@@ -112,7 +112,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
         directory.CreateBytes(
             "unterminated.txt",
             "a\nb"u8.ToArray());
-        string unterminated = Path.Combine(
+        string unterminated = Path.Join(
             directory.RootPath,
             "unterminated.txt");
         DifferentialCase[] cases =
@@ -145,7 +145,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
         directory.CreateFile(
             "haystack.txt",
             "before\n   ab12 ---- ab34 ---- ab56\nafter\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
         const string Pattern = "ab[0-9]+";
         DifferentialCase[] cases =
         [

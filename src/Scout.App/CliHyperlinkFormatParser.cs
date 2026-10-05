@@ -13,10 +13,7 @@ internal static class CliHyperlinkFormatParser
         var text = new StringBuilder();
         var firstText = new StringBuilder();
         var variable = new StringBuilder();
-        bool hasVariable = false;
-        bool hasPath = false;
-        bool hasLine = false;
-        bool hasColumn = false;
+        HyperlinkVariables variables = HyperlinkVariables.None;
         bool beforeFirstVariable = true;
         int state = 0;
 
@@ -64,7 +61,7 @@ internal static class CliHyperlinkFormatParser
                         variable.Clear();
                         if (c == '}')
                         {
-                            if (!AppendVariable(text, variable.ToString(), ref hasVariable, ref hasPath, ref hasLine, ref hasColumn, out error))
+                            if (!AppendVariable(text, variable.ToString(), ref variables, out error))
                             {
                                 normalized = string.Empty;
                                 return false;
@@ -85,7 +82,7 @@ internal static class CliHyperlinkFormatParser
                 case 3:
                     if (c == '}')
                     {
-                        if (!AppendVariable(text, variable.ToString(), ref hasVariable, ref hasPath, ref hasLine, ref hasColumn, out error))
+                        if (!AppendVariable(text, variable.ToString(), ref variables, out error))
                         {
                             normalized = string.Empty;
                             return false;
@@ -124,21 +121,21 @@ internal static class CliHyperlinkFormatParser
             return true;
         }
 
-        if (!hasVariable)
+        if (variables == HyperlinkVariables.None)
         {
             normalized = string.Empty;
             error = $"at least a {{path}} variable is required in a hyperlink format, or otherwise use a valid alias: {AliasNames}";
             return false;
         }
 
-        if (!hasPath)
+        if ((variables & HyperlinkVariables.Path) == 0)
         {
             normalized = string.Empty;
             error = "the {path} variable is required in a hyperlink format";
             return false;
         }
 
-        if (hasColumn && !hasLine)
+        if ((variables & HyperlinkVariables.Column) != 0 && (variables & HyperlinkVariables.Line) == 0)
         {
             normalized = string.Empty;
             error = "the hyperlink format contains a {column} variable, but no {line} variable is present";
@@ -169,10 +166,7 @@ internal static class CliHyperlinkFormatParser
     private static bool AppendVariable(
         StringBuilder text,
         string name,
-        ref bool hasVariable,
-        ref bool hasPath,
-        ref bool hasLine,
-        ref bool hasColumn,
+        ref HyperlinkVariables variables,
         out string? error)
     {
         switch (name)
@@ -184,15 +178,15 @@ internal static class CliHyperlinkFormatParser
                 break;
 
             case "path":
-                hasPath = true;
+                variables |= HyperlinkVariables.Path;
                 break;
 
             case "line":
-                hasLine = true;
+                variables |= HyperlinkVariables.Line;
                 break;
 
             case "column":
-                hasColumn = true;
+                variables |= HyperlinkVariables.Column;
                 break;
 
             default:
@@ -200,7 +194,7 @@ internal static class CliHyperlinkFormatParser
                 return false;
         }
 
-        hasVariable = true;
+        variables |= HyperlinkVariables.Any;
         text.Append('{');
         text.Append(name);
         text.Append('}');
@@ -219,10 +213,7 @@ internal static class CliHyperlinkFormatParser
         for (int index = 0; index < colon; index++)
         {
             char c = text[index];
-            if (!((c >= '0' && c <= '9') ||
-                (c >= 'A' && c <= 'Z') ||
-                (c >= 'a' && c <= 'z') ||
-                c is '+' or '-' or '.'))
+            if (!char.IsAsciiLetterOrDigit(c) && c is not ('+' or '-' or '.'))
             {
                 return false;
             }

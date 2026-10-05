@@ -86,6 +86,7 @@ public sealed class WalkParallel
                 }
                 catch (Exception exception) when (CaptureFailure(exception))
                 {
+                    Volatile.Write(ref quit, 1);
                 }
                 finally
                 {
@@ -95,6 +96,7 @@ public sealed class WalkParallel
                     }
                     catch (Exception exception) when (CaptureFailure(exception))
                     {
+                        Volatile.Write(ref quit, 1);
                     }
                     finally
                     {
@@ -109,7 +111,6 @@ public sealed class WalkParallel
 
         bool CaptureFailure(Exception exception)
         {
-            Volatile.Write(ref quit, 1);
             lock (failureLock)
             {
                 failure ??= ExceptionDispatchInfo.Capture(exception);

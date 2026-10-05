@@ -42,6 +42,7 @@ internal sealed class BackgroundWorkItem : IDisposable
         }
         catch (Exception exception) when (CaptureFailure(exception))
         {
+            return;
         }
         finally
         {

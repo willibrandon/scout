@@ -12,8 +12,8 @@ public sealed class NativeStandardInputConfigurationTests
     public void WindowsNativeBuildRunsAnonymousPipeStandardInputSmoke()
     {
         string root = FindRepositoryRoot();
-        string buildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
-        string smokeScript = File.ReadAllText(Path.Combine(root, "native", "test-standard-input-windows.ps1"));
+        string buildScript = File.ReadAllText(Path.Join(root, "native", "build-app-windows.ps1"));
+        string smokeScript = File.ReadAllText(Path.Join(root, "native", "test-standard-input-windows.ps1"));
 
         Assert.Contains("dotnet publish failed for $Rid", buildScript, StringComparison.Ordinal);
         Assert.Contains("native\\test-standard-input-windows.ps1", buildScript, StringComparison.Ordinal);
@@ -29,7 +29,7 @@ public sealed class NativeStandardInputConfigurationTests
     private static string FindRepositoryRoot()
     {
         string? path = AppContext.BaseDirectory;
-        while (path is not null && !File.Exists(Path.Combine(path, "Scout.slnx")))
+        while (path is not null && !File.Exists(Path.Join(path, "Scout.slnx")))
         {
             path = Directory.GetParent(path)?.FullName;
         }

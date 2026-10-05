@@ -12,8 +12,8 @@ public sealed class SearchPathArgumentTests
     [Fact]
     public void DirectoryDisplayPathBytesPreserveRootArgument()
     {
-        string fullRoot = Path.Combine(Path.GetTempPath(), "scout-root");
-        string fullPath = Path.Combine(fullRoot, "src", "file.txt");
+        string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
+        string fullPath = Path.Join(fullRoot, "src", "file.txt");
         var entry = new DirEntry(fullPath, 1, default, isDirectory: false, isSymbolicLink: false, isStdin: false, 0, default);
 
         byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(
@@ -32,8 +32,8 @@ public sealed class SearchPathArgumentTests
     [Fact]
     public void DefaultRootDirectoryDisplayPathBytesAreRelative()
     {
-        string fullRoot = Path.Combine(Path.GetTempPath(), "scout-root");
-        string fullPath = Path.Combine(fullRoot, "src", "file.txt");
+        string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
+        string fullPath = Path.Join(fullRoot, "src", "file.txt");
         var entry = new DirEntry(fullPath, 1, default, isDirectory: false, isSymbolicLink: false, isStdin: false, 0, default);
 
         byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(
@@ -52,8 +52,8 @@ public sealed class SearchPathArgumentTests
     [Fact]
     public void ExplicitCurrentDirectoryDisplayPathBytesKeepDotSlash()
     {
-        string fullRoot = Path.Combine(Path.GetTempPath(), "scout-root");
-        string fullPath = Path.Combine(fullRoot, "src", "file.txt");
+        string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
+        string fullPath = Path.Join(fullRoot, "src", "file.txt");
         var entry = new DirEntry(fullPath, 1, default, isDirectory: false, isSymbolicLink: false, isStdin: false, 0, default);
 
         byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(

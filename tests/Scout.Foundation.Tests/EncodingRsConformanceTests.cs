@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 public sealed class EncodingRsConformanceTests
 {
-    private static readonly string EncodingRsTestDataRoot = Path.Combine(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_data");
+    private static readonly string EncodingRsTestDataRoot = Path.Join(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_data");
 
     /// <summary>
     /// Gets the upstream decode-vector cases Scout currently supports.
@@ -77,16 +77,16 @@ public sealed class EncodingRsConformanceTests
             ("encoding-rs-0.8.35-shift-jis-in-ref", "shift_jis_in_ref.txt", "13B15AED64E9E7CB35E6A740B67413F0C285FDA944F4814D45A7619EA338FB5E"),
         ];
 
-        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(FindRepositoryRoot(), "tests", "PREREQS.lock"));
         for (int index = 0; index < vectors.Length; index++)
         {
             (string name, string fileName, string expectedSha256) = vectors[index];
-            string relativePath = Path.Combine("upstream", "encoding_rs-0.8.35", "src", "test_data", fileName).Replace('\\', '/');
+            string relativePath = Path.Join("upstream", "encoding_rs-0.8.35", "src", "test_data", fileName).Replace('\\', '/');
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("path = \"" + relativePath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
-            byte[] hash = SHA256.HashData(File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, fileName)));
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, fileName)));
             Assert.Equal(expectedSha256, Convert.ToHexString(hash));
         }
     }
@@ -101,8 +101,8 @@ public sealed class EncodingRsConformanceTests
     [MemberData(nameof(DecodeVectorCases))]
     public void DecodeMatchesEncodingRsReferenceOutput(SearchEncodingKind encodingKind, string inputFile, string expectedFile)
     {
-        byte[] input = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, inputFile));
-        byte[] expected = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, expectedFile));
+        byte[] input = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, inputFile));
+        byte[] expected = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, expectedFile));
 
         byte[] actual = SearchEncoding.Decode(input, encodingKind);
 
@@ -119,8 +119,8 @@ public sealed class EncodingRsConformanceTests
     [MemberData(nameof(DecodeVectorCases))]
     public void StreamingDecodeMatchesEncodingRsReferenceOutput(SearchEncodingKind encodingKind, string inputFile, string expectedFile)
     {
-        byte[] input = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, inputFile));
-        byte[] expected = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, expectedFile));
+        byte[] input = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, inputFile));
+        byte[] expected = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, expectedFile));
         using SegmentedReadStream stream = CreateOneByteReadStream(input);
 
         byte[] actual = SearchEncodingReader.ReadToEnd(stream, encodingKind);
@@ -133,7 +133,7 @@ public sealed class EncodingRsConformanceTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

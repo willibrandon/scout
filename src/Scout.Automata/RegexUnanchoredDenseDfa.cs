@@ -83,38 +83,11 @@ internal sealed class RegexUnanchoredDenseDfa(
             byteRepresentatives);
         int[] initialStates = [nfa.StartState];
 
-        for (byte previousContext = 0; previousContext < contextCount; previousContext++)
+        if (!HasOnlyPositiveWidthMatches(nfa, initialStates, contextCount, byteClassCount,
+            byteRepresentatives, contextRepresentatives))
         {
-            for (int byteClass = 0; byteClass < byteClassCount; byteClass++)
-            {
-                ResolveContextualClosure(
-                    nfa,
-                    initialStates,
-                    previousContext,
-                    byteRepresentatives[byteClass],
-                    contextRepresentatives,
-                    out _,
-                    out bool accepting);
-                if (accepting)
-                {
-                    dfa = null;
-                    return false;
-                }
-            }
-
-            ResolveContextualClosure(
-                nfa,
-                initialStates,
-                previousContext,
-                EndOfInput,
-                contextRepresentatives,
-                out _,
-                out bool acceptsAtEnd);
-            if (acceptsAtEnd)
-            {
-                dfa = null;
-                return false;
-            }
+            dfa = null;
+            return false;
         }
 
         var stateSets = new List<int[]>();
@@ -202,52 +175,7 @@ internal sealed class RegexUnanchoredDenseDfa(
             transitionRows[stateIndex] = transitions;
         }
 
-        int[] remappedStates = new int[stateSets.Count];
-        remappedStates[deadState] = 0;
-        int nextState = 1;
-        for (int stateIndex = 0; stateIndex < stateSets.Count; stateIndex++)
-        {
-            if (acceptingStates[stateIndex])
-            {
-                remappedStates[stateIndex] = nextState++;
-            }
-        }
-
-        int maximumSpecialState = checked((nextState - 1) * AlphabetSize);
-        for (int stateIndex = 0; stateIndex < stateSets.Count; stateIndex++)
-        {
-            if (stateIndex != deadState && !acceptingStates[stateIndex])
-            {
-                remappedStates[stateIndex] = nextState++;
-            }
-        }
-
-        System.Diagnostics.Debug.Assert(nextState == stateSets.Count);
-        int[] flattenedTransitions = GC.AllocateUninitializedArray<int>(
-            checked(stateSets.Count * AlphabetSize));
-        for (int stateIndex = 0; stateIndex < stateSets.Count; stateIndex++)
-        {
-            int targetOffset = checked(remappedStates[stateIndex] * AlphabetSize);
-            int[] row = transitionRows[stateIndex]!;
-            for (int value = 0; value < AlphabetSize; value++)
-            {
-                flattenedTransitions[targetOffset + value] = checked(
-                    remappedStates[row[value]] * AlphabetSize);
-            }
-        }
-
-        int[] remappedStartStates = new int[contextCount];
-        for (int context = 0; context < contextCount; context++)
-        {
-            remappedStartStates[context] = checked(
-                remappedStates[startStateIndexes[context]] * AlphabetSize);
-        }
-
-        dfa = new RegexUnanchoredDenseDfa(
-            flattenedTransitions,
-            remappedStartStates,
-            byteContexts,
-            maximumSpecialState);
+        dfa = CreateDfa(transitionRows, acceptingStates, startStateIndexes, byteContexts, deadState);
         return true;
 
         int Intern(int[] nfaStates, byte previousContext, bool accepting)
@@ -286,6 +214,110 @@ internal sealed class RegexUnanchoredDenseDfa(
             transitionRows.Add(null);
             return index;
         }
+    }
+
+    private static bool HasOnlyPositiveWidthMatches(
+        RegexNfa nfa,
+        int[] initialStates,
+        int contextCount,
+        int byteClassCount,
+        byte[] byteRepresentatives,
+        byte[] contextRepresentatives)
+    {
+        for (byte previousContext = 0; previousContext < contextCount; previousContext++)
+        {
+            for (int byteClass = 0; byteClass < byteClassCount; byteClass++)
+            {
+                ResolveContextualClosure(
+                    nfa,
+                    initialStates,
+                    previousContext,
+                    byteRepresentatives[byteClass],
+                    contextRepresentatives,
+                    out _,
+                    out bool accepting);
+                if (accepting)
+                {
+                    return false;
+                }
+            }
+
+            ResolveContextualClosure(
+                nfa,
+                initialStates,
+                previousContext,
+                EndOfInput,
+                contextRepresentatives,
+                out _,
+                out bool acceptsAtEnd);
+            if (acceptsAtEnd)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static RegexUnanchoredDenseDfa CreateDfa(
+        List<int[]?> transitionRows,
+        List<bool> acceptingStates,
+        int[] startStateIndexes,
+        byte[] byteContexts,
+        int deadState)
+    {
+        int[] remappedStates = BuildRemappedStateIndexes(acceptingStates, deadState, out int maximumSpecialState);
+        int[] flattenedTransitions = GC.AllocateUninitializedArray<int>(
+            checked(transitionRows.Count * AlphabetSize));
+        for (int stateIndex = 0; stateIndex < transitionRows.Count; stateIndex++)
+        {
+            int targetOffset = checked(remappedStates[stateIndex] * AlphabetSize);
+            int[] row = transitionRows[stateIndex]!;
+            for (int value = 0; value < AlphabetSize; value++)
+            {
+                flattenedTransitions[targetOffset + value] = checked(
+                    remappedStates[row[value]] * AlphabetSize);
+            }
+        }
+
+        int[] remappedStartStates = new int[startStateIndexes.Length];
+        for (int context = 0; context < startStateIndexes.Length; context++)
+        {
+            remappedStartStates[context] = checked(
+                remappedStates[startStateIndexes[context]] * AlphabetSize);
+        }
+
+        return new RegexUnanchoredDenseDfa(
+            flattenedTransitions, remappedStartStates, byteContexts, maximumSpecialState);
+    }
+
+    private static int[] BuildRemappedStateIndexes(
+        List<bool> acceptingStates,
+        int deadState,
+        out int maximumSpecialState)
+    {
+        int[] remappedStates = new int[acceptingStates.Count];
+        remappedStates[deadState] = 0;
+        int nextState = 1;
+        for (int stateIndex = 0; stateIndex < acceptingStates.Count; stateIndex++)
+        {
+            if (acceptingStates[stateIndex])
+            {
+                remappedStates[stateIndex] = nextState++;
+            }
+        }
+
+        maximumSpecialState = checked((nextState - 1) * AlphabetSize);
+        for (int stateIndex = 0; stateIndex < acceptingStates.Count; stateIndex++)
+        {
+            if (stateIndex != deadState && !acceptingStates[stateIndex])
+            {
+                remappedStates[stateIndex] = nextState++;
+            }
+        }
+
+        System.Diagnostics.Debug.Assert(nextState == acceptingStates.Count);
+        return remappedStates;
     }
 
     private static int BuildPreviousContexts(

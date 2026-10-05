@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -152,18 +153,10 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        foreach (AttributeArgumentSyntax argument in attribute.ArgumentList.Arguments)
-        {
-            string value = argument.Expression.ToString();
-            if (value.Contains("Quarantine", StringComparison.Ordinal) ||
+        return attribute.ArgumentList.Arguments.Select(static argument => argument.Expression.ToString())
+            .Any(static value => value.Contains("Quarantine", StringComparison.Ordinal) ||
                 value.Contains("Skipped", StringComparison.Ordinal) ||
-                value.Contains("Ignored", StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+                value.Contains("Ignored", StringComparison.Ordinal));
     }
 
     private static bool IsAssertExpression(ExpressionSyntax expression)

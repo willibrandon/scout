@@ -15,14 +15,14 @@ internal sealed class RgTestDirectory : IDisposable
 
     public static RgTestDirectory Create(string name)
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-rgtest-" + name + "-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-rgtest-" + name + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return new RgTestDirectory(path);
     }
 
     public RgTestDirectory Clone(string suffix)
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-rgtest-" + suffix + "-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-rgtest-" + suffix + "-" + Guid.NewGuid().ToString("N"));
         CopyDirectory(RootPath, path, RootPath, path);
         return new RgTestDirectory(path);
     }
@@ -34,12 +34,12 @@ internal sealed class RgTestDirectory : IDisposable
 
     public void SetLastAccessTimeUtc(string relativePath, DateTime lastAccessTimeUtc)
     {
-        File.SetLastAccessTimeUtc(Path.Combine(RootPath, relativePath), lastAccessTimeUtc);
+        File.SetLastAccessTimeUtc(Path.Join(RootPath, relativePath), lastAccessTimeUtc);
     }
 
     public void CreateBytes(string relativePath, byte[] contents)
     {
-        string path = Path.Combine(RootPath, relativePath);
+        string path = Path.Join(RootPath, relativePath);
         string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory))
         {
@@ -51,7 +51,7 @@ internal sealed class RgTestDirectory : IDisposable
 
     public void CreateSize(string relativePath, long size)
     {
-        string path = Path.Combine(RootPath, relativePath);
+        string path = Path.Join(RootPath, relativePath);
         string? directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory))
         {
@@ -64,13 +64,13 @@ internal sealed class RgTestDirectory : IDisposable
 
     public void CreateDirectory(string relativePath)
     {
-        Directory.CreateDirectory(Path.Combine(RootPath, relativePath));
+        Directory.CreateDirectory(Path.Join(RootPath, relativePath));
     }
 
     public void LinkDirectory(string sourceRelativePath, string targetRelativePath)
     {
-        string sourcePath = Path.GetFullPath(Path.Combine(RootPath, sourceRelativePath));
-        string targetPath = Path.GetFullPath(Path.Combine(RootPath, targetRelativePath));
+        string sourcePath = Path.GetFullPath(Path.Join(RootPath, sourceRelativePath));
+        string targetPath = Path.GetFullPath(Path.Join(RootPath, targetRelativePath));
         string? targetDirectory = Path.GetDirectoryName(targetPath);
         if (!string.IsNullOrEmpty(targetDirectory))
         {
@@ -82,8 +82,8 @@ internal sealed class RgTestDirectory : IDisposable
 
     public void LinkFile(string sourceRelativePath, string targetRelativePath)
     {
-        string sourcePath = Path.GetFullPath(Path.Combine(RootPath, sourceRelativePath));
-        string targetPath = Path.GetFullPath(Path.Combine(RootPath, targetRelativePath));
+        string sourcePath = Path.GetFullPath(Path.Join(RootPath, sourceRelativePath));
+        string targetPath = Path.GetFullPath(Path.Join(RootPath, targetRelativePath));
         string? targetDirectory = Path.GetDirectoryName(targetPath);
         if (!string.IsNullOrEmpty(targetDirectory))
         {
@@ -126,7 +126,7 @@ internal sealed class RgTestDirectory : IDisposable
         Directory.CreateDirectory(destinationPath);
         foreach (FileSystemInfo entry in new DirectoryInfo(sourcePath).EnumerateFileSystemInfos())
         {
-            string childDestination = Path.Combine(destinationPath, entry.Name);
+            string childDestination = Path.Join(destinationPath, entry.Name);
             if (entry.LinkTarget is string linkTarget)
             {
                 CopySymbolicLink(entry, childDestination, RewriteLinkTarget(linkTarget, sourceRootPath, destinationRootPath));
@@ -175,7 +175,7 @@ internal sealed class RgTestDirectory : IDisposable
         }
 
         string relativeTarget = Path.GetRelativePath(sourceRoot, targetPath);
-        return Path.Combine(Path.GetFullPath(destinationRootPath), relativeTarget);
+        return Path.Join(Path.GetFullPath(destinationRootPath), relativeTarget);
     }
 
     private static bool IsPathWithin(string path, string root)

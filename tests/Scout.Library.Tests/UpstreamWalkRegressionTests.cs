@@ -60,7 +60,7 @@ public sealed class UpstreamWalkRegressionTests
     public void ParentIgnoreRulesRetainEachRootsBase(string ignoreFile, bool reverse)
     {
         using var fixture = new DirectoryFixture();
-        Directory.CreateDirectory(System.IO.Path.Combine(fixture.Root, ".git"));
+        Directory.CreateDirectory(System.IO.Path.Join(fixture.Root, ".git"));
         fixture.Write(ignoreFile, "/a/ignored\n/b/ignored\n");
         fixture.Write("a/ignored");
         fixture.Write("b/ignored");
@@ -95,7 +95,7 @@ public sealed class UpstreamWalkRegressionTests
     {
         using var fixture = new DirectoryFixture();
         string existing = fixture.Write("present");
-        string missing = System.IO.Path.Combine(fixture.Root, "missing");
+        string missing = System.IO.Path.Join(fixture.Root, "missing");
         var errors = new List<WalkException>();
         WalkBuilder builder = WalkBuilder.FromPaths([missing, existing]).GitGlobal(false).ErrorHandler(error =>
         {

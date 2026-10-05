@@ -11,12 +11,49 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import tomllib
 import urllib.request
 import zipfile
 
 
+def extract_archive(archive: Path, destination: Path) -> None:
+    """Extract validation files without allowing tar paths or links outside the destination."""
+    if archive.suffix == ".zip":
+        with zipfile.ZipFile(archive) as source:
+            source.extractall(destination)
+    else:
+        with tarfile.open(archive) as source:
+            if callable(getattr(tarfile, "data_filter", None)):
+                source.extractall(destination, filter="data")
+            else:
+                extract_tar_files(source, destination)
+
+
+def extract_tar_files(source: tarfile.TarFile, destination: Path) -> None:
+    """Copy only files and directories when the system Python lacks extraction filters."""
+    root = destination.resolve()
+    for member in source:
+        target = (root / member.name).resolve()
+        if Path(member.name).is_absolute() or not target.is_relative_to(root):
+            raise ValueError(f"Tar member escapes the destination: {member.name}")
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif member.isfile():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source.extractfile(member) as contents, target.open("wb") as output:
+                shutil.copyfileobj(contents, output)
+            # Match data_filter's file permissions without restoring ownership or special bits.
+            mode = member.mode & 0o755
+            if not mode & 0o100:
+                mode &= ~0o111
+            target.chmod(mode | 0o600)
+            os.utime(target, (member.mtime, member.mtime))
+        else:
+            raise ValueError(f"Tar links and special files require extraction filters: {member.name}")
+
+
 def main() -> None:
+    import tomllib
+
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rid", required=True)
@@ -34,20 +71,7 @@ def main() -> None:
             urllib.request.urlretrieve(record["url"], archive)
         if hashlib.sha512(archive.read_bytes()).hexdigest() != record["sha512"]:
             raise RuntimeError(f"Archive checksum mismatch: {archive.name}")
-        if archive.suffix == ".zip":
-            with zipfile.ZipFile(archive) as source:
-                source.extractall(destination)
-        else:
-            with tarfile.open(archive) as source:
-                if hasattr(tarfile, "data_filter"):
-                    source.extractall(destination, filter="data")
-                else:
-                    # Older supported Python builds lack extraction filters. These archives
-                    # have already passed SHA-512 verification against the recorded source.
-                    for member in source.getmembers():
-                        if not (destination / member.name).resolve().is_relative_to(destination.resolve()):
-                            raise RuntimeError("Archive contains a path outside its destination")
-                    source.extractall(destination)
+        extract_archive(archive, destination)
         if kind == "dotnet_sdk_archive":
             # The SDK's bundled runtime is replaced by the existing validation runtime.
             shutil.rmtree(destination / "host/fxr")

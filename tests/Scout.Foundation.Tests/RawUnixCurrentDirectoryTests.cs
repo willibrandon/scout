@@ -78,7 +78,7 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

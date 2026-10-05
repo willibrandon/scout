@@ -462,14 +462,14 @@ internal sealed class IgnoreStack(
     {
         if (hasGitEntry)
         {
-            string dotGit = Path.Combine(directory, ".git");
+            string dotGit = Path.Join(directory, ".git");
             if (Directory.Exists(dotGit) || File.Exists(dotGit))
             {
                 return true;
             }
         }
 
-        return hasJjEntry && Directory.Exists(Path.Combine(directory, ".jj"));
+        return hasJjEntry && Directory.Exists(Path.Join(directory, ".jj"));
     }
 
     private static void AddFileRules(
@@ -479,7 +479,7 @@ internal sealed class IgnoreStack(
         bool ignoreCaseInsensitive,
         DiagnosticLogger logger)
     {
-        string path = Path.Combine(directory, fileName);
+        string path = Path.Join(directory, fileName);
         if (!File.Exists(path))
         {
             return;
@@ -505,10 +505,10 @@ internal sealed class IgnoreStack(
 
     private static string? ResolveGitExcludePath(string directory)
     {
-        string dotGit = Path.Combine(directory, ".git");
+        string dotGit = Path.Join(directory, ".git");
         if (Directory.Exists(dotGit))
         {
-            return Path.Combine(dotGit, "info", "exclude");
+            return Path.Join(dotGit, "info", "exclude");
         }
 
         if (!File.Exists(dotGit))
@@ -523,7 +523,7 @@ internal sealed class IgnoreStack(
         }
 
         string commonDir = ResolveCommonGitDirectory(gitDir);
-        return Path.Combine(commonDir, "info", "exclude");
+        return Path.Join(commonDir, "info", "exclude");
     }
 
     private static string? TryReadGitDirFile(string directory, string dotGit)
@@ -555,18 +555,18 @@ internal sealed class IgnoreStack(
             return Path.GetFullPath(path);
         }
 
-        string relativeToGitFile = Path.GetFullPath(Path.Combine(directory, path));
+        string relativeToGitFile = Path.GetFullPath(Path.Join(directory, path));
         if (Directory.Exists(relativeToGitFile) || File.Exists(relativeToGitFile))
         {
             return relativeToGitFile;
         }
 
-        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), path));
+        return Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), path));
     }
 
     private static string ResolveCommonGitDirectory(string gitDir)
     {
-        string commonDirPath = Path.Combine(gitDir, "commondir");
+        string commonDirPath = Path.Join(gitDir, "commondir");
         string? line;
         try
         {
@@ -590,6 +590,6 @@ internal sealed class IgnoreStack(
         string path = line.Trim();
         return Path.IsPathRooted(path)
             ? Path.GetFullPath(path)
-            : Path.GetFullPath(Path.Combine(gitDir, path));
+            : Path.GetFullPath(Path.Join(gitDir, path));
     }
 }

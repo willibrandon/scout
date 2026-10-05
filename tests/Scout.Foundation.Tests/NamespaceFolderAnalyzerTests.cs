@@ -10,6 +10,8 @@ namespace Scout;
 /// </summary>
 public sealed class NamespaceFolderAnalyzerTests
 {
+    private static readonly string[] SourceRootNames = ["src", "tests"];
+
     /// <summary>
     /// Verifies project-name namespaces are rejected at the project root.
     /// </summary>
@@ -76,12 +78,9 @@ public sealed class NamespaceFolderAnalyzerTests
                 cancellationToken: TestContext.Current.CancellationToken);
             ImmutableArray<Diagnostic> diagnostics = await AnalyzeTreeAsync(tree, projectDirectory).ConfigureAwait(true);
 
-            foreach (Diagnostic diagnostic in diagnostics)
+            foreach (Diagnostic diagnostic in diagnostics.Where(diagnostic => string.Equals(diagnostic.Id, "SCOUT0003", StringComparison.Ordinal)))
             {
-                if (string.Equals(diagnostic.Id, "SCOUT0003", StringComparison.Ordinal))
-                {
-                    mismatches.Add($"{Path.GetRelativePath(root, filePath)}: {diagnostic.GetMessage()}");
-                }
+                mismatches.Add($"{Path.GetRelativePath(root, filePath)}: {diagnostic.GetMessage()}");
             }
         }
 
@@ -90,8 +89,8 @@ public sealed class NamespaceFolderAnalyzerTests
 
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeNamespaceAsync(string @namespace)
     {
-        string projectDirectory = Path.Combine(Path.GetTempPath(), "Scout.Automata.Memmem");
-        string filePath = Path.Combine(projectDirectory, "MemchrSearch.cs");
+        string projectDirectory = Path.Join(Path.GetTempPath(), "Scout.Automata.Memmem");
+        string filePath = Path.Join(projectDirectory, "MemchrSearch.cs");
         SyntaxTree tree = CSharpSyntaxTree.ParseText(
             $$"""
             namespace {{@namespace}};
@@ -129,15 +128,12 @@ public sealed class NamespaceFolderAnalyzerTests
 
     private static IEnumerable<string> EnumerateRepositorySources(string root)
     {
-        foreach (string sourceRootName in new[] { "src", "tests" })
+        foreach (string sourceRoot in SourceRootNames.Select(name => Path.Join(root, name)))
         {
-            string sourceRoot = Path.Combine(root, sourceRootName);
-            foreach (string filePath in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+            foreach (string filePath in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+                .Where(filePath => !IsBuildArtifact(filePath)))
             {
-                if (!IsBuildArtifact(filePath))
-                {
-                    yield return filePath;
-                }
+                yield return filePath;
             }
         }
     }
@@ -175,7 +171,7 @@ public sealed class NamespaceFolderAnalyzerTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

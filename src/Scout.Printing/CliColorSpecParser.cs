@@ -433,9 +433,7 @@ public static class CliColorSpecParser
         for (int index = 2; index < value.Length; index++)
         {
             char c = value[index];
-            if ((c < '0' || c > '9') &&
-                (c < 'a' || c > 'f') &&
-                (c < 'A' || c > 'F'))
+            if (!char.IsAsciiHexDigit(c))
             {
                 return false;
             }

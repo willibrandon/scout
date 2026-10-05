@@ -271,7 +271,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchPrintsMatchingLinesForSingleFile()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nneedle one\nbeta needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -298,7 +298,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchPrintsLineNumbersForSingleFile()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nneedle one\nbeta needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -326,7 +326,7 @@ public sealed class ScoutApplicationTests
     public void CombinedShortFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nmiss\nneedle again\n");
 
         (int switchesExitCode, byte[] switchesOutput, string switchesError) = RunScout("-nH", "needle", path);
@@ -359,7 +359,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchNoLineNumberFlagDisablesEarlierLineNumberFlag()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nneedle one\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -388,7 +388,7 @@ public sealed class ScoutApplicationTests
     public void FixedStringsTreatsRegexMetacharactersLiterally()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a.c\nabc\na-c\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -417,7 +417,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexDotMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a.c\nabc\na-c\nac\n");
 
         (int exitCode, byte[] output, string error) = RunScout("a.c", path);
@@ -504,7 +504,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexRejectsUnsupportedEscapesWithoutUnhandledFailures(string pattern)
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Scout\n");
 
         (int exitCode, byte[] output, string error) = RunScout(pattern, path);
@@ -526,7 +526,7 @@ public sealed class ScoutApplicationTests
     public void MultilineRegexRejectsInvalidScalarsWithoutUnhandledFailures(string pattern)
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Scout\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-U", pattern, path);
@@ -547,7 +547,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexRejectsMalformedNestedCharacterClasses(string pattern)
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc012\n");
 
         (int exitCode, byte[] output, string error) = RunScout(pattern, path);
@@ -565,7 +565,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexClassMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "file7.txt\nfilex.txt\nfile12.txt\n");
 
         (int exitCode, byte[] output, string error) = RunScout(@"file[0-9]\.txt", path);
@@ -583,7 +583,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexNestedClassSyntaxMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc 123\n_Z-9\nspace\ttab\n");
 
         (int digitExitCode, byte[] digitOutput, string digitError) = RunScout("-o", "[[:digit:]]+", path);
@@ -626,7 +626,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexQuantifiersMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "ac\nabc\nabbc\nabbbc\nabdc\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-o", "ab+c", path);
@@ -644,7 +644,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexCountedRepetitionMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "ab\nabb\nabbb\nabbbb\nabab\nababab\nfoo12\nfoo123\nfoo1234\n");
 
         (int literalExitCode, byte[] literalOutput, string literalError) = RunScout("-n", "ab{2,3}", path);
@@ -677,7 +677,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexLazyQuantifiersMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abbb\na123b456b\nababab\n");
 
         (int oneByteExitCode, byte[] oneByteOutput, string oneByteError) = RunScout("-o", "ab+?", path);
@@ -710,7 +710,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexUngreedyFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a123b456b\nabbbbc\nab\n");
 
         (int enabledExitCode, byte[] enabledOutput, string enabledError) = RunScout("-o", "(?U)a.*b", path);
@@ -748,7 +748,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexInlineCaseFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "FOO\nfoo\nFooBar\nfooBAR\nfoobar\nbarFOO\n");
 
         (int enabledExitCode, byte[] enabledOutput, string enabledError) = RunScout("-n", "(?i)foo", path);
@@ -776,7 +776,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexInlineIgnoreWhitespaceFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfo o\nfoobar\nfoo b a r\nfo#o\nfoo#bar\nbar\nb a r\n");
 
         (int enabledExitCode, byte[] enabledOutput, string enabledError) = RunScout("-n", "(?x) f o o", path);
@@ -839,7 +839,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexScopedInlineCaseFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "FOObar\nFooBar\nfoobar\nfooBAR\nFOOBAR\n");
 
         (int scopedExitCode, byte[] scopedOutput, string scopedError) = RunScout("-n", "(?i:foo)bar", path);
@@ -867,7 +867,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexAnchorsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle start\nxx needle\nneedle\nend needle\n");
 
         (int startExitCode, byte[] startOutput, string startError) = RunScout("-n", "^needle", path);
@@ -890,7 +890,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexAlternationMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "cat\ndog\ncow\nhotdog\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "cat|dog", path);
@@ -908,7 +908,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexGroupsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foobar\nfoobaz\nfooqux\nfooquux\nabababc\nabc\nabbc\n");
 
         (int groupExitCode, byte[] groupOutput, string groupError) = RunScout("-n", "foo(ba[rz]|qux)", path);
@@ -931,7 +931,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc123\nabcXYZ\nname_1\nname-1\nspace tab\nspace\ttab\n123\n");
 
         (int digitExitCode, byte[] digitOutput, string digitError) = RunScout("-n", @"\d+", path);
@@ -969,7 +969,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexUnicodePropertyEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxy\nabc123\n");
 
         (int propertyExitCode, byte[] propertyOutput, string propertyError) = RunScout("-o", @"\pL{50}", path);
@@ -992,7 +992,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexHexEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\nA-B\nA.B\n");
 
         (int shortHexExitCode, byte[] shortHexOutput, string shortHexError) = RunScout("-n", @"\x66oo", path);
@@ -1025,7 +1025,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexWordBoundariesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoo-bar\nfoo_bar\nbarfoo\nfoo2\nxxfooxx\nbar foo baz\n");
 
         (int wordExitCode, byte[] wordOutput, string wordError) = RunScout("-n", @"\bfoo\b", path);
@@ -1073,7 +1073,7 @@ public sealed class ScoutApplicationTests
     public void DefaultRegexCombinedSyntaxMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc12\nabc123\nname_1\nabcXYZ\n");
 
         const string pattern = @"(?P<word>[[:alpha:]]+)(?:\d{2,3}?|_\w+)\b{end}";
@@ -1092,7 +1092,7 @@ public sealed class ScoutApplicationTests
     public void PatternNewlineRequiresMultilineMode()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\n");
 
         (int exitCode, byte[] output, string error) = RunScout("foo\nbar", path);
@@ -1115,7 +1115,7 @@ public sealed class ScoutApplicationTests
     public void MultilineSearchMatchesAcrossLineBoundaries()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "pre\nxxfoo\nbarzz\npost\n");
 
         (int standardExitCode, byte[] standardOutput, string standardError) = RunScout("-U", "foo\nbar", path);
@@ -1163,7 +1163,7 @@ public sealed class ScoutApplicationTests
     public void MultilineModeWithoutLiteralNewlineUsesLineSearch()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-U", "$", path);
@@ -1181,8 +1181,8 @@ public sealed class ScoutApplicationTests
     public void MultilineAbsoluteEndOnlyMatchingMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string unterminated = Path.Combine(root, "unterminated.txt");
-        string terminated = Path.Combine(root, "terminated.txt");
+        string unterminated = Path.Join(root, "unterminated.txt");
+        string terminated = Path.Join(root, "terminated.txt");
         File.WriteAllText(unterminated, "tail");
         File.WriteAllText(terminated, "tail\n");
 
@@ -1224,7 +1224,7 @@ public sealed class ScoutApplicationTests
 
         for (int inputIndex = 0; inputIndex < inputs.Length; inputIndex++)
         {
-            string path = Path.Combine(root, inputs[inputIndex].Name + ".txt");
+            string path = Path.Join(root, inputs[inputIndex].Name + ".txt");
             File.WriteAllBytes(path, inputs[inputIndex].Bytes);
             for (int patternIndex = 0; patternIndex < patterns.Length; patternIndex++)
             {
@@ -1257,9 +1257,9 @@ public sealed class ScoutApplicationTests
     public void MultilineEofSelectionIsGlobalFallback()
     {
         string root = CreateTempDirectory();
-        string earlierMatch = Path.Combine(root, "earlier.txt");
-        string finalMatch = Path.Combine(root, "final.txt");
-        string fallback = Path.Combine(root, "fallback.txt");
+        string earlierMatch = Path.Join(root, "earlier.txt");
+        string finalMatch = Path.Join(root, "final.txt");
+        string fallback = Path.Join(root, "fallback.txt");
         File.WriteAllText(earlierMatch, "x\nbar");
         File.WriteAllText(finalMatch, "bar\nx");
         File.WriteAllText(fallback, "bar");
@@ -1301,7 +1301,7 @@ public sealed class ScoutApplicationTests
     public void MultilineEofSelectionFormattingMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "head\ntail");
         string[][] argumentSets =
         [
@@ -1330,7 +1330,7 @@ public sealed class ScoutApplicationTests
     public void MultilineExecutionModeAnalysisMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "aa\n");
         string[][] argumentSets =
         [
@@ -1360,9 +1360,9 @@ public sealed class ScoutApplicationTests
     public void MultilineCrlfCarriageReturnMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string emptyCrlfPath = Path.Combine(root, "empty-crlf.txt");
-        string longCrlfPath = Path.Combine(root, "long-crlf.txt");
+        string path = Path.Join(root, "input.txt");
+        string emptyCrlfPath = Path.Join(root, "empty-crlf.txt");
+        string longCrlfPath = Path.Join(root, "long-crlf.txt");
         File.WriteAllBytes(path, "a\r\nb\r\n"u8.ToArray());
         File.WriteAllBytes(emptyCrlfPath, "\r\n"u8.ToArray());
         File.WriteAllBytes(longCrlfPath, "abcdef\r\n"u8.ToArray());
@@ -1430,7 +1430,7 @@ public sealed class ScoutApplicationTests
     public void MultilineSearchUsesMultilineAnchors()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-U", "foo\n^bar", path);
@@ -1448,7 +1448,7 @@ public sealed class ScoutApplicationTests
     public void RepeatedMultilinePatternsPreserveOrderedAlternation()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbarbaz\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -1482,7 +1482,7 @@ public sealed class ScoutApplicationTests
     public void RepeatedMultilinePatternsKeepFlagsScopedToEachPattern()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "FOO\nbar\nbaz\nqux\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -1514,7 +1514,7 @@ public sealed class ScoutApplicationTests
     public void MultilineDotallMatchesAcrossLineBoundaries()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\n");
 
         (int noMultilineExitCode, byte[] noMultilineOutput, string noMultilineError) = RunScout("--multiline-dotall", "foo.*bar", path);
@@ -1547,7 +1547,7 @@ public sealed class ScoutApplicationTests
     public void MultilineJsonMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "pre\nxxfoo\nbarzz\npost\n");
 
         (int newlineExitCode, byte[] newlineOutput, string newlineError) = RunScout("--json", "-U", "foo\nbar", path);
@@ -1575,7 +1575,7 @@ public sealed class ScoutApplicationTests
     public void MultilineJsonContextAndReplacementMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\nxxfoo\nbarxx\nfoo\nlast\n");
 
         (int contextExitCode, byte[] contextOutput, string contextError) = RunScout("--json", "-U", "-C1", "foo\nbar", path);
@@ -1608,7 +1608,7 @@ public sealed class ScoutApplicationTests
     public void MultilineCaseInsensitiveMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xxFOO\nBARzz\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-i", "-U", "foo\nbar", path);
@@ -1636,7 +1636,7 @@ public sealed class ScoutApplicationTests
     public void MultilineWordRegexpMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xfoo\nbarz\nxx foo\nbar yy\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-w", "-U", "foo\nbar", path);
@@ -1664,7 +1664,7 @@ public sealed class ScoutApplicationTests
     public void MultilineLineRegexpMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xxfoo\nbarzz\nfoo\nbar\nfoo\nbar baz\nFOO\nBAR\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-x", "-U", "foo\nbar", path);
@@ -1702,7 +1702,7 @@ public sealed class ScoutApplicationTests
     public void MultilineInvertMatchMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "pre\nfoo\nbar\nmid\nfoo\nbar baz\npost\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-v", "-U", "foo\nbar", path);
@@ -1750,7 +1750,7 @@ public sealed class ScoutApplicationTests
     public void LineRegexpDefaultRegexMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a.c\nabc\na-c\nxxabc\n");
 
         (int dotExitCode, byte[] dotOutput, string dotError) = RunScout("-x", "a.c", path);
@@ -1778,7 +1778,7 @@ public sealed class ScoutApplicationTests
     public void QuietSuppressesMatchingOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1807,7 +1807,7 @@ public sealed class ScoutApplicationTests
     public void QuietReturnsNoMatchWithoutOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1836,7 +1836,7 @@ public sealed class ScoutApplicationTests
     public void QuietSuppressesCountOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1866,7 +1866,7 @@ public sealed class ScoutApplicationTests
     public void InvertMatchPrintsNonMatchingLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle one\nmiss\nneedle two needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1895,7 +1895,7 @@ public sealed class ScoutApplicationTests
     public void InvertMatchCountMatchesCountsInvertedLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss one\nmiss two\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1925,7 +1925,7 @@ public sealed class ScoutApplicationTests
     public void InvertMatchFilesWithoutMatchUsesInvertedStatus()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1955,7 +1955,7 @@ public sealed class ScoutApplicationTests
     public void LineRegexpMatchesOnlyFullLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle suffix\nprefix needle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -1984,7 +1984,7 @@ public sealed class ScoutApplicationTests
     public void LineRegexpCountMatchesCountsFullLineMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle suffix\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2014,7 +2014,7 @@ public sealed class ScoutApplicationTests
     public void LineRegexpInvertMatchPrintsNonFullLineMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle suffix\nprefix needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2044,7 +2044,7 @@ public sealed class ScoutApplicationTests
     public void WordRegexpMatchesOnlyWholeWords()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoobar\nbarfoo\nfoo_bar\nfoo-bar\nx foo y\nfoo2\n2foo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2073,7 +2073,7 @@ public sealed class ScoutApplicationTests
     public void WordRegexpCountMatchesCountsWholeWordOccurrences()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo foo2 foo foo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2103,7 +2103,7 @@ public sealed class ScoutApplicationTests
     public void WordRegexpInvertMatchPrintsNonWholeWordMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoobar\nbarfoo\nfoo_bar\nfoo-bar\nx foo y\nfoo2\n2foo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2133,7 +2133,7 @@ public sealed class ScoutApplicationTests
     public void WordRegexpAndLineRegexpUseLastWinsBehavior()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoo-bar\nfoo bar\n");
         using MemoryStream wordWinsOutput = new();
         using MemoryStream wordWinsError = new();
@@ -2180,7 +2180,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCountPrintsMatchingLineCount()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle one\nmiss\nneedle two needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2208,7 +2208,7 @@ public sealed class ScoutApplicationTests
     public void LargeImplicitRegexCountMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "large.txt");
+        string path = Path.Join(root, "large.txt");
         using (var writer = new StreamWriter(path))
         {
             for (int index = 0; index < 10000; index++)
@@ -2233,7 +2233,7 @@ public sealed class ScoutApplicationTests
     public void LargeGeneralRegexCountMatchesAndStatsMatchRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "large-general.txt");
+        string path = Path.Join(root, "large-general.txt");
         using (var writer = new StreamWriter(path))
         {
             for (int index = 0; index < 12_000; index++)
@@ -2272,7 +2272,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCountOmitsZeroCounts()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2300,7 +2300,7 @@ public sealed class ScoutApplicationTests
     public void IncludeZeroCountPrintsZeroForUnmatchedFile()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2330,7 +2330,7 @@ public sealed class ScoutApplicationTests
     public void IncludeZeroCountMatchesPrintsZeroForUnmatchedFile()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2361,7 +2361,7 @@ public sealed class ScoutApplicationTests
     public void NoIncludeZeroDisablesEarlierIncludeZero()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2392,7 +2392,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCountMatchesPrintsMatchCount()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle one\nneedle two needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2420,7 +2420,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchIgnoreCaseMatchesAsciiCaseVariants()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Needle upper\nneedle lower\nNEEDLE all\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2448,7 +2448,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCaseSensitiveOverridesIgnoreCase()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Needle upper\nneedle lower\nNEEDLE all\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2477,7 +2477,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchSmartCaseUsesInsensitiveForLowercasePattern()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Needle upper\nneedle lower\nNEEDLE all\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2505,7 +2505,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchSmartCaseUsesSensitiveForUppercasePattern()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Needle upper\nneedle lower\nNEEDLE all\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2533,7 +2533,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchIgnoreCaseAffectsCountMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "Needle upper\nneedle lower\nNEEDLE all\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2562,7 +2562,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCountOverridesLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle one\nmiss\nneedle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2591,7 +2591,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchReturnsNoMatchWhenPatternIsAbsent()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2618,8 +2618,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchPrefixesMultipleFiles()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\nmiss\n");
         File.WriteAllText(second, "needle second");
         using MemoryStream output = new();
@@ -2648,7 +2648,7 @@ public sealed class ScoutApplicationTests
     public void WithFilenamePrefixesSingleFileMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -2677,7 +2677,7 @@ public sealed class ScoutApplicationTests
     public void HeadingPrintsSingleFileHeaderWhenFilenameIsEnabled()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one\nneedle two\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--heading", "-H", "-n", "needle", path);
@@ -2695,7 +2695,7 @@ public sealed class ScoutApplicationTests
     public void NoHeadingDisablesEarlierHeading()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--heading", "--no-heading", "-H", "-n", "needle", path);
@@ -2713,8 +2713,8 @@ public sealed class ScoutApplicationTests
     public void HeadingGroupsDirectoryMatchesByFile()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "a.txt"), "miss\nneedle a\n");
-        File.WriteAllText(Path.Combine(root, "b.txt"), "needle b\nmiss\nneedle again\n");
+        File.WriteAllText(Path.Join(root, "a.txt"), "miss\nneedle a\n");
+        File.WriteAllText(Path.Join(root, "b.txt"), "needle b\nmiss\nneedle again\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--heading", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--heading", "-n", "needle", root);
@@ -2731,8 +2731,8 @@ public sealed class ScoutApplicationTests
     public void TerminalDirectorySearchUsesAutoHeading()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "a.cs");
-        string second = Path.Combine(root, "b.cs");
+        string first = Path.Join(root, "a.cs");
+        string second = Path.Join(root, "b.cs");
         File.WriteAllText(first, "public class A\n");
         File.WriteAllText(second, "public class B\n");
 
@@ -2750,9 +2750,9 @@ public sealed class ScoutApplicationTests
     public void TerminalParallelDirectorySearchUsesAutoHeading()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "a.cs");
-        string second = Path.Combine(root, "b.cs");
-        string third = Path.Combine(root, "c.cs");
+        string first = Path.Join(root, "a.cs");
+        string second = Path.Join(root, "b.cs");
+        string third = Path.Join(root, "c.cs");
         File.WriteAllText(first, "public class A\n");
         File.WriteAllText(second, "public class B\n");
         File.WriteAllText(third, "public class C\n");
@@ -2778,8 +2778,8 @@ public sealed class ScoutApplicationTests
     public void TerminalNoHeadingDisablesAutoHeading()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "a.cs");
-        string second = Path.Combine(root, "b.cs");
+        string first = Path.Join(root, "a.cs");
+        string second = Path.Join(root, "b.cs");
         File.WriteAllText(first, "public class A\n");
         File.WriteAllText(second, "public class B\n");
 
@@ -2797,7 +2797,7 @@ public sealed class ScoutApplicationTests
     public void TerminalSingleFileWithFilenameUsesAutoHeading()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, "public class A\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-H", "public.*class", path);
@@ -2814,7 +2814,7 @@ public sealed class ScoutApplicationTests
     public void TerminalSingleFileSearchUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, "public class A\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "public.*class", path);
@@ -2831,7 +2831,7 @@ public sealed class ScoutApplicationTests
     public void TerminalSingleFileNoLineNumberSuppressesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, "public class A\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--no-line-number", "public.*class", path);
@@ -2848,7 +2848,7 @@ public sealed class ScoutApplicationTests
     public void TerminalOnlyMatchingUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, "public class A\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-o", "class\\s+\\w+", path);
@@ -2865,7 +2865,7 @@ public sealed class ScoutApplicationTests
     public void TerminalContextUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, "before\npublic class A\nafter\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-C1", "public.*class", path);
@@ -2908,8 +2908,8 @@ public sealed class ScoutApplicationTests
     public void HeadingNoFilenameSeparatesFileOutput()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "a.txt"), "needle a\n");
-        File.WriteAllText(Path.Combine(root, "b.txt"), "needle b\n");
+        File.WriteAllText(Path.Join(root, "a.txt"), "needle a\n");
+        File.WriteAllText(Path.Join(root, "b.txt"), "needle b\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--heading", "--no-filename", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--heading", "--no-filename", "-n", "needle", root);
@@ -2926,7 +2926,7 @@ public sealed class ScoutApplicationTests
     public void HeadingUsesNullPathTerminatorForHeaders()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--heading", "-0", "-H", "-n", "needle", path);
@@ -2944,8 +2944,8 @@ public sealed class ScoutApplicationTests
     public void NoFilenameSuppressesMultipleFileMatchPrefixes()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\n");
         File.WriteAllText(second, "miss\n");
         using MemoryStream output = new();
@@ -2976,8 +2976,8 @@ public sealed class ScoutApplicationTests
     public void FilenameFlagsControlCountPrefixes()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle\n");
         File.WriteAllText(second, "needle\n");
         using MemoryStream withOutput = new();
@@ -3026,8 +3026,8 @@ public sealed class ScoutApplicationTests
     public void NoFilenameDoesNotSuppressFilesWithMatchesOutput()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle\n");
         File.WriteAllText(second, "miss\n");
         using MemoryStream output = new();
@@ -3059,9 +3059,9 @@ public sealed class ScoutApplicationTests
     public void PathSeparatorRewritesStandardPathPrefixes()
     {
         string root = CreateTempDirectory();
-        string child = Path.Combine(root, "child");
+        string child = Path.Join(root, "child");
         Directory.CreateDirectory(child);
-        string path = Path.Combine(child, "input.txt");
+        string path = Path.Join(child, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "-H", "-n", "needle", root);
@@ -3079,9 +3079,9 @@ public sealed class ScoutApplicationTests
     public void PathSeparatorRewritesCountPrefixes()
     {
         string root = CreateTempDirectory();
-        string child = Path.Combine(root, "child");
+        string child = Path.Join(root, "child");
         Directory.CreateDirectory(child);
-        string path = Path.Combine(child, "input.txt");
+        string path = Path.Join(child, "input.txt");
         File.WriteAllText(path, "needle\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--path-separator=Z", "-H", "-c", "needle", root);
@@ -3099,9 +3099,9 @@ public sealed class ScoutApplicationTests
     public void PathSeparatorRewritesFilesOutput()
     {
         string root = CreateTempDirectory();
-        string child = Path.Combine(root, "child");
+        string child = Path.Join(root, "child");
         Directory.CreateDirectory(child);
-        string path = Path.Combine(child, "input.txt");
+        string path = Path.Join(child, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "--files", root);
@@ -3119,9 +3119,9 @@ public sealed class ScoutApplicationTests
     public void EmptyPathSeparatorResetsPathPrinting()
     {
         string root = CreateTempDirectory();
-        string child = Path.Combine(root, "child");
+        string child = Path.Join(root, "child");
         Directory.CreateDirectory(child);
-        string path = Path.Combine(child, "input.txt");
+        string path = Path.Join(child, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "--path-separator", string.Empty, "-H", "needle", path);
@@ -3139,8 +3139,8 @@ public sealed class ScoutApplicationTests
     public void NoFilenameSuppressesDirectorySearchPrefixes()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "child"));
-        File.WriteAllText(Path.Combine(root, "child", "keep.txt"), "needle child\n");
+        Directory.CreateDirectory(Path.Join(root, "child"));
+        File.WriteAllText(Path.Join(root, "child", "keep.txt"), "needle child\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -3168,7 +3168,7 @@ public sealed class ScoutApplicationTests
     public void ByteOffsetPrintsLineStartOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one\nxx needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3197,7 +3197,7 @@ public sealed class ScoutApplicationTests
     public void ByteOffsetCombinesWithLineNumbersAndFilenamePrefixes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one\nxx needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3228,7 +3228,7 @@ public sealed class ScoutApplicationTests
     public void NoByteOffsetDisablesEarlierByteOffset()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3258,7 +3258,7 @@ public sealed class ScoutApplicationTests
     public void ByteOffsetDoesNotAffectCountOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3288,7 +3288,7 @@ public sealed class ScoutApplicationTests
     public void ColumnPrintsFirstMatchColumnAndImpliesLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nxx needle one\nneedle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3317,7 +3317,7 @@ public sealed class ScoutApplicationTests
     public void ColumnCombinesWithFilenameAndByteOffsetFields()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nxx needle one\nneedle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3349,7 +3349,7 @@ public sealed class ScoutApplicationTests
     public void NoLineNumberSuppressesColumnImpliedLineNumber()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xx needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3379,7 +3379,7 @@ public sealed class ScoutApplicationTests
     public void ColumnInvertMatchOmitsColumnField()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\nxx foo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3409,7 +3409,7 @@ public sealed class ScoutApplicationTests
     public void NoColumnDisablesEarlierColumn()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3439,7 +3439,7 @@ public sealed class ScoutApplicationTests
     public void ColumnDoesNotAffectCountOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3469,7 +3469,7 @@ public sealed class ScoutApplicationTests
     public void TrimRemovesLeadingWhitespaceFromMatchingLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "  needle one\n\t needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3498,7 +3498,7 @@ public sealed class ScoutApplicationTests
     public void TrimPreservesPrefixFieldsAndOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "  needle one\n\t needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3531,7 +3531,7 @@ public sealed class ScoutApplicationTests
     public void TrimRemovesLeadingWhitespaceFromOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "  needle one\n\t needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3561,7 +3561,7 @@ public sealed class ScoutApplicationTests
     public void NoTrimDisablesEarlierTrim()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "  needle one\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3591,7 +3591,7 @@ public sealed class ScoutApplicationTests
     public void ContextPrintsSurroundingLinesWithStandardFields()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\ntwo\nneedle\nfour\nfive\nneedle2\nseven\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3624,8 +3624,8 @@ public sealed class ScoutApplicationTests
     public void DirectoryContextSeparatesFileGroups()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "a.txt");
-        string second = Path.Combine(root, "b.txt");
+        string first = Path.Join(root, "a.txt");
+        string second = Path.Join(root, "b.txt");
         File.WriteAllText(first, "one\nneedle\ntwo\n");
         File.WriteAllText(second, "three\nneedle\nfour\n");
 
@@ -3644,7 +3644,7 @@ public sealed class ScoutApplicationTests
     public void CustomFieldMatchSeparatorAppliesToStandardFields()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nxx needle\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -3678,7 +3678,7 @@ public sealed class ScoutApplicationTests
     public void CustomContextSeparatorsApplyToContextOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\nneedle\ntwo\nthree\nfour\nneedle\nsix\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -3714,7 +3714,7 @@ public sealed class ScoutApplicationTests
     public void ContextSeparatorCanBeEmptyOrDisabled()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\nneedle\ntwo\nthree\nfour\nneedle\nsix\n");
 
         (int emptyExitCode, byte[] emptyOutput, string emptyError) = RunScout("-H", "-n", "-C1", "--context-separator", string.Empty, "needle", path);
@@ -3742,7 +3742,7 @@ public sealed class ScoutApplicationTests
     public void PassthruPrintsEveryLine()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\nneedle\ntwo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3772,7 +3772,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingContextPrintsFullContextLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "  one\n  needle\n  three\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3803,7 +3803,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingContextUsesCustomFieldSeparators()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "one\nneedle needle\nthree\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -3839,7 +3839,7 @@ public sealed class ScoutApplicationTests
     public void InvertOnlyMatchingContextPrintsOriginalMatchesAsContext()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xx\nneedle needle\nyy\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3871,7 +3871,7 @@ public sealed class ScoutApplicationTests
     public void InvertOnlyMatchingContextUsesCustomFieldContextSeparator()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xx\nneedle needle\nyy\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -3909,7 +3909,7 @@ public sealed class ScoutApplicationTests
     public void ContextMaxCountStillPrintsMatchingContextLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a\nneedle1\nc\nneedle2\ne\nf\ng\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3940,7 +3940,7 @@ public sealed class ScoutApplicationTests
     public void NullTerminatesMatchPathPrefixes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -3973,7 +3973,7 @@ public sealed class ScoutApplicationTests
     public void NullTerminatesContextPathPrefixes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "before\nneedle\nafter\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -4005,7 +4005,7 @@ public sealed class ScoutApplicationTests
     public void NullTerminatesCountPathPrefixes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -4036,7 +4036,7 @@ public sealed class ScoutApplicationTests
     public void NullTerminatesFilesWithMatchesPaths()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -4066,7 +4066,7 @@ public sealed class ScoutApplicationTests
     public void NullTerminatesFilesModePaths()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -4095,7 +4095,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepPrintsOneLinePerMatch()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "needle", path);
@@ -4113,7 +4113,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepOnlyMatchingCombinesWithByteOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nxx needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-o", "-b", "needle", path);
@@ -4131,7 +4131,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepRespectsDisabledLineAndColumnFields()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int noLineExitCode, byte[] noLineOutput, string noLineError) = RunScout("--vimgrep", "-N", "needle", path);
@@ -4154,8 +4154,8 @@ public sealed class ScoutApplicationTests
     public void VimgrepRespectsFilenameAndSeparatorFlags()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\n");
         File.WriteAllText(second, "needle second\n");
 
@@ -4174,7 +4174,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepCountPrefixesSingleFile()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-c", "needle", path);
@@ -4192,7 +4192,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsOmitsLongMatchingLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "short needle\nthis is a very long needle line\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "12", "needle", path);
@@ -4210,7 +4210,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsPreviewPrintsLongLinePrefixes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "short needle\nthis is a very long needle line\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "12", "--max-columns-preview", "needle", path);
@@ -4228,7 +4228,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsAppliesToContextLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "very very long context\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-B1", "-M", "12", "needle", path);
@@ -4246,7 +4246,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsRespectsTrimmedOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "      needle\n      needle long long\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "--trim", "-M", "12", "--max-columns-preview", "needle", path);
@@ -4264,7 +4264,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsDoesNotAffectOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-o", "-M", "6", "needle", path);
@@ -4282,7 +4282,7 @@ public sealed class ScoutApplicationTests
     public void MaxColumnsZeroDisablesLimit()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "0", "needle", path);
@@ -4300,7 +4300,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepMaxColumnsOmitsLongLinesWithMatchCounts()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "short needle\nneedle needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-M", "12", "needle", path);
@@ -4318,7 +4318,7 @@ public sealed class ScoutApplicationTests
     public void VimgrepMaxColumnsPreviewPrintsRemainingMatchCounts()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "short needle\nneedle needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-M", "12", "--max-columns-preview", "needle", path);
@@ -4336,7 +4336,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceRewritesMatchingLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "X", "needle", path);
@@ -4354,7 +4354,7 @@ public sealed class ScoutApplicationTests
     public void TerminalReplacePrintsLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-r", "X", "needle", path);
@@ -4371,7 +4371,7 @@ public sealed class ScoutApplicationTests
     public void TerminalReplaceNoLineNumberSuppressesLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "--no-line-number", "-r", "X", "needle", path);
@@ -4388,7 +4388,7 @@ public sealed class ScoutApplicationTests
     public void TerminalReplaceOnlyMatchingPrintsLineNumbers()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-o", "-r", "X", "needle", path);
@@ -4418,7 +4418,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceOnlyMatchingUsesAdjustedOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "--column", "-b", "-o", "-r", "XX", "needle", path);
@@ -4436,7 +4436,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceAppliesToContextOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-C1", "-r", "X", "needle", path);
@@ -4454,7 +4454,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsWholeMatchAndMissingCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         const string replacement = "$$-$0-$1-${0}-${1}";
@@ -4473,7 +4473,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsNumericCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc123\nabc456\nstruct Foo\nenum Bar\nunion _baz\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$2-$1", "([a-z]+)([0-9]+)", path);
@@ -4501,7 +4501,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceAndJsonReplayNumberedNamedAndUnmatchedCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoobar\n");
         const string replacement = "$0|$1|$2|$left|$right|$3";
         const string pattern = "(?P<left>foo)(?P<right>bar)?";
@@ -4533,7 +4533,7 @@ public sealed class ScoutApplicationTests
     public void DirectoryReplacementExpandsCandidateVerifiedCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc123\n中文 struct Foo\nstruct Bar\nno match\n", Encoding.UTF8);
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
@@ -4551,7 +4551,7 @@ public sealed class ScoutApplicationTests
     public void DirectoryReplacementCandidateStreamingFallsBackForBinaryFiles()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.bin");
+        string path = Path.Join(root, "input.bin");
         byte[] bytes = new byte[(2 * 1024 * 1024) + 32];
         "struct Foo\0struct Bar\n"u8.CopyTo(bytes);
         File.WriteAllBytes(path, bytes);
@@ -4571,7 +4571,7 @@ public sealed class ScoutApplicationTests
     public void DirectoryReplacementCandidateStreamingStopsAtLaterBinaryBlock()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.bin");
+        string path = Path.Join(root, "input.bin");
         using (FileStream stream = File.Create(path))
         {
             stream.Write("struct Foo\n"u8);
@@ -4781,7 +4781,7 @@ public sealed class ScoutApplicationTests
     public void ReplacePreservesOptionalNamedCapturesInCrlfContext()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xfooy\r\nxfoo-bary\r\n");
         const string pattern = @"\B(?P<word>foo)(?:-(?P<suffix>bar))?\B";
 
@@ -4803,7 +4803,7 @@ public sealed class ScoutApplicationTests
     public void ReplacePreservesInvalidUtf8CaptureBytesInTextMode()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.bin");
+        string path = Path.Join(root, "input.bin");
         File.WriteAllBytes(path, [0xFF, (byte)'A', (byte)'\n']);
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -4824,7 +4824,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "a\nb\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -4845,7 +4845,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceReplaysCapturesInOriginalLineContext()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xfooy\n");
 
         (int lineExitCode, byte[] lineOutput, string lineError) = RunScout(
@@ -4872,7 +4872,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceReplaysCapturesAgainstAuthoritativeRecordContent()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -4893,7 +4893,7 @@ public sealed class ScoutApplicationTests
     public void MultilineReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "before\na\nx\nmiddle one\nmiddle two\nb\ny\nafter\n");
 
         (int exitCode, byte[] output, string error) = RunScout(
@@ -4978,7 +4978,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsNamedCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc123\nabc456\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$digits-$word", "(?P<word>[a-z]+)(?P<digits>[0-9]+)", path);
@@ -5001,7 +5001,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsAlternationCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nbar\nabd\nacd\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1:$2:$0", "(foo)|(bar)", path);
@@ -5024,7 +5024,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsInlineFlagCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "FOO\nfoo\nfoobar\nFOObar\nfoo bar\n");
 
         (int caseExitCode, byte[] caseOutput, string caseError) = RunScout("-n", "-r", "$1", "(?i)(foo)", path);
@@ -5057,7 +5057,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsBacktrackedQuantifiedCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "aaa\naaab\nab\n");
 
         (int greedyExitCode, byte[] greedyOutput, string greedyError) = RunScout("-n", "-r", "$1:$2:$0", "(a+)(a)", path);
@@ -5085,7 +5085,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceExpandsRegexClassCaptures()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc123\nabcXYZ\nname_1\nname-1\nspace tab\nspace\ttab\n123\n");
 
         (int alternationExitCode, byte[] alternationOutput, string alternationError) = RunScout("-n", "-r", "$1:$2:$3:$0", @"([[:alpha:]]+)(\d+)|(\w+)", path);
@@ -5118,7 +5118,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceVimgrepUsesAdjustedColumnsAndOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-b", "-r", "XX", "needle", path);
@@ -5136,7 +5136,7 @@ public sealed class ScoutApplicationTests
     public void ReplaceMaxColumnsUsesMatchCountSummaries()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int omittedExitCode, byte[] omittedOutput, string omittedError) = RunScout("-n", "-M", "4", "-r", "ABCDE", "needle", path);
@@ -5159,7 +5159,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsStandardOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-H", "-n", "--column", "-b", "needle", path);
@@ -5177,7 +5177,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsLiteralRegexMatchOffsets()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(
             path,
             "public sealed class Pcre2Regex\n" +
@@ -5198,7 +5198,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysContextOutputPreservesSlicedLineCoordinates()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, """
             one
             two
@@ -5238,7 +5238,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsInvertedContextOriginalMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, """
             before
             <InvariantGlobalization>true</InvariantGlobalization>
@@ -5271,7 +5271,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsMultilineSignatureArityOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             internal static bool SearchQuiet(
                 ReadOnlySpan<byte> bytes,
@@ -5302,7 +5302,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsMultilineSignatureArityContextOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             before
             internal static bool SearchQuiet(
@@ -5335,7 +5335,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsGenericMultilineOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             before
             internal static bool SearchQuiet(
@@ -5381,7 +5381,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "--column", "-b", "-o", "needle", path);
@@ -5399,7 +5399,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsVimgrepOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "needle", path);
@@ -5417,7 +5417,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsVimgrepContextOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-C1", "needle", path);
@@ -5435,7 +5435,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsVimgrepReplacementOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-r", "X", "needle", path);
@@ -5453,7 +5453,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsMultilineVimgrepOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             internal static bool SearchQuiet(
                 ReadOnlySpan<byte> bytes,
@@ -5484,7 +5484,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsMultilineVimgrepContextOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             internal static bool SearchQuiet(
                 ReadOnlySpan<byte> bytes,
@@ -5515,7 +5515,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsMultilineVimgrepReplacementOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.cs");
+        string path = Path.Join(root, "input.cs");
         File.WriteAllText(path, """
             internal static bool SearchQuiet(
                 ReadOnlySpan<byte> bytes,
@@ -5546,7 +5546,7 @@ public sealed class ScoutApplicationTests
     public void ColorAlwaysHighlightsReplacementOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "-r", "X", "needle", path);
@@ -5564,7 +5564,7 @@ public sealed class ScoutApplicationTests
     public void ColorNeverSuppressesAnsiOutput()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--color=never", "-n", "needle", path);
@@ -5582,7 +5582,7 @@ public sealed class ScoutApplicationTests
     public void ColorSpecsCustomizeOutputLikeRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "xx needle yy\nneedle needle\n");
         string[][] argumentPrefixes =
         [
@@ -5597,9 +5597,8 @@ public sealed class ScoutApplicationTests
             ["--color=always", "--colors", "highlight:bg:yellow"],
         ];
 
-        foreach (string[] argumentPrefix in argumentPrefixes)
+        foreach (string[] arguments in argumentPrefixes.Select<string[], string[]>(prefix => [.. prefix, "needle", path]))
         {
-            string[] arguments = [.. argumentPrefix, "needle", path];
 
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
@@ -5617,7 +5616,7 @@ public sealed class ScoutApplicationTests
     public void HyperlinkFormatEmitsPathPreludesLikeRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input file.txt");
+        string path = Path.Join(root, "input file.txt");
         File.WriteAllText(path, "xx needle yy\nneedle\n");
         string[][] argumentPrefixes =
         [
@@ -5628,9 +5627,8 @@ public sealed class ScoutApplicationTests
             ["--color=never", "--hyperlink-format", "file://{path}", "-H", "-n", "--column"],
         ];
 
-        foreach (string[] argumentPrefix in argumentPrefixes)
+        foreach (string[] arguments in argumentPrefixes.Select<string[], string[]>(prefix => [.. prefix, "needle", path]))
         {
-            string[] arguments = [.. argumentPrefix, "needle", path];
 
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
@@ -5648,7 +5646,7 @@ public sealed class ScoutApplicationTests
     public void PrettyOutputMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-p", "needle", path);
@@ -5671,9 +5669,9 @@ public sealed class ScoutApplicationTests
     public void UnrestrictedFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "ignored.txt\n");
-        File.WriteAllText(Path.Combine(root, "ignored.txt"), "needle ignored\n");
-        File.WriteAllText(Path.Combine(root, ".hidden"), "needle hidden\n");
+        File.WriteAllText(Path.Join(root, ".ignore"), "ignored.txt\n");
+        File.WriteAllText(Path.Join(root, "ignored.txt"), "needle ignored\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), "needle hidden\n");
 
         (int oneExitCode, byte[] oneOutput, string oneError) = RunScout("--sort=path", "-u", "needle", root);
         (int pinnedOneExitCode, byte[] pinnedOneOutput, string pinnedOneError) = RunPinnedRipgrep("--sort=path", "-u", "needle", root);
@@ -5695,7 +5693,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingPrintsEachMatch()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one needle\nxx needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5724,7 +5722,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingCombinesWithStandardFields()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\nneedle one needle\nxx needle two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5757,7 +5755,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingRespectsWordRegexp()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo foo2 foo\nfoo-bar\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5787,7 +5785,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingRespectsLineRegexp()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "foo\nfoo-bar\nxx foo\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5817,7 +5815,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingCountCountsMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5847,7 +5845,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingInvertMatchPrintsInvertedLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5877,7 +5875,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingEmptyPatternMatchesEachByte()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "abc\n\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -5923,7 +5921,7 @@ public sealed class ScoutApplicationTests
     public void OnlyMatchingRegexEmptyIterationMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "b\n");
 
         (int alternationExitCode, byte[] alternationOutput, string alternationError) = RunScout("-o", "b|", path);
@@ -5951,7 +5949,7 @@ public sealed class ScoutApplicationTests
     public void JsonOnlyMatchingRegexEmptyIterationMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "b\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", "(?:)+", path);
@@ -5969,7 +5967,7 @@ public sealed class ScoutApplicationTests
     public void JsonMultilineEofEmptyMatchMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "tail");
 
         (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", @"\z", path);
@@ -5995,7 +5993,7 @@ public sealed class ScoutApplicationTests
         bool crlf)
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes(contents));
         string[][] modes =
         [
@@ -6048,7 +6046,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountLimitsStandardMatches()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle1\nneedle2\nmiss\nneedle3\nneedle4\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6078,7 +6076,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountSupportsInlineForms()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle1\nneedle2\nneedle3\n");
         using MemoryStream shortOutput = new();
         using MemoryStream shortError = new();
@@ -6123,7 +6121,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountLimitsCountMatchesByMatchingLine()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nneedle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6154,7 +6152,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountOnlyMatchingPrintsAllMatchesInLimitedLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle needle\nneedle\nneedle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6185,7 +6183,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountInvertMatchLimitsInvertedLines()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nmiss one\nmiss two\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6216,7 +6214,7 @@ public sealed class ScoutApplicationTests
     public void MaxCountZeroDisablesSearchSummaries()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\nmiss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6286,8 +6284,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchCountPrefixesMultipleFiles()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\nneedle again\n");
         File.WriteAllText(second, "miss\n");
         using MemoryStream output = new();
@@ -6317,8 +6315,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchFilesWithMatchesPrintsMatchingPaths()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\n");
         File.WriteAllText(second, "miss\n");
         using MemoryStream output = new();
@@ -6348,7 +6346,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchFilesWithMatchesReturnsNoMatchForUnmatchedPaths()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6376,8 +6374,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchFilesWithoutMatchPrintsUnmatchedPaths()
     {
         string root = CreateTempDirectory();
-        string first = Path.Combine(root, "first.txt");
-        string second = Path.Combine(root, "second.txt");
+        string first = Path.Join(root, "first.txt");
+        string second = Path.Join(root, "second.txt");
         File.WriteAllText(first, "needle first\n");
         File.WriteAllText(second, "miss\n");
         using MemoryStream output = new();
@@ -6407,7 +6405,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchFilesWithoutMatchReturnsNoMatchForMatchedPaths()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6435,11 +6433,11 @@ public sealed class ScoutApplicationTests
     public void FilesModeListsSearchableFiles()
     {
         string root = CreateTempDirectory();
-        string keep = Path.Combine(root, "keep.txt");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
+        string keep = Path.Join(root, "keep.txt");
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
         File.WriteAllText(keep, "keep\n");
-        File.WriteAllText(Path.Combine(root, "drop.log"), "drop\n");
-        File.WriteAllText(Path.Combine(root, ".hidden"), "hidden\n");
+        File.WriteAllText(Path.Join(root, "drop.log"), "drop\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), "hidden\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6465,7 +6463,7 @@ public sealed class ScoutApplicationTests
     public void FilesModePathColorAndHyperlinksMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input file.txt");
+        string path = Path.Join(root, "input file.txt");
         File.WriteAllText(path, "keep\n");
         string[][] argumentSets =
         [
@@ -6498,13 +6496,13 @@ public sealed class ScoutApplicationTests
     public void FilesModeExplicitThreadsListsRipgrepFileSet()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "left"));
-        Directory.CreateDirectory(Path.Combine(root, "right"));
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
-        File.WriteAllText(Path.Combine(root, "left", "one.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "left", "drop.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "right", "two.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, ".hidden"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "left"));
+        Directory.CreateDirectory(Path.Join(root, "right"));
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
+        File.WriteAllText(Path.Join(root, "left", "one.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "left", "drop.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "right", "two.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
 
         (int exitCode, byte[] output, string error) = RunScout("--files", "--threads", "2", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", "--threads", "2", root);
@@ -6521,12 +6519,12 @@ public sealed class ScoutApplicationTests
     public void FilesModeDefaultThreadsListsRipgrepFileSet()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "left"));
-        Directory.CreateDirectory(Path.Combine(root, "right"));
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
-        File.WriteAllText(Path.Combine(root, "left", "one.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "left", "drop.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "right", "two.txt"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "left"));
+        Directory.CreateDirectory(Path.Join(root, "right"));
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
+        File.WriteAllText(Path.Join(root, "left", "one.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "left", "drop.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "right", "two.txt"), string.Empty);
 
         (int exitCode, byte[] output, string error) = RunScout("--files", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", root);
@@ -6543,7 +6541,7 @@ public sealed class ScoutApplicationTests
     public void QuietFilesModeSuppressesFileOutput()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.txt"), "keep\n");
+        File.WriteAllText(Path.Join(root, "keep.txt"), "keep\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6571,7 +6569,7 @@ public sealed class ScoutApplicationTests
     public void FilesModeListsDirectFilePath()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "keep\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6622,7 +6620,7 @@ public sealed class ScoutApplicationTests
     public void QuietFilesWithoutMatchUsesUnmatchedStatus()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "miss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6652,9 +6650,9 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchRecursesDirectories()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "child"));
-        File.WriteAllText(Path.Combine(root, "child", "keep.txt"), "needle child\n");
-        File.WriteAllText(Path.Combine(root, "miss.txt"), "miss\n");
+        Directory.CreateDirectory(Path.Join(root, "child"));
+        File.WriteAllText(Path.Join(root, "child", "keep.txt"), "needle child\n");
+        File.WriteAllText(Path.Join(root, "miss.txt"), "miss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6669,7 +6667,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal($"{Path.Combine(root, "child", "keep.txt")}:needle child\n", Utf8(output.ToArray()));
+        Assert.Equal($"{Path.Join(root, "child", "keep.txt")}:needle child\n", Utf8(output.ToArray()));
         Assert.Empty(error.ToArray());
     }
 
@@ -6680,14 +6678,14 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchRecursesDirectoriesWithManyNoMatchFiles()
     {
         string root = CreateTempDirectory();
-        string child = Path.Combine(root, "child");
+        string child = Path.Join(root, "child");
         Directory.CreateDirectory(child);
         for (int index = 0; index < 32; index++)
         {
-            File.WriteAllText(Path.Combine(root, $"miss-{index:D2}.txt"), "miss\n");
+            File.WriteAllText(Path.Join(root, $"miss-{index:D2}.txt"), "miss\n");
         }
 
-        File.WriteAllText(Path.Combine(child, "keep.txt"), "miss\nneedle child\n");
+        File.WriteAllText(Path.Join(child, "keep.txt"), "miss\nneedle child\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--threads=2", "--path-separator", "/", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--threads=2", "--path-separator", "/", "needle", root);
@@ -6704,8 +6702,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchPrintsDirectoryLineNumbersAfterPathPrefixes()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "child"));
-        File.WriteAllText(Path.Combine(root, "child", "keep.txt"), "miss\nneedle child\n");
+        Directory.CreateDirectory(Path.Join(root, "child"));
+        File.WriteAllText(Path.Join(root, "child", "keep.txt"), "miss\nneedle child\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6721,7 +6719,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal($"{Path.Combine(root, "child", "keep.txt")}:2:needle child\n", Utf8(output.ToArray()));
+        Assert.Equal($"{Path.Join(root, "child", "keep.txt")}:2:needle child\n", Utf8(output.ToArray()));
         Assert.Empty(error.ToArray());
     }
 
@@ -6732,9 +6730,9 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchHiddenFlagIncludesHiddenFiles()
     {
         string root = CreateTempDirectory();
-        string hidden = Path.Combine(root, ".hidden");
+        string hidden = Path.Join(root, ".hidden");
         File.WriteAllText(hidden, "needle hidden\n");
-        File.WriteAllText(Path.Combine(root, "visible.txt"), "miss\n");
+        File.WriteAllText(Path.Join(root, "visible.txt"), "miss\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6761,10 +6759,10 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchNoIgnoreIncludesIgnoredFilesButNotHiddenFiles()
     {
         string root = CreateTempDirectory();
-        string ignored = Path.Combine(root, "ignored.log");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
+        string ignored = Path.Join(root, "ignored.log");
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
         File.WriteAllText(ignored, "needle ignored\n");
-        File.WriteAllText(Path.Combine(root, ".hidden"), "needle hidden\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), "needle hidden\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6791,9 +6789,9 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchMaxDepthLimitsRecursion()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "child", "nested"));
-        File.WriteAllText(Path.Combine(root, "child", "direct.txt"), "needle direct\n");
-        File.WriteAllText(Path.Combine(root, "child", "nested", "deep.txt"), "needle deep\n");
+        Directory.CreateDirectory(Path.Join(root, "child", "nested"));
+        File.WriteAllText(Path.Join(root, "child", "direct.txt"), "needle direct\n");
+        File.WriteAllText(Path.Join(root, "child", "nested", "deep.txt"), "needle deep\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6823,8 +6821,8 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string target = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(target, "linked.txt"), "needle linked\n");
-        Assert.True(TryCreateDirectorySymlink(target, Path.Combine(root, "link")), "Required directory symlink could not be created.");
+        File.WriteAllText(Path.Join(target, "linked.txt"), "needle linked\n");
+        Assert.True(TryCreateDirectorySymlink(target, Path.Join(root, "link")), "Required directory symlink could not be created.");
 
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6853,8 +6851,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchGlobWhitelistFiltersFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.cs"), "needle keep\n");
-        File.WriteAllText(Path.Combine(root, "skip.txt"), "needle skip\n");
+        File.WriteAllText(Path.Join(root, "keep.cs"), "needle keep\n");
+        File.WriteAllText(Path.Join(root, "skip.txt"), "needle skip\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6883,8 +6881,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchNegatedGlobExcludesFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.txt"), "needle keep\n");
-        File.WriteAllText(Path.Combine(root, "skip.log"), "needle skip\n");
+        File.WriteAllText(Path.Join(root, "keep.txt"), "needle keep\n");
+        File.WriteAllText(Path.Join(root, "skip.log"), "needle skip\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6912,7 +6910,7 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchGlobWhitelistOverridesHiddenFilter()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".hidden"), "needle hidden\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), "needle hidden\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6940,7 +6938,7 @@ public sealed class ScoutApplicationTests
     public void CaseInsensitiveGlobOverridesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "app.cs"), "needle\n");
+        File.WriteAllText(Path.Join(root, "app.cs"), "needle\n");
 
         AssertFilesMatchPinned("--files", "--sort=path", "--iglob", "*.CS", root);
         AssertFilesMatchPinned("--files", "--sort=path", "--iglob", "*.CS", "--no-glob-case-insensitive", root);
@@ -6962,11 +6960,11 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchSortPathOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "b"));
-        Directory.CreateDirectory(Path.Combine(root, "a"));
-        File.WriteAllText(Path.Combine(root, "b", "match.txt"), "needle b\n");
-        File.WriteAllText(Path.Combine(root, "a", "match.txt"), "needle a\n");
-        File.WriteAllText(Path.Combine(root, "z.txt"), "needle z\n");
+        Directory.CreateDirectory(Path.Join(root, "b"));
+        Directory.CreateDirectory(Path.Join(root, "a"));
+        File.WriteAllText(Path.Join(root, "b", "match.txt"), "needle b\n");
+        File.WriteAllText(Path.Join(root, "a", "match.txt"), "needle a\n");
+        File.WriteAllText(Path.Join(root, "z.txt"), "needle z\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -6995,11 +6993,11 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchSortReversePathOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "b"));
-        Directory.CreateDirectory(Path.Combine(root, "a"));
-        File.WriteAllText(Path.Combine(root, "b", "match.txt"), "needle b\n");
-        File.WriteAllText(Path.Combine(root, "a", "match.txt"), "needle a\n");
-        File.WriteAllText(Path.Combine(root, "z.txt"), "needle z\n");
+        Directory.CreateDirectory(Path.Join(root, "b"));
+        Directory.CreateDirectory(Path.Join(root, "a"));
+        File.WriteAllText(Path.Join(root, "b", "match.txt"), "needle b\n");
+        File.WriteAllText(Path.Join(root, "a", "match.txt"), "needle a\n");
+        File.WriteAllText(Path.Join(root, "z.txt"), "needle z\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7027,8 +7025,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchSortModifiedOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
-        string newest = Path.Combine(root, "newest.txt");
-        string oldest = Path.Combine(root, "oldest.txt");
+        string newest = Path.Join(root, "newest.txt");
+        string oldest = Path.Join(root, "oldest.txt");
         File.WriteAllText(newest, "needle newest\n");
         File.WriteAllText(oldest, "needle oldest\n");
         File.SetLastWriteTimeUtc(newest, new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
@@ -7112,8 +7110,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchTypeSelectionFiltersFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.cs"), "needle cs\n");
-        File.WriteAllText(Path.Combine(root, "drop.txt"), "needle txt\n");
+        File.WriteAllText(Path.Join(root, "keep.cs"), "needle cs\n");
+        File.WriteAllText(Path.Join(root, "drop.txt"), "needle txt\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7141,8 +7139,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchTypeNotExcludesFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.cs"), "needle cs\n");
-        File.WriteAllText(Path.Combine(root, "drop.txt"), "needle txt\n");
+        File.WriteAllText(Path.Join(root, "keep.cs"), "needle cs\n");
+        File.WriteAllText(Path.Join(root, "drop.txt"), "needle txt\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7170,8 +7168,8 @@ public sealed class ScoutApplicationTests
     public void LiteralSearchTypeAddDefinesSelectableType()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.foo"), "needle foo\n");
-        File.WriteAllText(Path.Combine(root, "drop.txt"), "needle txt\n");
+        File.WriteAllText(Path.Join(root, "keep.foo"), "needle foo\n");
+        File.WriteAllText(Path.Join(root, "drop.txt"), "needle txt\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7201,8 +7199,8 @@ public sealed class ScoutApplicationTests
     public void FilesModeTypeSelectionFiltersFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.cs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "drop.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep.cs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "drop.txt"), string.Empty);
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7230,7 +7228,7 @@ public sealed class ScoutApplicationTests
     public void UnknownTypeDiagnosticMatchesRipgrep()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.cs"), "needle\n");
+        File.WriteAllText(Path.Join(root, "keep.cs"), "needle\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -7284,7 +7282,7 @@ public sealed class ScoutApplicationTests
     public void FilesModeHiddenFlagIncludesHiddenFiles()
     {
         string root = CreateTempDirectory();
-        string hidden = Path.Combine(root, ".hidden");
+        string hidden = Path.Join(root, ".hidden");
         File.WriteAllText(hidden, "hidden\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -7312,8 +7310,8 @@ public sealed class ScoutApplicationTests
     public void FilesModeNoIgnoreIncludesIgnoredFiles()
     {
         string root = CreateTempDirectory();
-        string ignored = Path.Combine(root, "ignored.log");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
+        string ignored = Path.Join(root, "ignored.log");
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
         File.WriteAllText(ignored, "ignored\n");
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -7342,9 +7340,9 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string ignoreRoot = CreateTempDirectory();
-        string keep = Path.Combine(root, "keep.txt");
-        string ignored = Path.Combine(root, "ignored.log");
-        string ignoreFile = Path.Combine(ignoreRoot, "rules.ignore");
+        string keep = Path.Join(root, "keep.txt");
+        string ignored = Path.Join(root, "ignored.log");
+        string ignoreFile = Path.Join(ignoreRoot, "rules.ignore");
         File.WriteAllText(keep, "needle\n");
         File.WriteAllText(ignored, "needle\n");
         File.WriteAllText(ignoreFile, "*.log\n");
@@ -7383,9 +7381,9 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string ignoreRoot = CreateTempDirectory();
-        string keep = Path.Combine(root, "keep.txt");
-        string ignored = Path.Combine(root, "ignored.log");
-        string ignoreFile = Path.Combine(ignoreRoot, "rules.ignore");
+        string keep = Path.Join(root, "keep.txt");
+        string ignored = Path.Join(root, "ignored.log");
+        string ignoreFile = Path.Join(ignoreRoot, "rules.ignore");
         File.WriteAllText(keep, "needle\n");
         File.WriteAllText(ignored, "needle\n");
         File.WriteAllText(ignoreFile, "*.log\n");
@@ -7452,14 +7450,14 @@ public sealed class ScoutApplicationTests
     public void IgnoreSourceTogglesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git", "info"));
-        File.WriteAllText(Path.Combine(root, ".ignore"), "dot.log\n");
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "vcs.log\n");
-        File.WriteAllText(Path.Combine(root, ".git", "info", "exclude"), "exclude.log\n");
-        File.WriteAllText(Path.Combine(root, "dot.log"), "needle\n");
-        File.WriteAllText(Path.Combine(root, "vcs.log"), "needle\n");
-        File.WriteAllText(Path.Combine(root, "exclude.log"), "needle\n");
-        File.WriteAllText(Path.Combine(root, "keep.txt"), "needle\n");
+        Directory.CreateDirectory(Path.Join(root, ".git", "info"));
+        File.WriteAllText(Path.Join(root, ".ignore"), "dot.log\n");
+        File.WriteAllText(Path.Join(root, ".gitignore"), "vcs.log\n");
+        File.WriteAllText(Path.Join(root, ".git", "info", "exclude"), "exclude.log\n");
+        File.WriteAllText(Path.Join(root, "dot.log"), "needle\n");
+        File.WriteAllText(Path.Join(root, "vcs.log"), "needle\n");
+        File.WriteAllText(Path.Join(root, "exclude.log"), "needle\n");
+        File.WriteAllText(Path.Join(root, "keep.txt"), "needle\n");
 
         AssertFilesMatchPinned("--files", "--sort=path", "--no-ignore-dot", root);
         AssertFilesMatchPinned("--files", "--sort=path", "--no-ignore-vcs", root);
@@ -7476,27 +7474,27 @@ public sealed class ScoutApplicationTests
     public void IgnoreTraversalModifiersMatchPinnedRipgrep()
     {
         string parent = CreateTempDirectory();
-        string child = Path.Combine(parent, "child");
+        string child = Path.Join(parent, "child");
         Directory.CreateDirectory(child);
-        File.WriteAllText(Path.Combine(parent, ".ignore"), "parent.log\n");
-        File.WriteAllText(Path.Combine(child, "parent.log"), "needle\n");
-        File.WriteAllText(Path.Combine(child, "keep.txt"), "needle\n");
+        File.WriteAllText(Path.Join(parent, ".ignore"), "parent.log\n");
+        File.WriteAllText(Path.Join(child, "parent.log"), "needle\n");
+        File.WriteAllText(Path.Join(child, "keep.txt"), "needle\n");
         AssertFilesMatchPinned("--files", "--sort=path", child);
         AssertFilesMatchPinned("--files", "--sort=path", "--no-ignore-parent", child);
         AssertFilesMatchPinned("--files", "--sort=path", "--no-ignore-parent", "--ignore-parent", child);
 
         string requireRoot = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(requireRoot, ".gitignore"), "vcs.log\n");
-        File.WriteAllText(Path.Combine(requireRoot, "vcs.log"), "needle\n");
-        File.WriteAllText(Path.Combine(requireRoot, "keep.txt"), "needle\n");
+        File.WriteAllText(Path.Join(requireRoot, ".gitignore"), "vcs.log\n");
+        File.WriteAllText(Path.Join(requireRoot, "vcs.log"), "needle\n");
+        File.WriteAllText(Path.Join(requireRoot, "keep.txt"), "needle\n");
         AssertFilesMatchPinned("--files", "--sort=path", requireRoot);
         AssertFilesMatchPinned("--files", "--sort=path", "--no-require-git", requireRoot);
         AssertFilesMatchPinned("--files", "--sort=path", "--no-require-git", "--require-git", requireRoot);
 
         string caseRoot = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(caseRoot, ".ignore"), "*.log\n");
-        File.WriteAllText(Path.Combine(caseRoot, "trace.LOG"), "needle\n");
-        File.WriteAllText(Path.Combine(caseRoot, "keep.txt"), "needle\n");
+        File.WriteAllText(Path.Join(caseRoot, ".ignore"), "*.log\n");
+        File.WriteAllText(Path.Join(caseRoot, "trace.LOG"), "needle\n");
+        File.WriteAllText(Path.Join(caseRoot, "keep.txt"), "needle\n");
         AssertFilesMatchPinned("--files", "--sort=path", caseRoot);
         AssertFilesMatchPinned("--files", "--sort=path", "--ignore-file-case-insensitive", caseRoot);
         AssertFilesMatchPinned(
@@ -7514,8 +7512,8 @@ public sealed class ScoutApplicationTests
     public void MaxFileSizeMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string small = Path.Combine(root, "small.txt");
-        string large = Path.Combine(root, "large.txt");
+        string small = Path.Join(root, "small.txt");
+        string large = Path.Join(root, "large.txt");
         File.WriteAllText(small, "abcd");
         File.WriteAllText(large, "abcde");
 
@@ -7540,7 +7538,7 @@ public sealed class ScoutApplicationTests
     public void ExplicitRegexpTreatsPositionalsAsPaths()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "alpha\nneedle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-e", "needle", path);
@@ -7563,7 +7561,7 @@ public sealed class ScoutApplicationTests
     public void MultipleExplicitRegexpsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "ababa\nalpha beta alpha\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "--column", "-o", "-e", "beta", "-e", "alpha", path);
@@ -7605,9 +7603,9 @@ public sealed class ScoutApplicationTests
     public void PatternFileSearchMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string patterns = Path.Combine(root, "patterns.txt");
-        string crlfPatterns = Path.Combine(root, "crlf-patterns.txt");
+        string path = Path.Join(root, "input.txt");
+        string patterns = Path.Join(root, "patterns.txt");
+        string crlfPatterns = Path.Join(root, "crlf-patterns.txt");
         File.WriteAllText(path, "alpha\nbeta\ngamma\n");
         File.WriteAllText(patterns, "alpha\nbeta\n");
         File.WriteAllText(crlfPatterns, "alpha\r\nbeta\r\n");
@@ -7632,9 +7630,9 @@ public sealed class ScoutApplicationTests
     public void EmptyAndBlankPatternFilesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string empty = Path.Combine(root, "empty.txt");
-        string blank = Path.Combine(root, "blank.txt");
+        string path = Path.Join(root, "input.txt");
+        string empty = Path.Join(root, "empty.txt");
+        string blank = Path.Join(root, "blank.txt");
         File.WriteAllText(path, "alpha\nbeta\n");
         File.WriteAllText(empty, string.Empty);
         File.WriteAllText(blank, "alpha\n\n");
@@ -7659,8 +7657,8 @@ public sealed class ScoutApplicationTests
     public void PatternFileOrderMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string patternFile = Path.Combine(root, "patterns.txt");
+        string path = Path.Join(root, "input.txt");
+        string patternFile = Path.Join(root, "patterns.txt");
         File.WriteAllText(path, "ab\n");
         File.WriteAllText(patternFile, "a\n");
 
@@ -7684,9 +7682,9 @@ public sealed class ScoutApplicationTests
     public void PatternFileDiagnosticsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string missing = Path.Combine(root, "missing.txt");
-        string invalid = Path.Combine(root, "invalid.txt");
+        string path = Path.Join(root, "input.txt");
+        string missing = Path.Join(root, "missing.txt");
+        string invalid = Path.Join(root, "invalid.txt");
         File.WriteAllText(path, "alpha\n");
         File.WriteAllBytes(invalid, [0xFF, (byte)'\n']);
 
@@ -7729,8 +7727,8 @@ public sealed class ScoutApplicationTests
     public void ScoutConfigPathArgumentsMatchPinnedRipgrepBehavior()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string config = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "alpha\nneedle\n");
         File.WriteAllText(config, "-n\nneedle\n" + path + "\n");
 
@@ -7749,8 +7747,8 @@ public sealed class ScoutApplicationTests
     public void ConfigPathPrecedenceMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string config = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "Needle\nneedle\n");
         File.WriteAllText(config, "--ignore-case\nneedle\n" + path + "\n");
 
@@ -7769,8 +7767,8 @@ public sealed class ScoutApplicationTests
     public void ConfigPathLineParsingMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string config = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "alpha\nneedle\n");
         File.WriteAllText(config, "  -n  \n  # comment\n\nneedle\n" + path + "\n");
 
@@ -7789,9 +7787,9 @@ public sealed class ScoutApplicationTests
     public void ScoutConfigPathTakesPrecedenceOverRipgrepConfigPath()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string scoutConfig = Path.Combine(root, "scout.conf");
-        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string scoutConfig = Path.Join(root, "scout.conf");
+        string ripgrepConfig = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "Needle\nneedle\n");
         File.WriteAllText(scoutConfig, "-n\n--case-sensitive\nneedle\n" + path + "\n");
         File.WriteAllText(ripgrepConfig, "-n\n--ignore-case\nneedle\n" + path + "\n");
@@ -7810,8 +7808,8 @@ public sealed class ScoutApplicationTests
     public void RipgrepConfigPathIsCompatibilityFallback()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string ripgrepConfig = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "alpha\nneedle\n");
         File.WriteAllText(ripgrepConfig, "-n\nneedle\n" + path + "\n");
 
@@ -7854,9 +7852,9 @@ public sealed class ScoutApplicationTests
     public void ScoutConfigPathReadErrorDoesNotFallBackToRipgrepConfigPath()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string scoutConfig = Path.Combine(root, "missing.conf");
-        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string scoutConfig = Path.Join(root, "missing.conf");
+        string ripgrepConfig = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "needle\n");
         File.WriteAllText(ripgrepConfig, "-n\n");
 
@@ -7875,7 +7873,7 @@ public sealed class ScoutApplicationTests
     public unsafe void RawUnixConfigPathEnvironmentPreservesInvalidBytes()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
+        string path = Path.Join(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         byte[] rootBytes = Encoding.UTF8.GetBytes(root);
@@ -7910,8 +7908,8 @@ public sealed class ScoutApplicationTests
     public void NoConfigSkipsConfigPath()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string config = Path.Combine(root, "rg.conf");
+        string path = Path.Join(root, "input.txt");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(path, "needle\n");
         File.WriteAllText(config, "--badflag\n");
 
@@ -7956,7 +7954,7 @@ public sealed class ScoutApplicationTests
     public void GenerateFromConfigWritesScoutArtifact()
     {
         string root = CreateTempDirectory();
-        string config = Path.Combine(root, "rg.conf");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(config, "--generate\ncomplete-fish\n");
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config);
@@ -7973,7 +7971,7 @@ public sealed class ScoutApplicationTests
     public void SpecialModesSkipConfigPath()
     {
         string root = CreateTempDirectory();
-        string config = Path.Combine(root, "rg.conf");
+        string config = Path.Join(root, "rg.conf");
         File.WriteAllText(config, "--badflag\n");
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "-V");
@@ -7990,8 +7988,8 @@ public sealed class ScoutApplicationTests
     public void MissingConfigPathDiagnosticMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.txt");
-        string config = Path.Combine(root, "missing.conf");
+        string path = Path.Join(root, "input.txt");
+        string config = Path.Join(root, "missing.conf");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "needle", path);
@@ -8019,7 +8017,7 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout(splitArguments);
 
-        Assert.Equal((int)ExitCode.Error, exitCode);
+        Assert.Equal(ExitCode.Error, exitCode);
         Assert.Empty(output);
         Assert.Contains(PatternPreparation.BuildLineTerminatorPatternError(nullData), error, StringComparison.Ordinal);
     }
@@ -8037,7 +8035,7 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout(pattern);
 
-        Assert.Equal((int)ExitCode.Error, exitCode);
+        Assert.Equal(ExitCode.Error, exitCode);
         Assert.Empty(output);
         Assert.Contains("pattern contains \"\\0\" but it is impossible to match", error, StringComparison.Ordinal);
     }
@@ -8211,7 +8209,7 @@ public sealed class ScoutApplicationTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -8255,7 +8253,7 @@ public sealed class ScoutApplicationTests
 
     private static string CreatePreprocessorScript(string root)
     {
-        string path = Path.Combine(root, "preprocessor.sh");
+        string path = Path.Join(root, "preprocessor.sh");
         File.WriteAllText(path, "#!/bin/sh\ncat >/dev/null\nprintf 'needle from preprocessor\\n'\n");
 
         ProcessStartInfo startInfo = new("chmod")
@@ -8375,12 +8373,9 @@ public sealed class ScoutApplicationTests
             }
 
             var children = new List<JsonNode>();
-            foreach (KeyValuePair<string, JsonNode?> property in jsonObject)
+            foreach (KeyValuePair<string, JsonNode?> property in jsonObject.Where(property => property.Value is not null))
             {
-                if (property.Value is not null)
-                {
-                    children.Add(property.Value);
-                }
+                children.Add(property.Value!);
             }
 
             for (int index = 0; index < children.Count; index++)

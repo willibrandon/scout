@@ -221,6 +221,6 @@ internal sealed class RegexTwoPrefixLiteralScanner
         Vector128<byte> secondMatches = Sse2.And(
             Sse2.And(Sse2.CompareEqual(bytes0, second0), Sse2.CompareEqual(bytes1, second1)),
             Sse2.CompareEqual(bytes2, second2));
-        return (uint)Sse2.Or(firstMatches, secondMatches).ExtractMostSignificantBits();
+        return Sse2.Or(firstMatches, secondMatches).ExtractMostSignificantBits();
     }
 }

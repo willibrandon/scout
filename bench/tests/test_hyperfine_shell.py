@@ -444,8 +444,7 @@ class HyperfineShellTests(unittest.TestCase):
             [
                 _SH,
                 "-c",
-                '. "$1"; exec_clean_performance_gate '
-                '"local" "$2" -c env',
+                '. "$1"; exec_clean_performance_gate "local" "$2" -c env',
                 "sh",
                 str(environment_helper),
                 _SH,

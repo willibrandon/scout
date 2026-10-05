@@ -99,10 +99,8 @@ public sealed class ByteRegexInvalidUtf8Tests
         byte[] input = [0xFF, 0xEF, 0xBF, 0xBD];
         string[] patterns = [@"\u{FFFD}", @"[\u{FFFD}]", @"\p{So}", "[^a]"];
 
-        foreach (string pattern in patterns)
+        foreach (ByteRegex regex in patterns.Select(pattern => ByteRegex.Compile(pattern, CreateOptions(engineMode))))
         {
-            var regex = ByteRegex.Compile(pattern, CreateOptions(engineMode));
-
             Assert.Equal(new ByteRegexMatch(0, 1), regex.Find(input));
             Assert.Equal(new ByteRegexMatch(1, 3), regex.Find(input, startAt: 1));
             Assert.Equal(2, regex.Count(input));

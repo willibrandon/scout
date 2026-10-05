@@ -64,7 +64,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
             string root = CreateTempDirectory();
             try
             {
-                string file = Path.Combine(root, "alpha.txt");
+                string file = Path.Join(root, "alpha.txt");
                 File.WriteAllText(file, "needle");
 
                 RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
@@ -121,7 +121,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
                 ];
                 for (int index = 0; index < names.Length; index++)
                 {
-                    File.WriteAllText(Path.Combine(root, names[index]), "needle");
+                    File.WriteAllText(Path.Join(root, names[index]), "needle");
                 }
 
                 RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
@@ -136,7 +136,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
                     byte[] expectedName = Encoding.UTF8.GetBytes(names[index]);
                     RawUnixDirectoryEntry entry = Find(entries, expectedName);
                     Assert.Equal(expectedName, entry.Name.ToArray());
-                    Assert.Equal(Encoding.UTF8.GetBytes(Path.Combine(root, names[index])), entry.FullPath.ToArray());
+                    Assert.Equal(Encoding.UTF8.GetBytes(Path.Join(root, names[index])), entry.FullPath.ToArray());
                     Assert.Equal(RawUnixDirectoryEntryType.RegularFile, entry.FileType);
                 }
             }
@@ -162,9 +162,9 @@ public sealed unsafe partial class RawUnixDirectoryTests
             string root = CreateTempDirectory();
             try
             {
-                string file = Path.Combine(root, "file");
-                string directory = Path.Combine(root, "directory");
-                string link = Path.Combine(root, "link");
+                string file = Path.Join(root, "file");
+                string directory = Path.Join(root, "directory");
+                string link = Path.Join(root, "link");
                 File.WriteAllText(file, "needle");
                 Directory.CreateDirectory(directory);
                 File.CreateSymbolicLink(link, file);
@@ -224,7 +224,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

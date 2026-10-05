@@ -44,8 +44,8 @@ internal ref struct RegexCandidateStartEnumerator(
     private int _requiredSearchAt = Math.Clamp(startAt, 0, haystack.Length);
     private int _pendingRequiredAt = -1;
     private int _lastReturnedStart = Math.Clamp(startAt, 0, haystack.Length) - 1;
-    private Span<long> _requiredRangeBuffer = requiredRangeBuffer;
-    private Span<bool> _nulDetection = nulDetection;
+    private readonly Span<long> _requiredRangeBuffer = requiredRangeBuffer;
+    private readonly Span<bool> _nulDetection = nulDetection;
     private int _requiredRangeCount;
     private bool _requiredGateDisabled;
     private bool _prefilterBypassed;

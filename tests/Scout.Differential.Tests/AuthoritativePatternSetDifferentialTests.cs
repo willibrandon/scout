@@ -13,7 +13,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-intersection");
         directory.CreateFile("haystack.txt", "abc\ndef\nzzz\nfeed\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("-n", "[a-z&&def]+", haystack));
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("--count-matches", "[a-z&&def]+", haystack));
@@ -52,7 +52,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-reported-regex");
         directory.CreateFile("haystack.txt", contents);
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("-n", pattern, haystack));
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("--count-matches", pattern, haystack));
@@ -67,7 +67,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-multiline-scalar-escape");
         directory.CreateFile("haystack.txt", "δδ\nlambda λ\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("-U", "-n", @"\u{3B4}+", haystack));
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("-U", "--count-matches", @"\u{3B4}+", haystack));
@@ -83,7 +83,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-auto-chained-quantifiers");
         directory.CreateFile("haystack.txt", "t\ntt\nttt\ntttt\nScout\nScouttt\nScoutttt\nScoutx\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
         string[] patterns = [@"^t{1,2}+$", @"^Scout++$", @"^Scout{1,2}+$"];
 
         for (int index = 0; index < patterns.Length; index++)
@@ -109,7 +109,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-class-algebra-modes");
         directory.CreateFile("haystack.txt", "aeiou\nbcdf\nabc\n012\ndef\ngxyz\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
         string[] patterns = ["[a-z--aeiou]+", "[a-f~~d-z]+", "[a-c[0-2]]+"];
         string[][] modes = [["-U"], ["--no-unicode"]];
 
@@ -135,7 +135,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-byte-hex");
         directory.CreateBytes("haystack.bin", [0xFF, (byte)'\n', 0xC3, 0xBF, (byte)'\n']);
-        string haystack = Path.Combine(directory.RootPath, "haystack.bin");
+        string haystack = Path.Join(directory.RootPath, "haystack.bin");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("--no-unicode", "-n", @"\xFF", haystack));
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact("--no-unicode", "--count-matches", @"\xFF", haystack));
@@ -158,7 +158,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     {
         using var directory = RgTestDirectory.Create("authoritative-pattern-set");
         directory.CreateFile("haystack.txt", "ab\nALPHA\nmiss\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
 
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact(
             CreateExpressionArguments(
@@ -205,7 +205,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
         DifferentialRunner.AssertMatchesPinned(DifferentialCase.Exact(
             "-n",
             "-f",
-            Path.Combine(directory.RootPath, "patterns.txt"),
+            Path.Join(directory.RootPath, "patterns.txt"),
             haystack));
     }
 
@@ -221,10 +221,10 @@ public sealed class AuthoritativePatternSetDifferentialTests
         directory.CreateBytes("nul.bin", "alpha\0miss\0beta\0"u8.ToArray());
         directory.CreateFile("boundary.txt", new string('x', 131_060) + "\nalpha\n");
 
-        string first = Path.Combine(directory.RootPath, "first.txt");
-        string second = Path.Combine(directory.RootPath, "second.txt");
-        string nul = Path.Combine(directory.RootPath, "nul.bin");
-        string boundary = Path.Combine(directory.RootPath, "boundary.txt");
+        string first = Path.Join(directory.RootPath, "first.txt");
+        string second = Path.Join(directory.RootPath, "second.txt");
+        string nul = Path.Join(directory.RootPath, "nul.bin");
+        string boundary = Path.Join(directory.RootPath, "boundary.txt");
         string[] expressions = ["(?i:(?<word>alpha))", "beta", "^gamma$"];
         DifferentialCase[] cases =
         [

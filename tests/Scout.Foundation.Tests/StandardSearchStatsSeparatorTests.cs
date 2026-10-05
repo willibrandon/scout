@@ -45,8 +45,8 @@ public sealed class StandardSearchStatsSeparatorTests
         string root = CreateSearchDirectory();
         try
         {
-            string firstPath = Path.Combine(root, "first.txt");
-            string secondPath = Path.Combine(root, "second.txt");
+            string firstPath = Path.Join(root, "first.txt");
+            string secondPath = Path.Join(root, "second.txt");
             string[] arguments = CreateArguments(
                 contextOption,
                 scenario,
@@ -76,8 +76,8 @@ public sealed class StandardSearchStatsSeparatorTests
         string root = CreateSearchDirectory();
         try
         {
-            string firstPath = Path.Combine(root, "first.txt");
-            string secondPath = Path.Combine(root, "second.txt");
+            string firstPath = Path.Join(root, "first.txt");
+            string secondPath = Path.Join(root, "second.txt");
 
             (int exitCode, string output, string error) = RunScout(
                 "--no-config",
@@ -110,8 +110,8 @@ public sealed class StandardSearchStatsSeparatorTests
         string root = CreateSearchDirectory();
         try
         {
-            string firstPath = Path.Combine(root, "first.txt");
-            string secondPath = Path.Combine(root, "second.txt");
+            string firstPath = Path.Join(root, "first.txt");
+            string secondPath = Path.Join(root, "second.txt");
 
             (int exitCode, string output, string error) = RunScout(
                 "--no-config",
@@ -144,8 +144,8 @@ public sealed class StandardSearchStatsSeparatorTests
         string root = CreateSearchDirectory();
         try
         {
-            string firstPath = Path.Combine(root, "first.txt");
-            string secondPath = Path.Combine(root, "second.txt");
+            string firstPath = Path.Join(root, "first.txt");
+            string secondPath = Path.Join(root, "second.txt");
 
             (int exitCode, string output, string error) = RunScout(
                 "--no-config",
@@ -199,12 +199,12 @@ public sealed class StandardSearchStatsSeparatorTests
 
     private static string CreateSearchDirectory()
     {
-        string root = Path.Combine(
+        string root = Path.Join(
             Path.GetTempPath(),
             "scout-stats-separator-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "first.txt"), "before\nneedle\nafter\n");
-        File.WriteAllText(Path.Combine(root, "second.txt"), "before\nneedle\nafter\n");
+        File.WriteAllText(Path.Join(root, "first.txt"), "before\nneedle\nafter\n");
+        File.WriteAllText(Path.Join(root, "second.txt"), "before\nneedle\nafter\n");
         return root;
     }
 

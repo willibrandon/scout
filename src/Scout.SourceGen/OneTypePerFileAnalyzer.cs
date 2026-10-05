@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using System.Collections.Immutable;
 using System.IO;
 using Microsoft.CodeAnalysis;
@@ -42,15 +42,7 @@ public sealed class OneTypePerFileAnalyzer : DiagnosticAnalyzer
         }
 
         SyntaxNode root = context.Tree.GetRoot(context.CancellationToken);
-        List<SyntaxNode> declarations = new(capacity: 2);
-
-        foreach (SyntaxNode node in root.DescendantNodes(static _ => true))
-        {
-            if (IsTypeDeclaration(node))
-            {
-                declarations.Add(node);
-            }
-        }
+        var declarations = root.DescendantNodes(static _ => true).Where(IsTypeDeclaration).ToList();
 
         if (declarations.Count == 0)
         {

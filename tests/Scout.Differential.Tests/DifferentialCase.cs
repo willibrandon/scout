@@ -348,12 +348,12 @@ internal sealed class DifferentialCase
 
         string fullPath = workingDirectory is null || Path.IsPathFullyQualified(path)
             ? path
-            : Path.Combine(workingDirectory, path);
+            : Path.Join(workingDirectory, path);
         return Directory.Exists(fullPath);
     }
 
     private string GetWorkingDirectory(string rootPath)
     {
-        return RelativeWorkingDirectory is null ? rootPath : Path.Combine(rootPath, RelativeWorkingDirectory);
+        return RelativeWorkingDirectory is null ? rootPath : Path.Join(rootPath, RelativeWorkingDirectory);
     }
 }

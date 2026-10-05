@@ -31,26 +31,20 @@ internal static class RegexEnginePlanner
         error = null;
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            Pcre2SearchPlan? pcre2Plan = null;
-            try
+            using var pcre2Owner = new DisposableOwner<Pcre2SearchPlan>();
+            bool created = TryCreatePcre2(patterns, lowArgs, out pcre2Owner.Resource, out error);
+            if (!created)
             {
-                if (!TryCreatePcre2(patterns, lowArgs, out pcre2Plan, out error))
-                {
-                    return false;
-                }
+                return false;
+            }
 
-                plan = new RegexEnginePlan(
-                    pcre2Plan!.Patterns,
-                    nativePlan: null,
-                    pcre2Plan,
-                    asciiCaseInsensitive: false);
-                pcre2Plan = null;
-                return true;
-            }
-            finally
-            {
-                pcre2Plan?.Dispose();
-            }
+            plan = new RegexEnginePlan(
+                pcre2Owner.Resource!.Patterns,
+                nativePlan: null,
+                pcre2Owner.Resource,
+                asciiCaseInsensitive: false);
+            pcre2Owner.Release();
+            return true;
         }
 
         if (TryCreateNative(
@@ -75,27 +69,21 @@ internal static class RegexEnginePlanner
             return false;
         }
 
-        Pcre2SearchPlan? fallbackPlan = null;
-        try
+        using var fallbackOwner = new DisposableOwner<Pcre2SearchPlan>();
+        bool fallbackCreated = TryCreatePcre2(patterns, lowArgs, out fallbackOwner.Resource, out ScoutError? pcre2Error);
+        if (fallbackCreated)
         {
-            if (TryCreatePcre2(patterns, lowArgs, out fallbackPlan, out ScoutError? pcre2Error))
-            {
-                plan = new RegexEnginePlan(
-                    fallbackPlan!.Patterns,
-                    nativePlan: null,
-                    fallbackPlan,
-                    asciiCaseInsensitive: false);
-                fallbackPlan = null;
-                return true;
-            }
+            plan = new RegexEnginePlan(
+                fallbackOwner.Resource!.Patterns,
+                nativePlan: null,
+                fallbackOwner.Resource,
+                asciiCaseInsensitive: false);
+            fallbackOwner.Release();
+            return true;
+        }
 
-            error = BuildCombinedError(nativeError!, pcre2Error!);
-            return false;
-        }
-        finally
-        {
-            fallbackPlan?.Dispose();
-        }
+        error = BuildCombinedError(nativeError!, pcre2Error!);
+        return false;
     }
 
     private static bool TryCreateNative(

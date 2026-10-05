@@ -3155,7 +3155,6 @@ public sealed class RegexAutomatonTests
         int firstStart = haystack.AsSpan().IndexOf(first);
         int secondStart = haystack.AsSpan().IndexOf(second);
         int thirdStart = haystack.AsSpan().IndexOf(third);
-        int fourthStart = haystack.AsSpan().IndexOf(fourth);
 
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 

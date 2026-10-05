@@ -16,7 +16,7 @@ public sealed class SearchFileReaderTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "utf16.txt");
+            string path = Path.Join(root, "utf16.txt");
             File.WriteAllBytes(path, [0xFF, 0xFE, (byte)'n', 0, (byte)'e', 0, (byte)'e', 0, (byte)'d', 0, (byte)'l', 0, (byte)'e', 0, (byte)'\n', 0]);
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.Auto, SearchMmapMode.Never, allowMemoryMap: true);
@@ -39,7 +39,7 @@ public sealed class SearchFileReaderTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllText(path, "needle\n");
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.AlwaysTryMmap, allowMemoryMap: false);
@@ -62,7 +62,7 @@ public sealed class SearchFileReaderTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllText(path, "needle\n");
 
             SearchFileReadResult disallowed = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.Auto, allowMemoryMap: false);
@@ -88,7 +88,7 @@ public sealed class SearchFileReaderTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "empty.txt");
+            string path = Path.Join(root, "empty.txt");
             File.WriteAllBytes(path, []);
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.AlwaysTryMmap, allowMemoryMap: true);
@@ -111,7 +111,7 @@ public sealed class SearchFileReaderTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             byte[] expected = "needle\n"u8.ToArray();
             File.WriteAllBytes(path, expected);
 
@@ -141,7 +141,7 @@ public sealed class SearchFileReaderTests
             string root = CreateTempDirectory();
             try
             {
-                string path = Path.Combine(root, "input.txt");
+                string path = Path.Join(root, "input.txt");
                 File.WriteAllText(path, "needle\n");
                 byte[] pathBytes = Encoding.UTF8.GetBytes(path);
 
@@ -166,7 +166,7 @@ public sealed class SearchFileReaderTests
 
     private static string CreateTempDirectory()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"scout-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"scout-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         return root;
     }

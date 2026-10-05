@@ -164,7 +164,6 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
             }
 
             coreStart = nextStart;
-            scalarEnd = coreStart + scalarLength;
         }
 
         int coreEnd = MatchCore(haystack, coreStart, scalar, scalarLength, kind);

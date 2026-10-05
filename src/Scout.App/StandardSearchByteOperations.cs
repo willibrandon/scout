@@ -1082,14 +1082,9 @@ internal static class StandardSearchByteOperations
         if (searchMode == CliSearchMode.Count)
         {
             long count;
-            if (onlyMatching && !invertMatch)
-            {
-                count = LiteralLineSearcher.CountMatchesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            }
-            else
-            {
-                count = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            }
+            count = onlyMatching && !invertMatch
+                ? LiteralLineSearcher.CountMatchesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData)
+                : LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
 
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
@@ -1123,26 +1118,18 @@ internal static class StandardSearchByteOperations
             if (onlyMatching)
             {
                 var replacementMatchSink = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan);
-                try
+                using (new DisposableScope<ReplacementMatchSink>(ref replacementMatchSink))
                 {
                     return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-                }
-                finally
-                {
-                    replacementMatchSink.Dispose();
                 }
             }
 
             var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan, streamPlainBodyDirectly: true);
-            try
+            using (new DisposableScope<ReplacementLineSink>(ref replacementLineSink))
             {
                 bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
                 replacementLineSink.Flush();
                 return matched;
-            }
-            finally
-            {
-                replacementLineSink.Dispose();
             }
         }
 
@@ -1353,33 +1340,22 @@ internal static class StandardSearchByteOperations
             {
                 var inner = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan);
                 var sink = new RegexPlanCountingMatchLineSink<ReplacementMatchSink>(inner);
-                try
+                using (new DisposableScope<ReplacementMatchSink>(ref sink.Inner))
                 {
                     bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
                     RecordMatchSinkMetrics(searchSpan.Length, maxCount, sink.MatchedLines, sink.Matches, sink.LastMatchedLineEnd, metrics);
                     return matched;
                 }
-                finally
-                {
-                    ReplacementMatchSink completedSink = sink.Inner;
-                    completedSink.Dispose();
-                }
             }
 
             var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan, streamPlainBodyDirectly: true);
             var countingReplacementSink = new RegexPlanCountingMatchLineSink<ReplacementLineSink>(replacementLineSink);
-            try
+            using (new DisposableScope<ReplacementLineSink>(ref countingReplacementSink.Inner))
             {
                 bool replacementMatched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref countingReplacementSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-                ReplacementLineSink completedSink = countingReplacementSink.Inner;
-                completedSink.Flush();
+                countingReplacementSink.Inner.Flush();
                 RecordMatchSinkMetrics(searchSpan.Length, maxCount, countingReplacementSink.MatchedLines, countingReplacementSink.Matches, countingReplacementSink.LastMatchedLineEnd, metrics);
                 return replacementMatched;
-            }
-            finally
-            {
-                ReplacementLineSink completedSink = countingReplacementSink.Inner;
-                completedSink.Dispose();
             }
         }
 
@@ -1597,9 +1573,7 @@ internal static class StandardSearchByteOperations
                 searchLength);
         }
 
-        bool statsInvertMatch = searchMode == CliSearchMode.FilesWithoutMatch
-            ? false
-            : invertMatch;
+        bool statsInvertMatch = searchMode != CliSearchMode.FilesWithoutMatch && invertMatch;
         bool contextOutputRequested = searchMode == CliSearchMode.Standard &&
             (beforeContext > 0 || afterContext > 0 || passthru);
         ulong? rendererMaxCount = maxCount;

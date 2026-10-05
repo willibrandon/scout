@@ -10,6 +10,8 @@ namespace Scout;
 /// </summary>
 public sealed class OneTypePerFileAnalyzerTests
 {
+    private static readonly string[] SourceRootNames = ["src", "tests"];
+
     /// <summary>
     /// Verifies a single type with a matching file name is accepted.
     /// </summary>
@@ -151,7 +153,7 @@ public sealed class OneTypePerFileAnalyzerTests
     [Fact]
     public async Task IgnoresExternalLibraryImportGeneratedFilesAsync()
     {
-        string filePath = Path.Combine(
+        string filePath = Path.Join(
             Path.GetTempPath(),
             "ScoutAnalyzerTests",
             "obj",
@@ -195,13 +197,10 @@ public sealed class OneTypePerFileAnalyzerTests
                 cancellationToken: TestContext.Current.CancellationToken);
             ImmutableArray<Diagnostic> diagnostics = await AnalyzeTreeAsync(tree).ConfigureAwait(true);
 
-            foreach (Diagnostic diagnostic in diagnostics)
+            foreach (Diagnostic diagnostic in diagnostics.Where(diagnostic => string.Equals(diagnostic.Id, "SCOUT0001", StringComparison.Ordinal) ||
+                    string.Equals(diagnostic.Id, "SCOUT0002", StringComparison.Ordinal)))
             {
-                if (string.Equals(diagnostic.Id, "SCOUT0001", StringComparison.Ordinal) ||
-                    string.Equals(diagnostic.Id, "SCOUT0002", StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, filePath)}: {diagnostic.GetMessage()}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, filePath)}: {diagnostic.GetMessage()}");
             }
         }
 
@@ -210,7 +209,7 @@ public sealed class OneTypePerFileAnalyzerTests
 
     private static Task<ImmutableArray<Diagnostic>> AnalyzeSourceAsync(string fileName, string source)
     {
-        string filePath = Path.Combine(Path.GetTempPath(), "ScoutAnalyzerTests", fileName);
+        string filePath = Path.Join(Path.GetTempPath(), "ScoutAnalyzerTests", fileName);
         return AnalyzeSourceAtPathAsync(filePath, source);
     }
 
@@ -236,15 +235,12 @@ public sealed class OneTypePerFileAnalyzerTests
 
     private static IEnumerable<string> EnumerateRepositorySources(string root)
     {
-        foreach (string sourceRootName in new[] { "src", "tests" })
+        foreach (string sourceRoot in SourceRootNames.Select(name => Path.Join(root, name)))
         {
-            string sourceRoot = Path.Combine(root, sourceRootName);
-            foreach (string filePath in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+            foreach (string filePath in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+                .Where(filePath => !IsBuildArtifact(filePath)))
             {
-                if (!IsBuildArtifact(filePath))
-                {
-                    yield return filePath;
-                }
+                yield return filePath;
             }
         }
     }
@@ -261,7 +257,7 @@ public sealed class OneTypePerFileAnalyzerTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

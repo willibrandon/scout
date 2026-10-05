@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -23,7 +24,7 @@ public sealed partial class PinnedConfigurationTests
     public void GlobalJsonPinsExactSdk()
     {
         string root = FindRepositoryRoot();
-        string json = File.ReadAllText(Path.Combine(root, "global.json"));
+        string json = File.ReadAllText(Path.Join(root, "global.json"));
         using var document = JsonDocument.Parse(json);
 
         JsonElement sdk = document.RootElement.GetProperty("sdk");
@@ -38,11 +39,11 @@ public sealed partial class PinnedConfigurationTests
     public void PerformanceGateProvisionsIsolatedPinnedSdk()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string setupSdk = File.ReadAllText(Path.Combine(root, "eng", "setup-dotnet-performance-sdk.sh"));
-        string performanceEnvironment = File.ReadAllText(Path.Combine(root, "eng", "performance-environment.sh"));
-        string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
-        string releaseGateWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string setupSdk = File.ReadAllText(Path.Join(root, "eng", "setup-dotnet-performance-sdk.sh"));
+        string performanceEnvironment = File.ReadAllText(Path.Join(root, "eng", "performance-environment.sh"));
+        string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
+        string releaseGateWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
         int performanceJobStart = releaseGateWorkflow.IndexOf("  performance-gate:\n", StringComparison.Ordinal);
         Assert.True(performanceJobStart >= 0);
         int performanceJobEnd = releaseGateWorkflow.IndexOf("\n  native-linux-x64:", performanceJobStart, StringComparison.Ordinal);
@@ -85,8 +86,8 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
 
-        Assert.True(File.Exists(Path.Combine(root, "Scout.slnx")));
-        Assert.False(File.Exists(Path.Combine(root, "Scout.sln")));
+        Assert.True(File.Exists(Path.Join(root, "Scout.slnx")));
+        Assert.False(File.Exists(Path.Join(root, "Scout.sln")));
     }
 
     /// <summary>
@@ -96,15 +97,15 @@ public sealed partial class PinnedConfigurationTests
     public void CiWorkflowPinsCrossPlatformGates()
     {
         string root = FindRepositoryRoot();
-        string workflowPath = Path.Combine(root, ".github", "workflows", "ci.yml");
-        string releaseGateWorkflowPath = Path.Combine(root, ".github", "workflows", "release-gates.yml");
+        string workflowPath = Path.Join(root, ".github", "workflows", "ci.yml");
+        string releaseGateWorkflowPath = Path.Join(root, ".github", "workflows", "release-gates.yml");
 
         Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
         Assert.True(File.Exists(releaseGateWorkflowPath), "Missing release gate workflow: " + releaseGateWorkflowPath);
         string ciWorkflow = File.ReadAllText(workflowPath);
         string releaseGateWorkflow = File.ReadAllText(releaseGateWorkflowPath);
-        string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
-        string benchmarkReadme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
+        string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
+        string benchmarkReadme = File.ReadAllText(Path.Join(root, "bench", "README.md"));
         string workflow = ciWorkflow + "\n" + releaseGateWorkflow;
         string[] githubHostedRunnerLabels =
         [
@@ -164,7 +165,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/restore-ripgrep-oracle.ps1", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/install-windows-host-prereqs.ps1", releaseGateWorkflow, StringComparison.Ordinal);
-        string windowsPrereqs = File.ReadAllText(Path.Combine(root, "eng", "install-windows-host-prereqs.ps1"));
+        string windowsPrereqs = File.ReadAllText(Path.Join(root, "eng", "install-windows-host-prereqs.ps1"));
         Assert.Contains("\"lz4\"", windowsPrereqs, StringComparison.Ordinal);
         Assert.Contains("\"brotli\"", windowsPrereqs, StringComparison.Ordinal);
         Assert.Contains("\"zstd\"", windowsPrereqs, StringComparison.Ordinal);
@@ -288,7 +289,7 @@ public sealed partial class PinnedConfigurationTests
     public void RepositoryPinsCrossPlatformLineEndings()
     {
         string root = FindRepositoryRoot();
-        string attributes = File.ReadAllText(Path.Combine(root, ".gitattributes"));
+        string attributes = File.ReadAllText(Path.Join(root, ".gitattributes"));
 
         Assert.Contains("* text=auto eol=lf", attributes, StringComparison.Ordinal);
     }
@@ -329,12 +330,12 @@ public sealed partial class PinnedConfigurationTests
     public void HostedReleaseGatesProvisionPinnedRipgrepOracle()
     {
         string root = FindRepositoryRoot();
-        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
-        string script = File.ReadAllText(Path.Combine(root, "eng", "restore-ripgrep-oracle.sh"));
-        string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "restore-ripgrep-oracle.ps1"));
-        string captureScript = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.sh"));
-        string windowsCaptureScript = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.ps1"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
+        string script = File.ReadAllText(Path.Join(root, "eng", "restore-ripgrep-oracle.sh"));
+        string windowsScript = File.ReadAllText(Path.Join(root, "eng", "restore-ripgrep-oracle.ps1"));
+        string captureScript = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.sh"));
+        string windowsCaptureScript = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.ps1"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
 
         Assert.Contains("Restore pinned ripgrep oracle archive", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/restore-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
@@ -407,7 +408,7 @@ public sealed partial class PinnedConfigurationTests
     public void HostedRipgrepOracleRowsCoverReleaseTestRids()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         (string Rid, string ArchivePath, string ArchiveSha256, string Path, string Sha256, string Pcre2Path, string Pcre2Sha256)[] rows =
         [
             (
@@ -479,7 +480,7 @@ public sealed partial class PinnedConfigurationTests
                 "pcre2_sha256 = \"" + pcre2Sha256 + "\"");
             Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
 
-            string archiveFullPath = Path.Combine(root, archivePath.Replace('/', Path.DirectorySeparatorChar));
+            string archiveFullPath = Path.Join(root, archivePath.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(archiveFullPath), "Missing hosted ripgrep oracle archive: " + archiveFullPath);
             string actualArchiveSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archiveFullPath))).ToLowerInvariant();
             Assert.Equal(archiveSha256, actualArchiveSha256);
@@ -493,10 +494,10 @@ public sealed partial class PinnedConfigurationTests
     public void HostedOracleCaptureUsesGitHubHostedUnixRunners()
     {
         string root = FindRepositoryRoot();
-        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "oracle-capture.yml"));
-        string script = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.sh"));
-        string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.ps1"));
-        string macosToolScript = File.ReadAllText(Path.Combine(root, "eng", "capture-macos-tools.sh"));
+        string workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "oracle-capture.yml"));
+        string script = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.sh"));
+        string windowsScript = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.ps1"));
+        string macosToolScript = File.ReadAllText(Path.Join(root, "eng", "capture-macos-tools.sh"));
 
         Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("push:", workflow, StringComparison.Ordinal);
@@ -595,7 +596,7 @@ public sealed partial class PinnedConfigurationTests
         PinnedRipgrepOracle.VerifyHash();
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         string defaultExecutablePath = PinnedRipgrepOracle.ReadHostOracleValue("path", "ripgrep_rg_path");
         string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
         List<string> oracleBlockLines =
@@ -633,7 +634,7 @@ public sealed partial class PinnedConfigurationTests
     public void CentralPackageVersionsPinToolchainAndTests()
     {
         string root = FindRepositoryRoot();
-        var document = XDocument.Load(Path.Combine(root, "Directory.Packages.props"));
+        var document = XDocument.Load(Path.Join(root, "Directory.Packages.props"));
 
         AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
         AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
@@ -651,8 +652,8 @@ public sealed partial class PinnedConfigurationTests
     public void NativeAotAndTrimPolicyIsPinned()
     {
         string root = FindRepositoryRoot();
-        var document = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
-        var targets = XDocument.Load(Path.Combine(root, "Directory.Build.targets"));
+        var document = XDocument.Load(Path.Join(root, "Directory.Build.props"));
+        var targets = XDocument.Load(Path.Join(root, "Directory.Build.targets"));
         XElement defaults = document.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
         XElement sourceGenerator = document.Root.Elements("PropertyGroup").Single(
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.SourceGen'", StringComparison.Ordinal));
@@ -715,15 +716,15 @@ public sealed partial class PinnedConfigurationTests
     public void LibraryPackageSurfaceIsPinned()
     {
         string root = FindRepositoryRoot();
-        var regex = XDocument.Load(Path.Combine(root, "src", "Scout.Regex", "Scout.Regex.csproj"));
-        var globbing = XDocument.Load(Path.Combine(root, "src", "Scout.Globbing", "Scout.Globbing.csproj"));
-        var ignore = XDocument.Load(Path.Combine(root, "src", "Scout.Ignore", "Scout.Ignore.csproj"));
-        var build = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
-        var targets = XDocument.Load(Path.Combine(root, "Directory.Build.targets"));
+        var regex = XDocument.Load(Path.Join(root, "src", "Scout.Regex", "Scout.Regex.csproj"));
+        var globbing = XDocument.Load(Path.Join(root, "src", "Scout.Globbing", "Scout.Globbing.csproj"));
+        var ignore = XDocument.Load(Path.Join(root, "src", "Scout.Ignore", "Scout.Ignore.csproj"));
+        var build = XDocument.Load(Path.Join(root, "Directory.Build.props"));
+        var targets = XDocument.Load(Path.Join(root, "Directory.Build.targets"));
         XElement defaults = build.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
-        string readme = File.ReadAllText(Path.Combine(root, "README.md"));
-        string libraries = File.ReadAllText(Path.Combine(root, "docs", "LIBRARIES.md"));
-        string defaultPackageReadme = File.ReadAllText(Path.Combine(root, "PACKAGE.md"));
+        string readme = File.ReadAllText(Path.Join(root, "README.md"));
+        string libraries = File.ReadAllText(Path.Join(root, "docs", "LIBRARIES.md"));
+        string defaultPackageReadme = File.ReadAllText(Path.Join(root, "PACKAGE.md"));
 
         AssertPackage(regex, "Scout.Text.Regex", "net9.0;net10.0");
         AssertPackage(globbing, "Scout.IO.Globbing", "net9.0;net10.0");
@@ -751,9 +752,9 @@ public sealed partial class PinnedConfigurationTests
     public void FuzzHarnessPinsDesignTargets()
     {
         string root = FindRepositoryRoot();
-        string solution = File.ReadAllText(Path.Combine(root, "Scout.slnx"));
-        string project = File.ReadAllText(Path.Combine(root, "fuzz", "Scout.Fuzz", "Scout.Fuzz.csproj"));
-        string runner = File.ReadAllText(Path.Combine(root, "fuzz", "Scout.Fuzz", "FuzzTargetRunner.cs"));
+        string solution = File.ReadAllText(Path.Join(root, "Scout.slnx"));
+        string project = File.ReadAllText(Path.Join(root, "fuzz", "Scout.Fuzz", "Scout.Fuzz.csproj"));
+        string runner = File.ReadAllText(Path.Join(root, "fuzz", "Scout.Fuzz", "FuzzTargetRunner.cs"));
 
         Assert.Contains("fuzz/Scout.Fuzz/Scout.Fuzz.csproj", solution, StringComparison.Ordinal);
         Assert.Contains("<PackageReference Include=\"SharpFuzz\" />", project, StringComparison.Ordinal);
@@ -823,9 +824,9 @@ public sealed partial class PinnedConfigurationTests
     public void MsBuildWarningGateEvaluatesImportedProperties()
     {
         string root = FindRepositoryRoot();
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
-        string script = File.ReadAllText(Path.Combine(root, "eng", "check-msbuild-warning-gates.sh"));
-        string targets = File.ReadAllText(Path.Combine(root, "Directory.Build.targets"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
+        string script = File.ReadAllText(Path.Join(root, "eng", "check-msbuild-warning-gates.sh"));
+        string targets = File.ReadAllText(Path.Join(root, "Directory.Build.targets"));
 
         Assert.Contains("artifacts/preflight/msbuild-warning-gates", preflight, StringComparison.Ordinal);
         Assert.Contains("dotnet format \"$ROOT/Scout.slnx\" --no-restore --verify-no-changes", preflight, StringComparison.Ordinal);
@@ -903,10 +904,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("-size 0c", script, StringComparison.Ordinal);
         Assert.Contains("Project warning-gate property dump is empty", script, StringComparison.Ordinal);
 
-        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+        string editorConfig = File.ReadAllText(Path.Join(root, ".editorconfig"));
         Assert.Contains("dotnet_diagnostic." + "IDE0005.severity = " + "error", editorConfig, StringComparison.Ordinal);
 
-        string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
+        string responseFile = File.ReadAllText(Path.Join(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
         Assert.Contains("ScoutNormalizeSdkBaselineNoWarn", targets, StringComparison.Ordinal);
         Assert.Contains("PropertyName=\"NoWarn\"", targets, StringComparison.Ordinal);
@@ -947,9 +948,9 @@ public sealed partial class PinnedConfigurationTests
     public void SourceAnalyzerRejectsSkippedIgnoredExplicitAndQuarantinedTests()
     {
         string root = FindRepositoryRoot();
-        string analyzer = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "NoSkippedTestsAnalyzer.cs"));
-        string descriptors = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "DiagnosticDescriptors.cs"));
-        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+        string analyzer = File.ReadAllText(Path.Join(root, "src", "Scout.SourceGen", "NoSkippedTestsAnalyzer.cs"));
+        string descriptors = File.ReadAllText(Path.Join(root, "src", "Scout.SourceGen", "DiagnosticDescriptors.cs"));
+        string editorConfig = File.ReadAllText(Path.Join(root, ".editorconfig"));
 
         Assert.Contains("NoSkippedTestsAnalyzer", analyzer, StringComparison.Ordinal);
         Assert.Contains("GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics", analyzer, StringComparison.Ordinal);
@@ -972,11 +973,11 @@ public sealed partial class PinnedConfigurationTests
     public void SourceGeneratorTracksAnalyzerReleases()
     {
         string root = FindRepositoryRoot();
-        string sourceGeneratorDirectory = Path.Combine(root, "src", "Scout.SourceGen");
-        string project = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "Scout.SourceGen.csproj"));
-        string shipped = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md"));
-        string unshipped = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md"));
-        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+        string sourceGeneratorDirectory = Path.Join(root, "src", "Scout.SourceGen");
+        string project = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "Scout.SourceGen.csproj"));
+        string shipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md"));
+        string unshipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md"));
+        string editorConfig = File.ReadAllText(Path.Join(root, ".editorconfig"));
 
         Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Shipped.md\" />", project, StringComparison.Ordinal);
         Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Unshipped.md\" />", project, StringComparison.Ordinal);
@@ -999,10 +1000,10 @@ public sealed partial class PinnedConfigurationTests
     public void RuntimeSurfacesReadScoutConfigPathWithRipgrepFallback()
     {
         string root = FindRepositoryRoot();
-        string configExpander = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ConfigArgumentExpander.cs"));
-        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
-        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string configExpander = File.ReadAllText(Path.Join(root, "src", "Scout.App", "ConfigArgumentExpander.cs"));
+        string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
+        string parity = File.ReadAllText(Path.Join(root, "docs", "PARITY.md"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
 
         Assert.Contains("SCOUT_CONFIG_PATH", configExpander, StringComparison.Ordinal);
         Assert.Contains("RIPGREP_CONFIG_PATH", configExpander, StringComparison.Ordinal);
@@ -1020,7 +1021,7 @@ public sealed partial class PinnedConfigurationTests
     public void ParityLedgerContainsNoTrackedGaps()
     {
         string root = FindRepositoryRoot();
-        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
+        string parity = File.ReadAllText(Path.Join(root, "docs", "PARITY.md"));
 
         Assert.Contains("Scout has no accepted behavioral deviations from the pinned ripgrep behavior.", parity, StringComparison.Ordinal);
         Assert.Contains("Identity surfaces are intentionally Scout-specific", parity, StringComparison.Ordinal);
@@ -1058,16 +1059,14 @@ public sealed partial class PinnedConfigurationTests
     public void GeneratedFlagDefinitionsUseDedicatedFolder()
     {
         string root = FindRepositoryRoot();
-        string appRoot = Path.Combine(root, "src", "Scout.App");
-        string definitionsRoot = Path.Combine(appRoot, "Flags", "Definitions");
+        string appRoot = Path.Join(root, "src", "Scout.App");
+        string definitionsRoot = Path.Join(appRoot, "Flags", "Definitions");
         var violations = new List<string>();
 
-        foreach (string path in Directory.EnumerateFiles(appRoot, "*Flag.cs", SearchOption.TopDirectoryOnly))
+        foreach (string path in Directory.EnumerateFiles(appRoot, "*Flag.cs", SearchOption.TopDirectoryOnly)
+            .Where(path => !string.Equals(Path.GetFileName(path), "IFlag.cs", StringComparison.Ordinal)))
         {
-            if (!string.Equals(Path.GetFileName(path), "IFlag.cs", StringComparison.Ordinal))
-            {
-                violations.Add(Path.GetRelativePath(root, path) + " is not under Flags/Definitions.");
-            }
+            violations.Add(Path.GetRelativePath(root, path) + " is not under Flags/Definitions.");
         }
 
         string[] definitionFiles = Directory.GetFiles(definitionsRoot, "*Flag.cs", SearchOption.TopDirectoryOnly);
@@ -1116,7 +1115,7 @@ public sealed partial class PinnedConfigurationTests
     public void FlagCatalogGeneratorReadsOrderFromDefinitions()
     {
         string root = FindRepositoryRoot();
-        string generator = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "FlagCatalogSourceGenerator.cs"));
+        string generator = File.ReadAllText(Path.Join(root, "src", "Scout.SourceGen", "FlagCatalogSourceGenerator.cs"));
 
         Assert.Contains("FlagOrderAttribute", generator, StringComparison.Ordinal);
         Assert.Contains("CompareByFlagDefinitionOrder", generator, StringComparison.Ordinal);
@@ -1153,7 +1152,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         var violations = new List<string>();
 
-        foreach (string sourceRoot in new[] { Path.Combine(root, "src"), Path.Combine(root, "spike") })
+        foreach (string sourceRoot in new[] { Path.Join(root, "src"), Path.Join(root, "spike") })
         {
             foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
             {
@@ -1181,7 +1180,7 @@ public sealed partial class PinnedConfigurationTests
     public void StandardInputProbeHandlesMacosX64StatLayout()
     {
         string root = FindRepositoryRoot();
-        string probePath = Path.Combine(root, "src", "Scout.Cli", "StandardInputProbe.cs");
+        string probePath = Path.Join(root, "src", "Scout.Cli", "StandardInputProbe.cs");
         string probe = File.ReadAllText(probePath);
 
         Assert.Contains("RuntimeInformation.ProcessArchitecture == Architecture.X64", probe, StringComparison.Ordinal);
@@ -1196,7 +1195,7 @@ public sealed partial class PinnedConfigurationTests
     public void UnixOsLayerReadsLinkTargetsAsBytes()
     {
         string root = FindRepositoryRoot();
-        string metadataPath = Path.Combine(root, "src", "Scout.Ignore", "IO", "Ignore", "NativeFileSystemMetadata.cs");
+        string metadataPath = Path.Join(root, "src", "Scout.Ignore", "IO", "Ignore", "NativeFileSystemMetadata.cs");
         string metadata = File.ReadAllText(metadataPath);
 
         Assert.Contains("TryReadRawUnixLinkTarget(ReadOnlySpan<byte> path, out byte[] target)", metadata, StringComparison.Ordinal);
@@ -1211,14 +1210,14 @@ public sealed partial class PinnedConfigurationTests
     public void CliUtilitiesOwnExternalSearchCommandSpawning()
     {
         string root = FindRepositoryRoot();
-        string appReaderPath = Path.Combine(root, "src", "Scout.App", "SearchFileContentReader.cs");
-        string cliRunnerPath = Path.Combine(root, "src", "Scout.Cli", "CliSearchCommandRunner.cs");
+        string appReaderPath = Path.Join(root, "src", "Scout.App", "SearchFileContentReader.cs");
+        string cliRunnerPath = Path.Join(root, "src", "Scout.Cli", "CliSearchCommandRunner.cs");
 
         Assert.True(File.Exists(cliRunnerPath), "Missing CLI command runner: " + cliRunnerPath);
 
         string appReader = File.ReadAllText(appReaderPath);
         string cliRunner = File.ReadAllText(cliRunnerPath);
-        string cliUpstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Cli", "UPSTREAM.md"));
+        string cliUpstream = File.ReadAllText(Path.Join(root, "src", "Scout.Cli", "UPSTREAM.md"));
 
         Assert.Contains("CliSearchCommandRunner.TryRun", appReader, StringComparison.Ordinal);
         Assert.DoesNotContain("new Process", appReader, StringComparison.Ordinal);
@@ -1240,7 +1239,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         var violations = new List<string>();
 
-        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        foreach (string path in Directory.EnumerateFiles(Path.Join(root, "src"), "*.cs", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
             if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, "obj"))
@@ -1269,8 +1268,8 @@ public sealed partial class PinnedConfigurationTests
         var violations = new List<string>();
         string[] encodingProjects =
         [
-            Path.Combine(root, "src", "Scout.Encoding"),
-            Path.Combine(root, "src", "Scout.Encoding.Io"),
+            Path.Join(root, "src", "Scout.Encoding"),
+            Path.Join(root, "src", "Scout.Encoding.Io"),
         ];
 
         foreach (string projectPath in encodingProjects)
@@ -1322,12 +1321,9 @@ public sealed partial class PinnedConfigurationTests
         foreach (string path in EnumerateRuntimeSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            foreach (string token in forbiddenTokens)
+            foreach (string token in forbiddenTokens.Where(token => text.Contains(token, StringComparison.Ordinal)))
             {
-                if (text.Contains(token, StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
             }
         }
 
@@ -1367,12 +1363,9 @@ public sealed partial class PinnedConfigurationTests
         foreach (string path in EnumerateRuntimeSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            foreach (string token in forbiddenTokens)
+            foreach (string token in forbiddenTokens.Where(token => text.Contains(token, StringComparison.Ordinal)))
             {
-                if (text.Contains(token, StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
             }
         }
 
@@ -1386,7 +1379,7 @@ public sealed partial class PinnedConfigurationTests
     public void RuntimeGlobalizationIsInvariantAndCultureInsensitive()
     {
         string root = FindRepositoryRoot();
-        var buildProperties = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        var buildProperties = XDocument.Load(Path.Join(root, "Directory.Build.props"));
         Assert.Equal("true", buildProperties.Descendants("InvariantGlobalization").Single().Value);
         Assert.Equal("true", buildProperties.Descendants("InvariantTimezone").Single().Value);
 
@@ -1435,12 +1428,9 @@ public sealed partial class PinnedConfigurationTests
         foreach (string path in EnumerateSearchHotPathSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            foreach (string token in forbiddenTokens)
+            foreach (string token in forbiddenTokens.Where(token => text.Contains(token, StringComparison.Ordinal)))
             {
-                if (text.Contains(token, StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
             }
         }
 
@@ -1460,28 +1450,19 @@ public sealed partial class PinnedConfigurationTests
             "using System.Linq;",
             "System.Linq",
             "Enumerable.",
-            ".Select(",
-            ".Where(",
-            ".OrderBy(",
-            ".OrderByDescending(",
-            ".ThenBy(",
-            ".ThenByDescending(",
-            ".GroupBy(",
-            ".Join(",
-            ".GroupJoin(",
-            ".Zip(",
-            ".Aggregate(",
         ];
 
         foreach (string path in EnumerateSearchHotPathSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            foreach (string token in forbiddenTokens)
+            foreach (string token in forbiddenTokens.Where(token => text.Contains(token, StringComparison.Ordinal)))
             {
-                if (text.Contains(token, StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+            }
+
+            foreach (string invocation in LinqUsageInspector.Find(text))
+            {
+                violations.Add($"{Path.GetRelativePath(root, path)}: {invocation}");
             }
         }
 
@@ -1513,12 +1494,9 @@ public sealed partial class PinnedConfigurationTests
         foreach (string path in EnumerateRuntimeSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            foreach (string token in forbiddenTokens)
+            foreach (string token in forbiddenTokens.Where(token => text.Contains(token, StringComparison.Ordinal)))
             {
-                if (text.Contains(token, StringComparison.Ordinal))
-                {
-                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
-                }
+                violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
             }
         }
 
@@ -1534,16 +1512,12 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         var violations = new List<string>();
 
-        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        foreach ((string path, string relativePath) in Directory.EnumerateFiles(Path.Join(root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Select(path => (Path: path, RelativePath: Path.GetRelativePath(root, path)))
+            .Where(source => !ContainsPathSegment(source.RelativePath, "bin") &&
+                !ContainsPathSegment(source.RelativePath, "obj") &&
+                !string.Equals(source.RelativePath, Path.Join("src", "Scout.Os", "ProcessEnvironment.cs"), StringComparison.Ordinal)))
         {
-            string relativePath = Path.GetRelativePath(root, path);
-            if (ContainsPathSegment(relativePath, "bin") ||
-                ContainsPathSegment(relativePath, "obj") ||
-                string.Equals(relativePath, Path.Combine("src", "Scout.Os", "ProcessEnvironment.cs"), StringComparison.Ordinal))
-            {
-                continue;
-            }
-
             string text = File.ReadAllText(path);
             if (text.Contains("Environment.GetEnvironmentVariable", StringComparison.Ordinal))
             {
@@ -1561,17 +1535,17 @@ public sealed partial class PinnedConfigurationTests
     public void NativeEntryCapturesPlatformArgumentsAtBoundary()
     {
         string root = FindRepositoryRoot();
-        string scoutEntry = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ScoutEntry.cs"));
-        string nativeArgumentReader = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "NativeArgumentReader.cs"));
-        string unixEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_main.c"));
-        string windowsEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_wmain.c"));
-        string spikeProject = File.ReadAllText(Path.Combine(root, "spike", "Scout.Entry", "Scout.Entry.csproj"));
-        string spikeEntry = File.ReadAllText(Path.Combine(root, "spike", "Scout.Entry", "ScoutEntry.cs"));
-        string spikeBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-unix.sh"));
-        string spikeUnixEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_main.c"));
-        string spikeWindowsEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_wmain.c"));
-        string spikeWindowsBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-windows.ps1"));
-        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string scoutEntry = File.ReadAllText(Path.Join(root, "src", "Scout.App", "ScoutEntry.cs"));
+        string nativeArgumentReader = File.ReadAllText(Path.Join(root, "src", "Scout.App", "NativeArgumentReader.cs"));
+        string unixEntry = File.ReadAllText(Path.Join(root, "native", "entry", "scout_main.c"));
+        string windowsEntry = File.ReadAllText(Path.Join(root, "native", "entry", "scout_wmain.c"));
+        string spikeProject = File.ReadAllText(Path.Join(root, "spike", "Scout.Entry", "Scout.Entry.csproj"));
+        string spikeEntry = File.ReadAllText(Path.Join(root, "spike", "Scout.Entry", "ScoutEntry.cs"));
+        string spikeBuildScript = File.ReadAllText(Path.Join(root, "spike", "build-unix.sh"));
+        string spikeUnixEntry = File.ReadAllText(Path.Join(root, "spike", "native", "scout_main.c"));
+        string spikeWindowsEntry = File.ReadAllText(Path.Join(root, "spike", "native", "scout_wmain.c"));
+        string spikeWindowsBuildScript = File.ReadAllText(Path.Join(root, "spike", "build-windows.ps1"));
+        string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
         string[] forbiddenFallbacks =
         [
             "Environment.GetCommandLineArgs",
@@ -1649,8 +1623,8 @@ public sealed partial class PinnedConfigurationTests
 
         string[] nativeEntryPaths =
         [
-            Path.Combine(root, "native", "entry", "scout_main.c"),
-            Path.Combine(root, "native", "entry", "scout_wmain.c"),
+            Path.Join(root, "native", "entry", "scout_main.c"),
+            Path.Join(root, "native", "entry", "scout_wmain.c"),
         ];
         for (int pathIndex = 0; pathIndex < nativeEntryPaths.Length; pathIndex++)
         {
@@ -1676,9 +1650,9 @@ public sealed partial class PinnedConfigurationTests
     public void NativeGeneratedArtifactDifferentialsAreWired()
     {
         string root = FindRepositoryRoot();
-        string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
-        string generatedArtifactScript = File.ReadAllText(Path.Combine(root, "native", "test-generated-artifacts-unix.sh"));
-        string oracleScript = File.ReadAllText(Path.Combine(root, "eng", "read-ripgrep-oracle.sh"));
+        string appBuildScript = File.ReadAllText(Path.Join(root, "native", "build-app-unix.sh"));
+        string generatedArtifactScript = File.ReadAllText(Path.Join(root, "native", "test-generated-artifacts-unix.sh"));
+        string oracleScript = File.ReadAllText(Path.Join(root, "eng", "read-ripgrep-oracle.sh"));
 
         Assert.Contains("\"$ROOT/native/test-generated-artifacts-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("read_lock_rid_table_value()", oracleScript, StringComparison.Ordinal);
@@ -1706,10 +1680,10 @@ public sealed partial class PinnedConfigurationTests
     public void NativeReleasePackagingIsWiredForEveryRid()
     {
         string root = FindRepositoryRoot();
-        string unixBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
-        string windowsBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
-        string unixPackageScript = File.ReadAllText(Path.Combine(root, "eng", "package-release.sh"));
-        string windowsPackageScript = File.ReadAllText(Path.Combine(root, "eng", "package-release.ps1"));
+        string unixBuildScript = File.ReadAllText(Path.Join(root, "native", "build-app-unix.sh"));
+        string windowsBuildScript = File.ReadAllText(Path.Join(root, "native", "build-app-windows.ps1"));
+        string unixPackageScript = File.ReadAllText(Path.Join(root, "eng", "package-release.sh"));
+        string windowsPackageScript = File.ReadAllText(Path.Join(root, "eng", "package-release.ps1"));
 
         Assert.Contains("\"$ROOT/eng/package-release.sh\" \"$RID\"", unixBuildScript, StringComparison.Ordinal);
         Assert.Contains("eng\\package-release.ps1", windowsBuildScript, StringComparison.Ordinal);
@@ -1752,7 +1726,7 @@ public sealed partial class PinnedConfigurationTests
     public void WindowsReleaseWorkflowUsesResolvedPackagePaths()
     {
         string root = FindRepositoryRoot();
-        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release.yml"));
 
         Assert.Contains("""$sourceDir = (Resolve-Path "artifacts\packages\stage\scout-$rid").Path""", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("-d SourceDir=$sourceDir", releaseWorkflow, StringComparison.Ordinal);
@@ -1771,7 +1745,7 @@ public sealed partial class PinnedConfigurationTests
     public void ReleaseWorkflowPacksAndPublishesLibraryPackages()
     {
         string root = FindRepositoryRoot();
-        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release.yml"));
 
         Assert.Contains("pack-library-packages:", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("name: pack library packages", releaseWorkflow, StringComparison.Ordinal);
@@ -1804,7 +1778,7 @@ public sealed partial class PinnedConfigurationTests
     public void ScoopManifestUpdateUsesWindowsArchiveExtractDirs()
     {
         string root = FindRepositoryRoot();
-        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release.yml"));
 
         Assert.Contains("\"bin\": \"scout.exe\"", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("\"extract_dir\": \"scout-win-x64\"", releaseWorkflow, StringComparison.Ordinal);
@@ -1818,7 +1792,7 @@ public sealed partial class PinnedConfigurationTests
     public void DotnetToolPackagingUsesActionsShaWhenAvailable()
     {
         string root = FindRepositoryRoot();
-        string packScript = File.ReadAllText(Path.Combine(root, "eng", "pack-dotnet-tool.py"));
+        string packScript = File.ReadAllText(Path.Join(root, "eng", "pack-dotnet-tool.py"));
 
         Assert.Contains("def repository_commit(root: Path) -> str:", packScript, StringComparison.Ordinal);
         Assert.Contains("os.environ.get(\"GITHUB_SHA\", \"\").strip()", packScript, StringComparison.Ordinal);
@@ -1835,8 +1809,8 @@ public sealed partial class PinnedConfigurationTests
     public void TrademarkCheckRecordsKnownCollisions()
     {
         string root = FindRepositoryRoot();
-        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
-        string trademarkCheck = File.ReadAllText(Path.Combine(root, "docs", "TRADEMARK-CHECK.md"));
+        string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
+        string trademarkCheck = File.ReadAllText(Path.Join(root, "docs", "TRADEMARK-CHECK.md"));
 
         Assert.Contains("docs/TRADEMARK-CHECK.md", design, StringComparison.Ordinal);
         Assert.Contains("Date: 2026-06-01", trademarkCheck, StringComparison.Ordinal);
@@ -1866,12 +1840,12 @@ public sealed partial class PinnedConfigurationTests
     public void GeneratedArtifactsAreSourceGenerated()
     {
         string root = FindRepositoryRoot();
-        string helpOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "HelpOutput.cs"));
-        string generateOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "GenerateOutput.cs"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
-        string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-generated-artifacts.sh"));
-        string transform = File.ReadAllText(Path.Combine(root, "eng", "transform-ripgrep-artifact.pl"));
-        string projectPath = Path.Combine(root, "src", "Scout.App", "Scout.App.csproj");
+        string helpOutput = File.ReadAllText(Path.Join(root, "src", "Scout.App", "HelpOutput.cs"));
+        string generateOutput = File.ReadAllText(Path.Join(root, "src", "Scout.App", "GenerateOutput.cs"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
+        string verifier = File.ReadAllText(Path.Join(root, "eng", "verify-generated-artifacts.sh"));
+        string transform = File.ReadAllText(Path.Join(root, "eng", "transform-ripgrep-artifact.pl"));
+        string projectPath = Path.Join(root, "src", "Scout.App", "Scout.App.csproj");
         var project = XDocument.Load(projectPath);
 
         Assert.DoesNotContain("private const string", helpOutput, StringComparison.Ordinal);
@@ -1933,8 +1907,8 @@ public sealed partial class PinnedConfigurationTests
     public void UpstreamCargoLockIsVendored()
     {
         string root = FindRepositoryRoot();
-        string cargoLock = File.ReadAllText(Path.Combine(root, "upstream", "Cargo.lock"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string cargoLock = File.ReadAllText(Path.Join(root, "upstream", "Cargo.lock"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
 
         Assert.Contains("name = \"regex-automata\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.4.15\"", cargoLock, StringComparison.Ordinal);
@@ -1957,17 +1931,17 @@ public sealed partial class PinnedConfigurationTests
     public void VendoredUnicodeTablesMatchPinnedRegexSyntaxVersion()
     {
         string root = FindRepositoryRoot();
-        string unicodeVersion = File.ReadAllText(Path.Combine(root, "upstream", "UNICODE-VERSION")).Trim();
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
-        string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-unicode-data.sh"));
-        string ucdReadme = File.ReadAllText(Path.Combine(root, "upstream", "ucd", "README.md"));
-        string regexByteClass = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexByteClass.cs"));
-        string regexSyntaxParseState = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexSyntaxParseState.cs"));
-        string regexUnicodePropertyKind = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyKind.cs"));
-        string regexUnicodePropertyNames = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyNames.cs"));
-        string regexUnicodeTables = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexUnicodeTables.cs"));
-        string ucdArchive = Path.Combine(root, "upstream", "ucd", "UCD-16.0.0.zip");
-        string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.11", "unicode_tables");
+        string unicodeVersion = File.ReadAllText(Path.Join(root, "upstream", "UNICODE-VERSION")).Trim();
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
+        string verifier = File.ReadAllText(Path.Join(root, "eng", "verify-unicode-data.sh"));
+        string ucdReadme = File.ReadAllText(Path.Join(root, "upstream", "ucd", "README.md"));
+        string regexByteClass = File.ReadAllText(Path.Join(root, "src", "Scout.Automata", "RegexByteClass.cs"));
+        string regexSyntaxParseState = File.ReadAllText(Path.Join(root, "src", "Scout.Automata.Syntax", "RegexSyntaxParseState.cs"));
+        string regexUnicodePropertyKind = File.ReadAllText(Path.Join(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyKind.cs"));
+        string regexUnicodePropertyNames = File.ReadAllText(Path.Join(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyNames.cs"));
+        string regexUnicodeTables = File.ReadAllText(Path.Join(root, "src", "Scout.Automata", "RegexUnicodeTables.cs"));
+        string ucdArchive = Path.Join(root, "upstream", "ucd", "UCD-16.0.0.zip");
+        string tablesRoot = Path.Join(root, "upstream", "regex-syntax-0.8.11", "unicode_tables");
         string[] expectedTables =
         [
             "age.rs",
@@ -2014,8 +1988,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("require_archive_entry \"PropertyValueAliases.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"Scripts.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"ScriptExtensions.txt\"", verifier, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
-        Assert.True(File.Exists(Path.Combine(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
+        Assert.True(File.Exists(Path.Join(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
+        Assert.True(File.Exists(Path.Join(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
         Assert.Contains("Unicode version: " + unicodeVersion + ".", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsGeneralCategory(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsBooleanProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
@@ -2077,7 +2051,7 @@ public sealed partial class PinnedConfigurationTests
 
         for (int index = 0; index < expectedTables.Length; index++)
         {
-            string table = File.ReadAllText(Path.Combine(tablesRoot, expectedTables[index]));
+            string table = File.ReadAllText(Path.Join(tablesRoot, expectedTables[index]));
             Assert.Contains("DO NOT EDIT THIS FILE. IT WAS AUTOMATICALLY GENERATED BY:", table, StringComparison.Ordinal);
             Assert.Contains("ucd-" + unicodeVersion, table, StringComparison.Ordinal);
             Assert.Contains("Unicode version: " + unicodeVersion + ".", table, StringComparison.Ordinal);
@@ -2273,7 +2247,7 @@ public sealed partial class PinnedConfigurationTests
         for (int fileIndex = 0; fileIndex < upstreamFiles.Length; fileIndex++)
         {
             (string relativePath, string[] fragments) = upstreamFiles[fileIndex];
-            string path = Path.Combine(root, relativePath);
+            string path = Path.Join(root, relativePath);
 
             Assert.True(File.Exists(path), "Missing upstream provenance file: " + relativePath);
             string text = File.ReadAllText(path);
@@ -2291,7 +2265,7 @@ public sealed partial class PinnedConfigurationTests
     public void SourceProjectsHaveUpstreamProvenanceFiles()
     {
         string root = FindRepositoryRoot();
-        string sourceRoot = Path.Combine(root, "src");
+        string sourceRoot = Path.Join(root, "src");
         var missing = new List<string>();
 
         foreach (string projectPath in Directory.EnumerateFiles(sourceRoot, "*.csproj", SearchOption.AllDirectories))
@@ -2303,7 +2277,7 @@ public sealed partial class PinnedConfigurationTests
             }
 
             string projectDirectory = Path.GetDirectoryName(projectPath) ?? sourceRoot;
-            string upstreamPath = Path.Combine(projectDirectory, "UPSTREAM.md");
+            string upstreamPath = Path.Join(projectDirectory, "UPSTREAM.md");
             if (!File.Exists(upstreamPath))
             {
                 missing.Add(Path.GetRelativePath(root, upstreamPath));
@@ -2320,12 +2294,14 @@ public sealed partial class PinnedConfigurationTests
     public void CargoLockPackagesHaveExplicitDisposition()
     {
         string root = FindRepositoryRoot();
-        string cargoLock = File.ReadAllText(Path.Combine(root, "upstream", "Cargo.lock"));
-        string provenance = File.ReadAllText(Path.Combine(root, "docs", "UPSTREAM-SYNC.md"));
-        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "UPSTREAM.md", SearchOption.AllDirectories))
+        string cargoLock = File.ReadAllText(Path.Join(root, "upstream", "Cargo.lock"));
+        var provenanceBuilder = new StringBuilder(File.ReadAllText(Path.Join(root, "docs", "UPSTREAM-SYNC.md")));
+        foreach (string path in Directory.EnumerateFiles(Path.Join(root, "src"), "UPSTREAM.md", SearchOption.AllDirectories))
         {
-            provenance += "\n" + File.ReadAllText(path);
+            provenanceBuilder.AppendLine().Append(File.ReadAllText(path));
         }
+
+        string provenance = provenanceBuilder.ToString();
 
         var missing = new List<string>();
         foreach (Match match in CargoLockPackagePattern().Matches(cargoLock))
@@ -2353,7 +2329,7 @@ public sealed partial class PinnedConfigurationTests
     public void UpstreamSyncDocumentsNoSurfaceLockfileEntries()
     {
         string root = FindRepositoryRoot();
-        string policy = File.ReadAllText(Path.Combine(root, "docs", "UPSTREAM-SYNC.md"));
+        string policy = File.ReadAllText(Path.Join(root, "docs", "UPSTREAM-SYNC.md"));
         string[] requiredFragments =
         [
             "## Lockfile Entries With No Scout Port",
@@ -2382,7 +2358,7 @@ public sealed partial class PinnedConfigurationTests
     public void ThirdPartyNoticesReproduceRequiredLicenses()
     {
         string root = FindRepositoryRoot();
-        string notices = File.ReadAllText(Path.Combine(root, "docs", "THIRD-PARTY-NOTICES.md"));
+        string notices = File.ReadAllText(Path.Join(root, "docs", "THIRD-PARTY-NOTICES.md"));
         string[] requiredInventoryRows =
         [
             "| ripgrep | `/Users/brandon/src/ripgrep` at `" + PinnedRipgrepCommit + "` | MIT OR Unlicense |",
@@ -2441,9 +2417,9 @@ public sealed partial class PinnedConfigurationTests
     public void Pcre2InvalidUtfOptionMatchesVendoredHeader()
     {
         string root = FindRepositoryRoot();
-        string header = File.ReadAllText(Path.Combine(root, "native", "pcre2", "pcre2-10.46", "include", "pcre2.h"));
-        string pcre2CompileOptions = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2CompileOptions.cs"));
-        string pcre2SearchOperations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string header = File.ReadAllText(Path.Join(root, "native", "pcre2", "pcre2-10.46", "include", "pcre2.h"));
+        string pcre2CompileOptions = File.ReadAllText(Path.Join(root, "src", "Scout.Pcre2", "Pcre2CompileOptions.cs"));
+        string pcre2SearchOperations = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
 
         Assert.Contains("#define PCRE2_MATCH_INVALID_UTF   0x04000000u", header, StringComparison.Ordinal);
         Assert.Contains("MatchInvalidUtf = 0x04000000", pcre2CompileOptions, StringComparison.Ordinal);
@@ -2457,22 +2433,22 @@ public sealed partial class PinnedConfigurationTests
     public void Pcre2UpstreamPinMatchesVendoredHeader()
     {
         string root = FindRepositoryRoot();
-        string directoryBuildProps = File.ReadAllText(Path.Combine(root, "Directory.Build.props"));
-        string upstream = File.ReadAllText(Path.Combine(root, "native", "pcre2", "UPSTREAM"));
-        string sourceRoot = Path.Combine(root, "native", "pcre2", "pcre2-10.46");
-        string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
-        string windowsBuildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-windows.ps1"));
-        string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
-        string toolchainScript = File.ReadAllText(Path.Combine(root, "native", "toolchain-unix.sh"));
-        string windowsAppBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
-        string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
-        string oracleReader = File.ReadAllText(Path.Combine(root, "eng", "read-ripgrep-oracle.sh"));
-        string invalidUtf8DifferentialScript = File.ReadAllText(Path.Combine(root, "native", "test-invalid-utf8-differential-unix.sh"));
-        string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
-        string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
-        string pcre2SearchOperations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
+        string directoryBuildProps = File.ReadAllText(Path.Join(root, "Directory.Build.props"));
+        string upstream = File.ReadAllText(Path.Join(root, "native", "pcre2", "UPSTREAM"));
+        string sourceRoot = Path.Join(root, "native", "pcre2", "pcre2-10.46");
+        string buildScript = File.ReadAllText(Path.Join(root, "native", "pcre2", "build-unix.sh"));
+        string windowsBuildScript = File.ReadAllText(Path.Join(root, "native", "pcre2", "build-windows.ps1"));
+        string appBuildScript = File.ReadAllText(Path.Join(root, "native", "build-app-unix.sh"));
+        string toolchainScript = File.ReadAllText(Path.Join(root, "native", "toolchain-unix.sh"));
+        string windowsAppBuildScript = File.ReadAllText(Path.Join(root, "native", "build-app-windows.ps1"));
+        string differentialScript = File.ReadAllText(Path.Join(root, "native", "test-pcre2-differential-unix.sh"));
+        string oracleReader = File.ReadAllText(Path.Join(root, "eng", "read-ripgrep-oracle.sh"));
+        string invalidUtf8DifferentialScript = File.ReadAllText(Path.Join(root, "native", "test-invalid-utf8-differential-unix.sh"));
+        string pcre2Library = File.ReadAllText(Path.Join(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
+        string pcre2Regex = File.ReadAllText(Path.Join(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
+        string pcre2SearchOperations = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string headerPath = Path.Join(sourceRoot, "include", "pcre2.h");
         string pinnedPcre2RipgrepBinaryPath = PinnedPcre2RipgrepOracle.ExecutablePath;
         string defaultPcre2RipgrepPath = PinnedRipgrepOracle.ReadHostOracleValue("pcre2_path", "ripgrep_pcre2_rg_path");
         string expectedPcre2RipgrepSha256 = PinnedPcre2RipgrepOracle.ExpectedSha256;
@@ -2482,9 +2458,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
         Assert.True(File.Exists(pinnedPcre2RipgrepBinaryPath), "Missing pinned PCRE2 ripgrep binary: " + pinnedPcre2RipgrepBinaryPath);
         PinnedPcre2RipgrepOracle.VerifyHash();
-        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_compile.c")));
-        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_match.c")));
-        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_jit_compile.c")));
+        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_compile.c")));
+        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_match.c")));
+        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_jit_compile.c")));
         string header = File.ReadAllText(headerPath);
 
         Assert.Contains("binding = \"pcre2\"", upstream, StringComparison.Ordinal);
@@ -2744,7 +2720,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("ConfigVersion = 11", pcre2Library, StringComparison.Ordinal);
         Assert.Contains("SearchPcre2DirectoryParallel", pcre2SearchOperations, StringComparison.Ordinal);
-        Assert.Contains("ThreadLocal<Pcre2Regex>", pcre2SearchOperations, StringComparison.Ordinal);
+        string workerRegexes = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2WorkerRegexes.cs"));
+        Assert.Contains("ThreadLocal<Pcre2Regex>", workerRegexes, StringComparison.Ordinal);
+        Assert.Contains("new Pcre2WorkerRegexes(regex, pcre2Pattern, compileOptions)", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("SearchWalkPlanning.GetSearchWalkThreadCount", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("BuildParallel().Run", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("CollectPcre2SearchStats", pcre2SearchOperations, StringComparison.Ordinal);
@@ -2774,7 +2752,7 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         for (int index = 0; index < tools.Length; index++)
         {
             (string name, string version, string path, string localSha256) = tools[index];
@@ -2818,8 +2796,8 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
 
         Assert.Contains("read_lock_macos_tool_value()", preflight, StringComparison.Ordinal);
         Assert.Contains("selected_has_value = table_has_value", preflight, StringComparison.Ordinal);
@@ -2849,7 +2827,7 @@ public sealed partial class PinnedConfigurationTests
     public void MacosToolHashSetsAreNarrowlyScopedAndLiteral()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         var expectedMultipleHashTables = new Dictionary<(string Rid, string Environment, string Name), int>
         {
             [("osx-arm64", "github-actions", "xz")] = 2,
@@ -2947,12 +2925,12 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string ciWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"));
-        string releaseGateWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
-        string resolver = File.ReadAllText(Path.Combine(root, "eng", "resolve-linux-prereqs.sh"));
-        string hostInstaller = File.ReadAllText(Path.Combine(root, "eng", "install-linux-host-prereqs.sh"));
-        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string ciWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "ci.yml"));
+        string releaseGateWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
+        string resolver = File.ReadAllText(Path.Join(root, "eng", "resolve-linux-prereqs.sh"));
+        string hostInstaller = File.ReadAllText(Path.Join(root, "eng", "install-linux-host-prereqs.sh"));
+        string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
         string snapshotDate = ReadTopLevelTomlValue(prerequisiteLock, "linux_snapshot");
         string snapshotUrl = "http://snapshot.debian.org/archive/debian/" + snapshotDate.Replace("-", string.Empty, StringComparison.Ordinal) + "T000000Z";
 
@@ -3001,8 +2979,8 @@ public sealed partial class PinnedConfigurationTests
     public void LinuxPrerequisiteVerificationChecksInstalledToolHashes()
     {
         string root = FindRepositoryRoot();
-        string verifyScript = File.ReadAllText(Path.Combine(root, "eng", "verify-linux-prereqs.sh"));
-        string resolveScript = File.ReadAllText(Path.Combine(root, "eng", "resolve-linux-prereqs.sh"));
+        string verifyScript = File.ReadAllText(Path.Join(root, "eng", "verify-linux-prereqs.sh"));
+        string resolveScript = File.ReadAllText(Path.Join(root, "eng", "resolve-linux-prereqs.sh"));
 
         Assert.Contains("[[tool.linux]]", verifyScript, StringComparison.Ordinal);
         Assert.Contains("dpkg-query -W -f='${Version}' \"$package\"", verifyScript, StringComparison.Ordinal);
@@ -3037,7 +3015,7 @@ public sealed partial class PinnedConfigurationTests
         const string x64BinarySha256 = "d2ed929d79d8feb7c0ef3578c105181786876a913039e0b2c89ed56942aee0a4";
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
 
         Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -3062,11 +3040,11 @@ public sealed partial class PinnedConfigurationTests
     public void HostedReleaseGatesProvisionPinnedHyperfine()
     {
         string root = FindRepositoryRoot();
-        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
-        string script = File.ReadAllText(Path.Combine(root, "eng", "setup-hyperfine.sh"));
-        string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
-        string benchmark = File.ReadAllText(Path.Combine(root, "bench", "run-hyperfine.sh"));
+        string workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
+        string script = File.ReadAllText(Path.Join(root, "eng", "setup-hyperfine.sh"));
+        string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
+        string benchmark = File.ReadAllText(Path.Join(root, "bench", "run-hyperfine.sh"));
 
         string[] workflowLines = workflow.Split('\n');
         int performanceStepIndex = Array.FindIndex(
@@ -3112,9 +3090,9 @@ public sealed partial class PinnedConfigurationTests
     public void ExternalBenchmarkCorporaHavePinnedInputs()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string fetchCorpora = File.ReadAllText(Path.Combine(root, "eng", "fetch-corpora.sh"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string fetchCorpora = File.ReadAllText(Path.Join(root, "eng", "fetch-corpora.sh"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
 
         Assert.DoesNotContain("resolved@", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("only_windows_tar_symlink_errors", fetchCorpora, StringComparison.Ordinal);
@@ -3171,8 +3149,8 @@ public sealed partial class PinnedConfigurationTests
     public void PrerequisiteLockHashesAreLiteralSha256Values()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string oracle = File.ReadAllText(Path.Combine(root, "tests", "Scout.Testing", "PinnedRipgrepOracle.cs"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string oracle = File.ReadAllText(Path.Join(root, "tests", "Scout.Testing", "PinnedRipgrepOracle.cs"));
         var violations = new List<string>();
         int assignmentCount = 0;
         int arrayAssignmentCount = 0;
@@ -3242,31 +3220,31 @@ public sealed partial class PinnedConfigurationTests
     public void HyperfineBenchSuiteCoversReleaseGateWorkloads()
     {
         string root = FindRepositoryRoot();
-        string script = File.ReadAllText(Path.Combine(root, "bench", "run-hyperfine.sh"));
-        string gateReporter = File.ReadAllText(Path.Combine(root, "bench", "hyperfine_gate.py"));
-        string gateReporterTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_hyperfine_gate.py"));
-        string gateShellTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_hyperfine_shell.py"));
-        string outputVerifier = File.ReadAllText(Path.Combine(root, "bench", "verify_hyperfine_output.py"));
-        string outputVerifierTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_verify_hyperfine_output.py"));
-        string interleaved = File.ReadAllText(Path.Combine(root, "bench", "hyperfine_interleaved.py"));
-        string interleavedTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_hyperfine_interleaved.py"));
-        string performanceInputVerifier = File.ReadAllText(Path.Combine(root, "bench", "verify_performance_inputs.py"));
-        string performanceInputVerifierTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_verify_performance_inputs.py"));
-        string performanceManifestWriter = File.ReadAllText(Path.Combine(root, "bench", "write_performance_manifest.py"));
-        string performanceManifestWriterTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_write_performance_manifest.py"));
-        string readme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
-        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
-        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
-        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
-        string setupHyperfine = File.ReadAllText(Path.Combine(root, "eng", "setup-hyperfine.sh"));
-        string sourceFingerprint = File.ReadAllText(Path.Combine(root, "eng", "source-fingerprint.sh"));
-        string harnessFingerprint = File.ReadAllText(Path.Combine(root, "eng", "performance-harness-fingerprint.sh"));
-        string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
-        string performanceEnvironment = File.ReadAllText(Path.Combine(root, "eng", "performance-environment.sh"));
-        string nativeBuild = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
-        string nativePublish = File.ReadAllText(Path.Combine(root, "native", "publish-app-unix.sh"));
-        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string script = File.ReadAllText(Path.Join(root, "bench", "run-hyperfine.sh"));
+        string gateReporter = File.ReadAllText(Path.Join(root, "bench", "hyperfine_gate.py"));
+        string gateReporterTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_hyperfine_gate.py"));
+        string gateShellTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_hyperfine_shell.py"));
+        string outputVerifier = File.ReadAllText(Path.Join(root, "bench", "verify_hyperfine_output.py"));
+        string outputVerifierTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_verify_hyperfine_output.py"));
+        string interleaved = File.ReadAllText(Path.Join(root, "bench", "hyperfine_interleaved.py"));
+        string interleavedTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_hyperfine_interleaved.py"));
+        string performanceInputVerifier = File.ReadAllText(Path.Join(root, "bench", "verify_performance_inputs.py"));
+        string performanceInputVerifierTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_verify_performance_inputs.py"));
+        string performanceManifestWriter = File.ReadAllText(Path.Join(root, "bench", "write_performance_manifest.py"));
+        string performanceManifestWriterTests = File.ReadAllText(Path.Join(root, "bench", "tests", "test_write_performance_manifest.py"));
+        string readme = File.ReadAllText(Path.Join(root, "bench", "README.md"));
+        string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
+        string parity = File.ReadAllText(Path.Join(root, "docs", "PARITY.md"));
+        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
+        string setupHyperfine = File.ReadAllText(Path.Join(root, "eng", "setup-hyperfine.sh"));
+        string sourceFingerprint = File.ReadAllText(Path.Join(root, "eng", "source-fingerprint.sh"));
+        string harnessFingerprint = File.ReadAllText(Path.Join(root, "eng", "performance-harness-fingerprint.sh"));
+        string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
+        string performanceEnvironment = File.ReadAllText(Path.Join(root, "eng", "performance-environment.sh"));
+        string nativeBuild = File.ReadAllText(Path.Join(root, "native", "build-app-unix.sh"));
+        string nativePublish = File.ReadAllText(Path.Join(root, "native", "publish-app-unix.sh"));
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
 
         Assert.Contains("subtitles_en_literal", script, StringComparison.Ordinal);
         Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
@@ -3659,8 +3637,8 @@ public sealed partial class PinnedConfigurationTests
     public void MemchrSearchIncludesRequiredSimdGates()
     {
         string root = FindRepositoryRoot();
-        string memchrSearch = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Memmem", "MemchrSearch.cs"));
-        string upstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Memmem", "UPSTREAM.md"));
+        string memchrSearch = File.ReadAllText(Path.Join(root, "src", "Scout.Automata.Memmem", "MemchrSearch.cs"));
+        string upstream = File.ReadAllText(Path.Join(root, "src", "Scout.Automata.Memmem", "UPSTREAM.md"));
 
         Assert.Contains("Avx512BW.IsSupported", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("Avx2.IsSupported", memchrSearch, StringComparison.Ordinal);
@@ -3683,11 +3661,11 @@ public sealed partial class PinnedConfigurationTests
     public void ByteCounterIncludesRequiredSimdGates()
     {
         string root = FindRepositoryRoot();
-        string byteCounter = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "ByteCounter.cs"));
-        string multiline = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "MultilineSearchOperations.cs"));
-        string pcre2 = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
-        string json = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "JsonSearchOperations.cs"));
-        string upstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "UPSTREAM.md"));
+        string byteCounter = File.ReadAllText(Path.Join(root, "src", "Scout.Automata", "ByteCounter.cs"));
+        string multiline = File.ReadAllText(Path.Join(root, "src", "Scout.App", "MultilineSearchOperations.cs"));
+        string pcre2 = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string json = File.ReadAllText(Path.Join(root, "src", "Scout.App", "JsonSearchOperations.cs"));
+        string upstream = File.ReadAllText(Path.Join(root, "src", "Scout.Automata", "UPSTREAM.md"));
         int advSimdCombinedStart = byteCounter.IndexOf("private static long CountAndFindFirstAdvSimd", StringComparison.Ordinal);
         Assert.True(advSimdCombinedStart >= 0);
         int advSimdCombinedEnd = byteCounter.IndexOf("private static Vector128<uint> WidenAdvSimdLaneCounts", advSimdCombinedStart, StringComparison.Ordinal);
@@ -3813,7 +3791,7 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         for (int index = 0; index < corpora.Length; index++)
         {
             (string name, string relativePath, string expectedSha256) = corpora[index];
@@ -3821,7 +3799,7 @@ public sealed partial class PinnedConfigurationTests
             Assert.Contains("path = \"" + relativePath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
-            string path = Path.Combine(root, relativePath);
+            string path = Path.Join(root, relativePath);
             byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
             Assert.Equal(expectedSha256, Convert.ToHexString(hash));
         }
@@ -3834,7 +3812,7 @@ public sealed partial class PinnedConfigurationTests
     public void PrerequisiteLockUsesRepoRelativeConformanceCorpusPaths()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
 
         Assert.DoesNotContain("/.cargo/registry/", prerequisiteLock, StringComparison.Ordinal);
         Assert.DoesNotContain("\\.cargo\\registry\\", prerequisiteLock, StringComparison.Ordinal);
@@ -3850,12 +3828,12 @@ public sealed partial class PinnedConfigurationTests
     public void VendoredConformanceCorpusFilesMatchPrerequisiteLock()
     {
         string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         string[] corpusRoots =
         [
-            Path.Combine(root, "upstream", "regex-1.13.0", "testdata"),
-            Path.Combine(root, "upstream", "encoding_rs-0.8.35", "src"),
-            Path.Combine(root, "upstream", "ripgrep-e89fff89", "tests"),
+            Path.Join(root, "upstream", "regex-1.13.0", "testdata"),
+            Path.Join(root, "upstream", "encoding_rs-0.8.35", "src"),
+            Path.Join(root, "upstream", "ripgrep-e89fff89", "tests"),
         ];
 
         foreach (string corpusRoot in corpusRoots)
@@ -3878,16 +3856,16 @@ public sealed partial class PinnedConfigurationTests
     public void PortedRipgrepTestCorpusIsVendored()
     {
         string root = FindRepositoryRoot();
-        string coverageTest = File.ReadAllText(Path.Combine(root, "tests", "Scout.Differential.Tests", "PortedRgTestCoverageTests.cs"));
-        string portedTests = File.ReadAllText(Path.Combine(root, "tests", "Scout.Differential.Tests", "PortedRgTests.cs"));
-        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string attributes = File.ReadAllText(Path.Combine(root, ".gitattributes"));
-        string testsRoot = Path.Combine(root, "upstream", "ripgrep-e89fff89", "tests");
+        string coverageTest = File.ReadAllText(Path.Join(root, "tests", "Scout.Differential.Tests", "PortedRgTestCoverageTests.cs"));
+        string portedTests = File.ReadAllText(Path.Join(root, "tests", "Scout.Differential.Tests", "PortedRgTests.cs"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string attributes = File.ReadAllText(Path.Join(root, ".gitattributes"));
+        string testsRoot = Path.Join(root, "upstream", "ripgrep-e89fff89", "tests");
 
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", coverageTest, StringComparison.Ordinal);
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", portedTests, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Combine(testsRoot, "regression.rs")));
-        Assert.True(File.Exists(Path.Combine(testsRoot, "data", "sherlock-nul.txt")));
+        Assert.True(File.Exists(Path.Join(testsRoot, "regression.rs")));
+        Assert.True(File.Exists(Path.Join(testsRoot, "data", "sherlock-nul.txt")));
         Assert.Contains("upstream/ripgrep-e89fff89/tests/** -whitespace", attributes, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
@@ -4454,7 +4432,7 @@ public sealed partial class PinnedConfigurationTests
 
     private static IEnumerable<string> EnumerateProjectProvenanceFiles(string root)
     {
-        string sourceRoot = Path.Combine(root, "src");
+        string sourceRoot = Path.Join(root, "src");
         foreach (string path in Directory.EnumerateFiles(sourceRoot, "UPSTREAM.md", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
@@ -4470,7 +4448,7 @@ public sealed partial class PinnedConfigurationTests
         string[] scanRoots = ["src", "tests", "eng", "bench", "native", "spike"];
         for (int rootIndex = 0; rootIndex < scanRoots.Length; rootIndex++)
         {
-            string scanRoot = Path.Combine(root, scanRoots[rootIndex]);
+            string scanRoot = Path.Join(root, scanRoots[rootIndex]);
             foreach (string path in Directory.EnumerateFiles(scanRoot, "*", SearchOption.AllDirectories))
             {
                 string relativePath = Path.GetRelativePath(root, path);
@@ -4478,7 +4456,7 @@ public sealed partial class PinnedConfigurationTests
                     ContainsPathSegment(relativePath, "obj") ||
                     ContainsPathSegment(relativePath, "artifacts") ||
                     IsVendoredPcre2Source(relativePath) ||
-                    string.Equals(relativePath, Path.Combine("tests", "Scout.Foundation.Tests", "PinnedConfigurationTests.cs"), StringComparison.Ordinal) ||
+                    string.Equals(relativePath, Path.Join("tests", "Scout.Foundation.Tests", "PinnedConfigurationTests.cs"), StringComparison.Ordinal) ||
                     !IsImplementationDeferralScanFile(path))
                 {
                     continue;
@@ -4506,14 +4484,14 @@ public sealed partial class PinnedConfigurationTests
 
     private static bool IsVendoredPcre2Source(string relativePath)
     {
-        string vendoredRoot = Path.Combine("native", "pcre2", "pcre2-10.46");
+        string vendoredRoot = Path.Join("native", "pcre2", "pcre2-10.46");
         return relativePath.StartsWith(vendoredRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
             relativePath.StartsWith(vendoredRoot + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     private static IEnumerable<string> EnumerateTestSourceFiles(string root)
     {
-        string testsRoot = Path.Combine(root, "tests");
+        string testsRoot = Path.Join(root, "tests");
         foreach (string path in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
@@ -4526,8 +4504,8 @@ public sealed partial class PinnedConfigurationTests
 
     private static IEnumerable<string> EnumerateRuntimeSourceFiles(string root)
     {
-        string sourceRoot = Path.Combine(root, "src");
-        string sourceGeneratorRoot = Path.Combine("src", "Scout.SourceGen");
+        string sourceRoot = Path.Join(root, "src");
+        string sourceGeneratorRoot = Path.Join("src", "Scout.SourceGen");
         foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
@@ -4559,7 +4537,7 @@ public sealed partial class PinnedConfigurationTests
 
         for (int index = 0; index < projectDirectories.Length; index++)
         {
-            string directory = Path.Combine(root, "src", projectDirectories[index]);
+            string directory = Path.Join(root, "src", projectDirectories[index]);
             foreach (string path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
             {
                 string relativePath = Path.GetRelativePath(root, path);
@@ -4585,7 +4563,7 @@ public sealed partial class PinnedConfigurationTests
 
         for (int index = 0; index < roots.Length; index++)
         {
-            string directory = Path.Combine(root, roots[index]);
+            string directory = Path.Join(root, roots[index]);
             if (!Directory.Exists(directory))
             {
                 continue;
@@ -4628,7 +4606,7 @@ public sealed partial class PinnedConfigurationTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

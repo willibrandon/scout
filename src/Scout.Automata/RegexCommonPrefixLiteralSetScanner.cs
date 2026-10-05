@@ -258,16 +258,11 @@ internal sealed class RegexCommonPrefixLiteralSetScanner(
             continuingIndex < continuingLiteralIds.Length)
         {
             int literalId;
-            if (continuingIndex >= continuingLiteralIds.Length ||
+            literalId = continuingIndex >= continuingLiteralIds.Length ||
                 (prefixIndex < _prefixLiteralIds.Length &&
-                    _prefixLiteralIds[prefixIndex] < continuingLiteralIds[continuingIndex]))
-            {
-                literalId = _prefixLiteralIds[prefixIndex++];
-            }
-            else
-            {
-                literalId = continuingLiteralIds[continuingIndex++];
-            }
+                    _prefixLiteralIds[prefixIndex] < continuingLiteralIds[continuingIndex])
+                ? _prefixLiteralIds[prefixIndex++]
+                : continuingLiteralIds[continuingIndex++];
 
             byte[] literal = _literals[literalId];
             if (literal.Length <= haystack.Length - candidateStart &&

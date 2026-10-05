@@ -602,7 +602,7 @@ internal sealed class RegexUnanchoredLazyDfa(
                 return !gaveUp;
             }
 
-            total += sumSpans ? match.Length : 1;
+            total += match.Length;
             offset = match.End;
         }
 

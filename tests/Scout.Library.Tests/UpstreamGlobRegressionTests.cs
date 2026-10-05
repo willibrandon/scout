@@ -9,6 +9,11 @@ namespace Scout;
 /// </summary>
 public sealed class UpstreamGlobRegressionTests
 {
+    private static readonly string[] CandidatePaths = [
+                "src/App.cs", "src/Other.cs", "abc", "def", "foo/abc", "foo/a.c", "foo/a.rs",
+                "a/main.rs", "main.rs", "a/lib.rs", "ab/c/def", "ab/cd", "ab/x", "a", "a/b/c/main.rs", "foo.rs", "as", "", "..",
+];
+
     /// <summary>
     /// Verifies MatchesAll requires every pattern, including duplicates and mixed strategies.
     /// </summary>
@@ -37,13 +42,8 @@ public sealed class UpstreamGlobRegressionTests
         {
             Glob[] globs = patterns.Select(static pattern => Glob.Parse(Encoding.UTF8.GetBytes(pattern))).ToArray();
             var set = GlobSet.Create(globs);
-            foreach (string candidate in new[]
+            foreach (byte[] path in CandidatePaths.Select(candidate => Encoding.UTF8.GetBytes(candidate)))
             {
-                "src/App.cs", "src/Other.cs", "abc", "def", "foo/abc", "foo/a.c", "foo/a.rs",
-                "a/main.rs", "main.rs", "a/lib.rs", "ab/c/def", "ab/cd", "ab/x", "a", "a/b/c/main.rs", "foo.rs", "as", "", "..",
-            })
-            {
-                byte[] path = Encoding.UTF8.GetBytes(candidate);
                 bool expected = globs.All(glob => glob.IsMatch(path));
                 Assert.Equal(expected, set.MatchesAll(path));
                 Assert.Equal(expected, set.MatchesAll(GlobCandidate.FromBytes(path)));

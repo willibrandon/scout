@@ -12,25 +12,20 @@ public sealed class RegexEnginePlannerTests
     public void DefaultEngineRetainsAuthoritativeNativePlan()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=default", "--word-regexp", "needle");
-        RegexEnginePlan? plan = null;
-        try
+        using (var owner = new DisposableOwner<RegexEnginePlan>())
         {
             bool created = RegexEnginePlanner.TryCreate(
                 ["needle"u8.ToArray()],
                 lowArgs,
-                out plan,
+                out owner.Resource,
                 out ScoutError? error);
 
             Assert.True(created, error?.FormatAlternate());
-            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(plan);
+            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(owner.Resource);
             Assert.False(selectedPlan.UsesPcre2);
             RegexSearchPlan nativePlan = Assert.IsType<RegexSearchPlan>(selectedPlan.NativePlan);
             Assert.True(nativePlan.Options.WordRegexp);
             Assert.Equal(new RegexMatch(1, 6), nativePlan.Matcher.Find(" needle "u8));
-        }
-        finally
-        {
-            plan?.Dispose();
         }
     }
 
@@ -42,25 +37,20 @@ public sealed class RegexEnginePlannerTests
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=auto", "--fixed-strings", "a.c");
         byte[] rawPattern = "a.c"u8.ToArray();
-        RegexEnginePlan? plan = null;
-        try
+        using (var owner = new DisposableOwner<RegexEnginePlan>())
         {
             bool created = RegexEnginePlanner.TryCreate(
                 [rawPattern],
                 lowArgs,
-                out plan,
+                out owner.Resource,
                 out ScoutError? error);
 
             Assert.True(created, error?.FormatAlternate());
-            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(plan);
+            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(owner.Resource);
             Assert.False(selectedPlan.UsesPcre2);
             Assert.NotNull(selectedPlan.NativePlan);
             Assert.Equal("a\\.c"u8.ToArray(), Assert.Single(selectedPlan.Patterns));
             Assert.Equal("a.c"u8.ToArray(), rawPattern);
-        }
-        finally
-        {
-            plan?.Dispose();
         }
     }
 
@@ -203,16 +193,11 @@ public sealed class RegexEnginePlannerTests
         IReadOnlyList<byte[]> patterns,
         CliLowArgs lowArgs)
     {
-        RegexEnginePlan? plan = null;
-        try
+        using (var owner = new DisposableOwner<RegexEnginePlan>())
         {
-            bool created = RegexEnginePlanner.TryCreate(patterns, lowArgs, out plan, out ScoutError? error);
+            bool created = RegexEnginePlanner.TryCreate(patterns, lowArgs, out owner.Resource, out ScoutError? error);
             Assert.False(created);
             return Assert.IsType<ScoutError>(error);
-        }
-        finally
-        {
-            plan?.Dispose();
         }
     }
 

@@ -167,34 +167,33 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
-        long count = 0;
-        long spanSum = 0;
+        RegexMatchTotals totals = new() { Count = 0, SpanSum = 0 };
+
         if (!options.UnicodeClasses)
         {
-            CountOrSumAscii(haystack, startAt, sumSpans, ref count, ref spanSum);
+            CountOrSumAscii(haystack, startAt, sumSpans, ref totals);
         }
         else if (!ContainsNonAscii(haystack))
         {
-            CountOrSumAscii(haystack, startAt, sumSpans, ref count, ref spanSum);
+            CountOrSumAscii(haystack, startAt, sumSpans, ref totals);
         }
         else if (hasThreeWordWhitespaceShape && firstWhitespaceCount == 1)
         {
-            CountOrSumMostlyAsciiUnicode(haystack, startAt, sumSpans, ref count, ref spanSum);
+            CountOrSumMostlyAsciiUnicode(haystack, startAt, sumSpans, ref totals);
         }
         else
         {
-            CountOrSumGeneric(haystack, startAt, sumSpans, ref count, ref spanSum);
+            CountOrSumGeneric(haystack, startAt, sumSpans, ref totals);
         }
 
-        return sumSpans ? spanSum : count;
+        return sumSpans ? totals.SpanSum : totals.Count;
     }
 
     private void CountOrSumMostlyAsciiUnicode(
         ReadOnlySpan<byte> haystack,
         int startAt,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         var guardRanges = new List<Range>();
         // A match that needs Unicode scalar semantics must include a non-ASCII scalar.
@@ -238,8 +237,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                     segmentStart,
                     guardStart,
                     sumSpans,
-                    ref count,
-                    ref spanSum);
+                    ref totals);
             }
 
             segmentStart = CountOrSumGenericRange(
@@ -247,8 +245,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 guardStart,
                 guardEnd,
                 sumSpans,
-                ref count,
-                ref spanSum);
+                ref totals);
         }
 
         if (segmentStart < haystack.Length)
@@ -258,8 +255,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 segmentStart,
                 haystack.Length,
                 sumSpans,
-                ref count,
-                ref spanSum);
+                ref totals);
         }
     }
 
@@ -295,8 +291,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         ReadOnlySpan<byte> haystack,
         int startAt,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         int search = offset + anchorPrefixLength;
@@ -312,8 +307,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                     search,
                     lastAnchor,
                     sumSpans,
-                    ref count,
-                    ref spanSum);
+                    ref totals);
                 return;
             }
 
@@ -324,8 +318,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                     search,
                     lastAnchor,
                     sumSpans,
-                    ref count,
-                    ref spanSum);
+                    ref totals);
                 return;
             }
         }
@@ -344,10 +337,10 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 : TryMatchAsciiAt(haystack, start, out _);
             if (matched)
             {
-                count++;
+                totals.Count++;
                 if (sumSpans)
                 {
-                    spanSum += fixedAsciiLength;
+                    totals.SpanSum += fixedAsciiLength;
                 }
 
                 offset = start + fixedAsciiLength;
@@ -364,8 +357,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int start,
         int end,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         if (end - start < fixedAsciiLength)
         {
@@ -386,8 +378,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 search,
                 lastAnchor,
                 sumSpans,
-                ref count,
-                ref spanSum);
+                ref totals);
             return;
         }
 
@@ -398,8 +389,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 search,
                 lastAnchor,
                 sumSpans,
-                ref count,
-                ref spanSum);
+                ref totals);
             return;
         }
 
@@ -409,8 +399,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
             search,
             lastAnchor,
             sumSpans,
-            ref count,
-            ref spanSum,
+            ref totals,
             ref nextAllowedAnchor);
     }
 
@@ -419,8 +408,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int start,
         int end,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         int offset = start;
         int nextSegmentStart = end;
@@ -428,10 +416,10 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         {
             if (TryMatchGenericAt(haystack, offset, out int length))
             {
-                count++;
+                totals.Count++;
                 if (sumSpans)
                 {
-                    spanSum += length;
+                    totals.SpanSum += length;
                 }
 
                 offset += length;
@@ -450,8 +438,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int search,
         int lastAnchor,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int nextAllowedAnchor = search;
@@ -466,8 +453,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 offset,
                 mask,
                 sumSpans,
-                ref count,
-                ref spanSum,
+                ref totals,
                 ref nextAllowedAnchor);
             offset += Vector256<byte>.Count;
         }
@@ -477,8 +463,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
             offset,
             lastAnchor,
             sumSpans,
-            ref count,
-            ref spanSum,
+            ref totals,
             ref nextAllowedAnchor);
     }
 
@@ -487,8 +472,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int search,
         int lastAnchor,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int nextAllowedAnchor = search;
@@ -503,8 +487,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 offset,
                 mask,
                 sumSpans,
-                ref count,
-                ref spanSum,
+                ref totals,
                 ref nextAllowedAnchor);
             offset += Vector128<byte>.Count;
         }
@@ -514,8 +497,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
             offset,
             lastAnchor,
             sumSpans,
-            ref count,
-            ref spanSum,
+            ref totals,
             ref nextAllowedAnchor);
     }
 
@@ -524,8 +506,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int blockStart,
         uint mask,
         bool sumSpans,
-        ref long count,
-        ref long spanSum,
+        ref RegexMatchTotals totals,
         ref int nextAllowedAnchor)
     {
         while (mask != 0)
@@ -544,10 +525,10 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 continue;
             }
 
-            count++;
+            totals.Count++;
             if (sumSpans)
             {
-                spanSum += fixedAsciiLength;
+                totals.SpanSum += fixedAsciiLength;
             }
 
             nextAllowedAnchor = start + fixedAsciiLength + anchorPrefixLength;
@@ -559,8 +540,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int search,
         int lastAnchor,
         bool sumSpans,
-        ref long count,
-        ref long spanSum,
+        ref RegexMatchTotals totals,
         ref int nextAllowedAnchor)
     {
         while (search <= lastAnchor)
@@ -583,10 +563,10 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
                 continue;
             }
 
-            count++;
+            totals.Count++;
             if (sumSpans)
             {
-                spanSum += fixedAsciiLength;
+                totals.SpanSum += fixedAsciiLength;
             }
 
             nextAllowedAnchor = start + fixedAsciiLength + anchorPrefixLength;
@@ -613,18 +593,17 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         ReadOnlySpan<byte> haystack,
         int startAt,
         bool sumSpans,
-        ref long count,
-        ref long spanSum)
+        ref RegexMatchTotals totals)
     {
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (offset < haystack.Length)
         {
             if (TryMatchGenericAt(haystack, offset, out int length))
             {
-                count++;
+                totals.Count++;
                 if (sumSpans)
                 {
-                    spanSum += length;
+                    totals.SpanSum += length;
                 }
 
                 offset += length;

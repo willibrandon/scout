@@ -95,8 +95,7 @@ internal sealed class RegexDotStarClassFallbackEngine
             if (searchAt < lineEnd)
             {
                 int classRunLength = lineEnd - searchAt;
-                total += sumSpans ? classRunLength : classRunLength;
-                searchAt = lineEnd;
+                total += classRunLength;
             }
 
             if (lineEnd >= haystack.Length)

@@ -493,12 +493,10 @@ internal static class DifferentialOutputNormalizer
             return false;
         }
 
-        if (currentLines.Count > 0)
+        if (currentLines.Count > 0 &&
+            (!TryAddContextChunk(chunks, currentLines, currentFirstIndex)))
         {
-            if (!TryAddContextChunk(chunks, currentLines, currentFirstIndex))
-            {
-                return false;
-            }
+            return false;
         }
 
         if (chunks.Count < 2)

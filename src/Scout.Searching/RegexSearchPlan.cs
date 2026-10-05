@@ -897,41 +897,35 @@ internal sealed class RegexSearchPlan(
         out bool hasLineAnchors,
         out bool hasHaystackAnchors)
     {
-        hasAbsoluteAnchors = false;
-        hasLineAnchors = false;
-        hasHaystackAnchors = false;
-        AnalyzeNodeAnchors(
-            root,
-            options,
-            ref hasAbsoluteAnchors,
-            ref hasLineAnchors,
-            ref hasHaystackAnchors);
+        RegexAnchorAnalysis analysis = default;
+        AnalyzeNodeAnchors(root, options, ref analysis);
+        hasAbsoluteAnchors = analysis.HasAbsoluteAnchors;
+        hasLineAnchors = analysis.HasLineAnchors;
+        hasHaystackAnchors = analysis.HasHaystackAnchors;
     }
 
     private static void AnalyzeNodeAnchors(
         RegexSyntaxNode node,
         RegexCompileOptions options,
-        ref bool hasAbsoluteAnchors,
-        ref bool hasLineAnchors,
-        ref bool hasHaystackAnchors)
+        ref RegexAnchorAnalysis analysis)
     {
         switch (node)
         {
             case RegexAtomNode atom:
                 if (atom.Kind is RegexSyntaxKind.AbsoluteStartAnchor or RegexSyntaxKind.AbsoluteEndAnchor)
                 {
-                    hasAbsoluteAnchors = true;
-                    hasHaystackAnchors = true;
+                    analysis.HasAbsoluteAnchors = true;
+                    analysis.HasHaystackAnchors = true;
                 }
                 else if (!options.MultiLine &&
                     atom.Kind is RegexSyntaxKind.StartAnchor or RegexSyntaxKind.EndAnchor)
                 {
-                    hasLineAnchors = true;
-                    hasHaystackAnchors = true;
+                    analysis.HasLineAnchors = true;
+                    analysis.HasHaystackAnchors = true;
                 }
                 else if (atom.Kind is RegexSyntaxKind.StartAnchor or RegexSyntaxKind.EndAnchor)
                 {
-                    hasLineAnchors = true;
+                    analysis.HasLineAnchors = true;
                 }
 
                 break;
@@ -943,9 +937,7 @@ internal sealed class RegexSearchPlan(
                     AnalyzeNodeAnchors(
                         child,
                         currentOptions,
-                        ref hasAbsoluteAnchors,
-                        ref hasLineAnchors,
-                        ref hasHaystackAnchors);
+                        ref analysis);
                     if (child is RegexInlineFlagsNode flags)
                     {
                         currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
@@ -959,9 +951,7 @@ internal sealed class RegexSearchPlan(
                     AnalyzeNodeAnchors(
                         alternation.Alternatives[index],
                         options,
-                        ref hasAbsoluteAnchors,
-                        ref hasLineAnchors,
-                        ref hasHaystackAnchors);
+                        ref analysis);
                 }
 
                 break;
@@ -969,17 +959,13 @@ internal sealed class RegexSearchPlan(
                 AnalyzeNodeAnchors(
                     group.Child,
                     options.Apply(group.EnabledFlags, group.DisabledFlags),
-                    ref hasAbsoluteAnchors,
-                    ref hasLineAnchors,
-                    ref hasHaystackAnchors);
+                    ref analysis);
                 break;
             case RegexRepetitionNode repetition:
                 AnalyzeNodeAnchors(
                     repetition.Child,
                     options,
-                    ref hasAbsoluteAnchors,
-                    ref hasLineAnchors,
-                    ref hasHaystackAnchors);
+                    ref analysis);
                 break;
         }
     }

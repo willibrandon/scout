@@ -51,9 +51,9 @@ public sealed class BufferedWalkRegressionTests
         string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
         try
         {
-            File.WriteAllText(Path.Combine(root, ".rgignore"), "ignored\n");
-            File.WriteAllText(Path.Combine(root, "ignored"), "needle");
-            File.WriteAllText(Path.Combine(root, "kept"), "needle");
+            File.WriteAllText(Path.Join(root, ".rgignore"), "ignored\n");
+            File.WriteAllText(Path.Join(root, "ignored"), "needle");
+            File.WriteAllText(Path.Join(root, "kept"), "needle");
             var errors = new ConcurrentBag<WalkException>();
             var visited = new ConcurrentBag<string>();
             Walk actualReader = new WalkBuilder(root).GitGlobal(false).Build();
@@ -72,7 +72,7 @@ public sealed class BufferedWalkRegressionTests
             {
                 if (entry.Depth == 0)
                 {
-                    File.WriteAllText(Path.Combine(root, ".rgignore"), "kept\n");
+                    File.WriteAllText(Path.Join(root, ".rgignore"), "kept\n");
                 }
 
                 if (entry.IsFile)
@@ -124,7 +124,7 @@ public sealed class BufferedWalkRegressionTests
             string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
             try
             {
-                string path = Path.Combine(root, "vanishes");
+                string path = Path.Join(root, "vanishes");
                 File.WriteAllText(path, "needle");
                 byte[] bytes = Encoding.UTF8.GetBytes(path);
                 Walk actualReader = new WalkBuilder(root).GitGlobal(false).Build();
@@ -183,21 +183,21 @@ public sealed class BufferedWalkRegressionTests
         try
         {
             var expected = new HashSet<string>(StringComparer.Ordinal);
-            string[] roots = [Path.Combine(root, "a"), Path.Combine(root, "b")];
+            string[] roots = [Path.Join(root, "a"), Path.Join(root, "b")];
             foreach (string path in roots)
             {
                 Directory.CreateDirectory(path);
                 expected.Add(path);
-                File.WriteAllText(Path.Combine(path, ".rgignore"), "ignored\n");
+                File.WriteAllText(Path.Join(path, ".rgignore"), "ignored\n");
                 for (int directoryIndex = 0; directoryIndex < 32; directoryIndex++)
                 {
-                    string directory = Path.Combine(path, "d" + directoryIndex);
+                    string directory = Path.Join(path, "d" + directoryIndex);
                     Directory.CreateDirectory(directory);
                     expected.Add(directory);
-                    File.WriteAllText(Path.Combine(directory, "ignored"), "needle");
+                    File.WriteAllText(Path.Join(directory, "ignored"), "needle");
                     for (int fileIndex = 0; fileIndex < 16; fileIndex++)
                     {
-                        string file = Path.Combine(directory, "f" + fileIndex);
+                        string file = Path.Join(directory, "f" + fileIndex);
                         File.WriteAllText(file, "needle");
                         expected.Add(file);
                     }

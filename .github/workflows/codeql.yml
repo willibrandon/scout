@@ -1,0 +1,88 @@
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 9 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Scan ${{ matrix.language }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { language: actions, build-mode: none }
+          - { language: c-cpp, build-mode: manual }
+          - { language: csharp, build-mode: manual }
+          - { language: python, build-mode: none }
+          - { language: rust, build-mode: none }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql-config.yml
+      - name: Build C# including generated sources
+        if: matrix.language == 'csharp'
+        run: dotnet build Scout.slnx --no-incremental
+      - name: Build the native sources with their actual compiler definitions
+        if: matrix.language == 'c-cpp'
+        run: |
+          native/pcre2/build-unix.sh linux-x64
+          mkdir -p artifacts/codeql-native
+          cc -DSCOUT_LAUNCHER -c native/entry/scout_main.c -o artifacts/codeql-native/scout_launcher.o
+          cc -c native/entry/scout_main.c -o artifacts/codeql-native/scout_entry.o
+          cc -c spike/native/scout_main.c -o artifacts/codeql-native/scout_spike.o
+      - name: Test the findings gate
+        if: matrix.language == 'actions'
+        run: python3 -m unittest discover -s bench/tests -p test_verify_codeql_results.py
+      - name: Analyze
+        id: analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+          output: artifacts/codeql-results
+          wait-for-processing: false
+      - name: Upload CodeQL results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codeql-results-${{ matrix.language }}-${{ github.run_attempt }}
+          path: artifacts/codeql-results/**/*.sarif
+          if-no-files-found: error
+      - name: Require zero findings in Scout-owned native code
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language == 'c-cpp' }}
+        # Keep upstream PCRE2/SLJIT intact; upload and report every finding without dismissing alerts.
+        run: python3 eng/verify-codeql-results.py artifacts/codeql-results --third-party-root native/pcre2
+      - name: Require zero findings
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language != 'c-cpp' && matrix.language != 'csharp' }}
+        run: python3 eng/verify-codeql-results.py artifacts/codeql-results
+      - name: Require zero applicable C# findings
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language == 'csharp' }}
+        run: python3 eng/verify-codeql-results.py artifacts/codeql-results --reviewed-reports eng/codeql-reviewed-reports.json

@@ -158,10 +158,7 @@ internal sealed class RegexLiteralSetEngine
             this.literals.Length <= 5 &&
             !ContainsUtf8ScalarsLongerThanTwoBytes(this.literals))
         {
-            if (!asciiCaseInsensitive &&
-                !unicodeCaseInsensitive &&
-                !useAho &&
-                !ContainsNonAscii(this.literals) &&
+            if (!ContainsNonAscii(this.literals) &&
                 RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? shortScanner))
             {
                 shortLiteralScanner = shortScanner;
@@ -194,15 +191,12 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
-        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
+            RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? fallbackShortScanner))
         {
-            if (RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? shortScanner))
-            {
-                shortLiteralScanner = shortScanner;
-                return;
-            }
+            shortLiteralScanner = fallbackShortScanner;
+            return;
         }
-
         if (ShouldUseEarlySmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
         {
             smallLiteralFinders = CreateSmallLiteralFinders(this.literals);
@@ -398,8 +392,6 @@ internal sealed class RegexLiteralSetEngine
         RegexLargeLiteralTrieScanner? largeLiteralTrieScanner = null;
         RegexLargeLiteralSetScanner? largeLiteralScanner = null;
         if (useAho &&
-            !asciiOnlyCaseInsensitive &&
-            !unicodeCaseInsensitive &&
             (RegexLargeLiteralSetScanner.TryCreate(literals, out largeLiteralScanner) ||
              RegexLargeLiteralTrieScanner.TryCreate(literals, out largeLiteralTrieScanner)))
         {
@@ -1516,11 +1508,18 @@ internal sealed class RegexLiteralSetEngine
         bool unicodeCaseInsensitive,
         bool useAho)
     {
-        return ShouldUseSmallLiteralFinders(literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
-            (literals.Length == 2 &&
-                Math.Min(literals[0].Length, literals[1].Length) >= 4 ||
-            literals.Length == 3 &&
-                Math.Min(Math.Min(literals[0].Length, literals[1].Length), literals[2].Length) >= 4);
+        if (!ShouldUseSmallLiteralFinders(literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            return false;
+        }
+
+        if (literals.Length == 2)
+        {
+            return Math.Min(literals[0].Length, literals[1].Length) >= 4;
+        }
+
+        return literals.Length == 3 &&
+            Math.Min(Math.Min(literals[0].Length, literals[1].Length), literals[2].Length) >= 4;
     }
 
     private static MemmemFinder[] CreateSmallLiteralFinders(byte[][] literals)

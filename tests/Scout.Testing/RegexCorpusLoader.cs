@@ -5,7 +5,7 @@ namespace Scout;
 
 internal static class RegexCorpusLoader
 {
-    private static readonly string CorpusRoot = Path.Combine(FindRepositoryRoot(), "upstream", "regex-1.13.0", "testdata");
+    private static readonly string CorpusRoot = Path.Join(FindRepositoryRoot(), "upstream", "regex-1.13.0", "testdata");
 
     public static IReadOnlyList<string> EnumerateAllCaseKeys()
     {
@@ -28,7 +28,7 @@ internal static class RegexCorpusLoader
 
     public static IReadOnlyList<string> EnumerateCaseNames(string relativePath)
     {
-        string path = Path.Combine(CorpusRoot, relativePath);
+        string path = Path.Join(CorpusRoot, relativePath);
         string text = File.ReadAllText(path);
         string[] blocks = text.Split("[[test]]", StringSplitOptions.RemoveEmptyEntries);
         var names = new List<string>();
@@ -45,7 +45,7 @@ internal static class RegexCorpusLoader
 
     public static RegexCorpusCase Load(string relativePath, string name)
     {
-        string path = Path.Combine(CorpusRoot, relativePath);
+        string path = Path.Join(CorpusRoot, relativePath);
         string text = File.ReadAllText(path);
         string block = FindBlock(text, name, path);
         bool unescape = ReadOptionalBool(block, "unescape", path, name) ?? false;
@@ -94,7 +94,7 @@ internal static class RegexCorpusLoader
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

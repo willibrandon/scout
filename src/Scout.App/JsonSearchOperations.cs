@@ -172,12 +172,9 @@ internal static class JsonSearchOperations
         int erroredFlag = 0;
         using var printTask = BackgroundWorkItem.Queue(() =>
         {
-            foreach (byte[] body in outputs.GetConsumingEnumerable())
+            foreach (byte[] body in outputs.GetConsumingEnumerable().Where(body => body.Length > 0))
             {
-                if (body.Length > 0)
-                {
-                    output.Write(body);
-                }
+                output.Write(body);
             }
         });
 
@@ -844,7 +841,7 @@ internal static class JsonSearchOperations
         ReadOnlyMemory<byte>? replacement)
     {
         var collector = new JsonMatchCollector(matches, replacement, searchPlan);
-        try
+        using (new DisposableScope<JsonMatchCollector>(ref collector))
         {
             for (int index = 0; index < retainedMatches.Length; index++)
             {
@@ -862,10 +859,6 @@ internal static class JsonSearchOperations
                     line,
                     line.Slice(match.Start, match.Length));
             }
-        }
-        finally
-        {
-            collector.Dispose();
         }
     }
 }

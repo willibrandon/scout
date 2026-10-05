@@ -77,9 +77,9 @@ public sealed class UpstreamRegexRegressionTests
     [Fact]
     public void UnicodeComparisonsComposeWithClassAlgebra()
     {
-        foreach (ByteRegexEngineMode mode in Enum.GetValues<ByteRegexEngineMode>())
+        foreach (ByteRegexOptions options in Enum.GetValues<ByteRegexEngineMode>()
+            .Select(mode => new ByteRegexOptions { EngineMode = mode }))
         {
-            var options = new ByteRegexOptions { EngineMode = mode };
             var regex = ByteRegex.Compile(@"(?i)[[\P{gc!=Letter}]&&[a-z]]", options);
             Assert.True(regex.IsMatch("A"u8));
             Assert.True(regex.IsMatch(Encoding.UTF8.GetBytes("ſK")));

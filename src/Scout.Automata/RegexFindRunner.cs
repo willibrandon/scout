@@ -32,9 +32,15 @@ internal ref struct RegexFindRunner(
     /// </summary>
     internal readonly bool IsInitialized =>
         _automaton is not null &&
-        (_pikeVm is null || _pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion)) &&
-        (_onePassDfa is null || _onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion)) &&
-        (_state is null || _state.IsActive);
+        HasActivePikeVmLease && HasActiveOnePassDfaLease && HasActiveState;
+
+    private readonly bool HasActivePikeVmLease =>
+        _pikeVm is null || _pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion);
+
+    private readonly bool HasActiveOnePassDfaLease =>
+        _onePassDfa is null || _onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion);
+
+    private readonly bool HasActiveState => _state is null || _state.IsActive;
 
     /// <summary>
     /// Gets the current anchored-DFA lease generation, or zero before lazy rental.
@@ -82,9 +88,17 @@ internal ref struct RegexFindRunner(
     /// </returns>
     internal readonly bool SharesPooledStateWith(in RegexFindRunner other)
     {
-        return _pikeVm is not null && ReferenceEquals(_pikeVm, other._pikeVm) ||
-            _onePassDfa is not null && ReferenceEquals(_onePassDfa, other._onePassDfa) ||
-            _state is not null && ReferenceEquals(_state, other._state);
+        if (_pikeVm is not null && ReferenceEquals(_pikeVm, other._pikeVm))
+        {
+            return true;
+        }
+
+        if (_onePassDfa is not null && ReferenceEquals(_onePassDfa, other._onePassDfa))
+        {
+            return true;
+        }
+
+        return _state is not null && ReferenceEquals(_state, other._state);
     }
 
     /// <summary>
@@ -97,9 +111,7 @@ internal ref struct RegexFindRunner(
     {
         RegexAutomaton? automaton = _automaton;
         if (automaton is null ||
-            _pikeVm is not null && !_pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion) ||
-            _onePassDfa is not null && !_onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion) ||
-            _state is not null && !_state.IsActive)
+            !HasActivePikeVmLease || !HasActiveOnePassDfaLease || !HasActiveState)
         {
             throw new ObjectDisposedException(nameof(RegexFindRunner));
         }
@@ -127,9 +139,7 @@ internal ref struct RegexFindRunner(
     {
         RegexAutomaton? automaton = _automaton;
         if (automaton is null ||
-            _pikeVm is not null && !_pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion) ||
-            _onePassDfa is not null && !_onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion) ||
-            _state is not null && !_state.IsActive)
+            !HasActivePikeVmLease || !HasActiveOnePassDfaLease || !HasActiveState)
         {
             throw new ObjectDisposedException(nameof(RegexFindRunner));
         }

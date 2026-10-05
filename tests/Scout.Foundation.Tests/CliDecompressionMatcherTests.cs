@@ -114,29 +114,29 @@ public sealed class CliDecompressionMatcherTests
             "/missing;/tools",
             isWindows: true,
             pathSeparator: ';',
-            path => path == Path.Combine("/tools", "gzip.com"),
+            path => path == Path.Join("/tools", "gzip.com"),
             out string comProgram);
         bool resolvedExe = CliDecompressionMatcher.TryResolveBinary(
             "xz",
             "/tools",
             isWindows: true,
             pathSeparator: ';',
-            path => path == Path.Combine("/tools", "xz.exe"),
+            path => path == Path.Join("/tools", "xz.exe"),
             out string exeProgram);
         bool resolvedExact = CliDecompressionMatcher.TryResolveBinary(
             "brotli.exe",
             "/tools",
             isWindows: true,
             pathSeparator: ';',
-            path => path == Path.Combine("/tools", "brotli.exe"),
+            path => path == Path.Join("/tools", "brotli.exe"),
             out string exactProgram);
 
         Assert.True(resolvedCom);
-        Assert.Equal(Path.Combine("/tools", "gzip.com"), comProgram);
+        Assert.Equal(Path.Join("/tools", "gzip.com"), comProgram);
         Assert.True(resolvedExe);
-        Assert.Equal(Path.Combine("/tools", "xz.exe"), exeProgram);
+        Assert.Equal(Path.Join("/tools", "xz.exe"), exeProgram);
         Assert.True(resolvedExact);
-        Assert.Equal(Path.Combine("/tools", "brotli.exe"), exactProgram);
+        Assert.Equal(Path.Join("/tools", "brotli.exe"), exactProgram);
     }
 
     /// <summary>

@@ -9,7 +9,7 @@ public sealed class DiagnosticMessenger
 {
     private static readonly DiagnosticState SharedState = new();
 
-    private readonly RawByteWriter error;
+    private readonly RawByteWriter _error;
     private readonly DiagnosticState state;
     private readonly object gate = new();
 
@@ -31,7 +31,7 @@ public sealed class DiagnosticMessenger
     {
         ArgumentNullException.ThrowIfNull(error);
         ArgumentNullException.ThrowIfNull(state);
-        this.error = error;
+        _error = error;
         this.state = state;
     }
 
@@ -97,8 +97,8 @@ public sealed class DiagnosticMessenger
         byte[] bytes = Encoding.UTF8.GetBytes(message);
         lock (gate)
         {
-            error.WriteLine(bytes);
-            error.Flush();
+            _error.WriteLine(bytes);
+            _error.Flush();
         }
     }
 }

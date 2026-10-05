@@ -25,18 +25,18 @@ public class UpstreamTraversalBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        root = Path.Combine(Path.GetTempPath(), "scout-traversal-bench-" + Guid.NewGuid().ToString("N"));
-        string[] paths = [Path.Combine(root, "a"), Path.Combine(root, "b")];
+        root = Path.Join(Path.GetTempPath(), "scout-traversal-bench-" + Guid.NewGuid().ToString("N"));
+        string[] paths = [Path.Join(root, "a"), Path.Join(root, "b")];
         foreach (string path in paths)
         {
             Directory.CreateDirectory(path);
-            File.WriteAllText(Path.Combine(path, ".rgignore"), "**/*.skip\n");
+            File.WriteAllText(Path.Join(path, ".rgignore"), "**/*.skip\n");
             for (int index = 0; index < Directories; index++)
             {
-                string directory = Path.Combine(path, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                string directory = Path.Join(path, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 Directory.CreateDirectory(directory);
-                File.WriteAllText(Path.Combine(directory, "keep"), "needle");
-                File.WriteAllText(Path.Combine(directory, "ignored.skip"), "needle");
+                File.WriteAllText(Path.Join(directory, "keep"), "needle");
+                File.WriteAllText(Path.Join(directory, "ignored.skip"), "needle");
             }
         }
 

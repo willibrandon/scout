@@ -387,10 +387,24 @@ internal static class RegexByteClass
                 or RegexSyntaxKind.WhitespaceClass => unicodeClasses,
             RegexSyntaxKind.Literal => expression.Length > 1 ||
                 unicodeClasses && caseInsensitive && LiteralCaseFoldMayNeedUnicodeScalar(expression),
-            RegexSyntaxKind.CharacterClass => codepointMode && IsNegatedClass(expression) ||
-                unicodeClasses && (ContainsScalarClassToken(expression) || caseInsensitive && ClassCaseFoldMayNeedUnicodeScalar(expression)),
+            RegexSyntaxKind.CharacterClass => CharacterClassNeedsUnicodeScalar(expression, codepointMode, unicodeClasses, caseInsensitive),
             _ => false,
         };
+    }
+
+    private static bool CharacterClassNeedsUnicodeScalar(
+        ReadOnlySpan<byte> expression,
+        bool codepointMode,
+        bool unicodeClasses,
+        bool caseInsensitive)
+    {
+        if (codepointMode && IsNegatedClass(expression))
+        {
+            return true;
+        }
+
+        return unicodeClasses &&
+            (ContainsScalarClassToken(expression) || caseInsensitive && ClassCaseFoldMayNeedUnicodeScalar(expression));
     }
 
     private static bool LiteralCaseFoldMayNeedUnicodeScalar(ReadOnlySpan<byte> expression)

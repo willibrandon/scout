@@ -36,27 +36,27 @@ internal readonly struct RegexCompileOptions(
     /// <summary>
     /// Gets a value indicating whether matching ignores case.
     /// </summary>
-    public bool CaseInsensitive { get; } = caseInsensitive;
+    public bool CaseInsensitive { get; private init; } = caseInsensitive;
 
     /// <summary>
     /// Gets a value indicating whether repetition greediness is reversed.
     /// </summary>
-    public bool SwapGreed { get; } = swapGreed;
+    public bool SwapGreed { get; private init; } = swapGreed;
 
     /// <summary>
     /// Gets a value indicating whether line anchors match at record boundaries.
     /// </summary>
-    public bool MultiLine { get; } = multiLine;
+    public bool MultiLine { get; private init; } = multiLine;
 
     /// <summary>
     /// Gets a value indicating whether dot normally matches line terminators.
     /// </summary>
-    public bool DotMatchesNewline { get; } = dotMatchesNewline;
+    public bool DotMatchesNewline { get; private init; } = dotMatchesNewline;
 
     /// <summary>
     /// Gets a value indicating whether carriage return and line feed form the line-terminator family.
     /// </summary>
-    public bool Crlf { get; } = crlf;
+    public bool Crlf { get; private init; } = crlf;
 
     /// <summary>
     /// Gets the line terminator used when CRLF mode is disabled.
@@ -66,12 +66,12 @@ internal readonly struct RegexCompileOptions(
     /// <summary>
     /// Gets a value indicating whether matching observes UTF-8 scalar boundaries.
     /// </summary>
-    public bool Utf8 { get; } = utf8;
+    public bool Utf8 { get; private init; } = utf8;
 
     /// <summary>
     /// Gets a value indicating whether character classes use Unicode semantics.
     /// </summary>
-    public bool UnicodeClasses { get; } = unicodeClasses;
+    public bool UnicodeClasses { get; private init; } = unicodeClasses;
 
     /// <summary>
     /// Gets the specialization mode.
@@ -111,56 +111,18 @@ internal readonly struct RegexCompileOptions(
     /// <returns>The effective options for the scope.</returns>
     public RegexCompileOptions Apply(string enabledFlags, string disabledFlags)
     {
-        bool effectiveCaseInsensitive = CaseInsensitive;
-        bool effectiveSwapGreed = SwapGreed;
-        bool effectiveMultiLine = MultiLine;
-        bool effectiveDotMatchesNewline = DotMatchesNewline;
-        bool effectiveCrlf = Crlf;
-        bool effectiveUtf8 = Utf8;
-        bool effectiveUnicodeClasses = UnicodeClasses;
+        RegexCompileOptions effective = this;
         for (int index = 0; index < enabledFlags.Length; index++)
         {
-            ApplyFlag(
-                enabledFlags[index],
-                enabled: true,
-                ref effectiveCaseInsensitive,
-                ref effectiveSwapGreed,
-                ref effectiveMultiLine,
-                ref effectiveDotMatchesNewline,
-                ref effectiveCrlf,
-                ref effectiveUtf8,
-                ref effectiveUnicodeClasses);
+            effective = effective.ApplyFlag(enabledFlags[index], enabled: true);
         }
 
         for (int index = 0; index < disabledFlags.Length; index++)
         {
-            ApplyFlag(
-                disabledFlags[index],
-                enabled: false,
-                ref effectiveCaseInsensitive,
-                ref effectiveSwapGreed,
-                ref effectiveMultiLine,
-                ref effectiveDotMatchesNewline,
-                ref effectiveCrlf,
-                ref effectiveUtf8,
-                ref effectiveUnicodeClasses);
+            effective = effective.ApplyFlag(disabledFlags[index], enabled: false);
         }
 
-        return new RegexCompileOptions(
-            effectiveCaseInsensitive,
-            effectiveSwapGreed,
-            effectiveMultiLine,
-            effectiveDotMatchesNewline,
-            effectiveCrlf,
-            LineTerminator,
-            effectiveUtf8,
-            effectiveUnicodeClasses,
-            SpecializationMode,
-            ExcludeLineTerminators,
-            ExcludeCrLf,
-            ExcludedLineTerminator,
-            AllowRawPatternSpecializations,
-            MatchInvalidUtf8);
+        return effective;
     }
 
     /// <summary>
@@ -246,38 +208,17 @@ internal readonly struct RegexCompileOptions(
             matchInvalidUtf8: MatchInvalidUtf8);
     }
 
-    private static void ApplyFlag(
-        char flag,
-        bool enabled,
-        ref bool caseInsensitive,
-        ref bool swapGreed,
-        ref bool multiLine,
-        ref bool dotMatchesNewline,
-        ref bool crlf,
-        ref bool utf8,
-        ref bool unicodeClasses)
+    private RegexCompileOptions ApplyFlag(char flag, bool enabled)
     {
-        switch (flag)
+        return flag switch
         {
-            case 'i':
-                caseInsensitive = enabled;
-                break;
-            case 'm':
-                multiLine = enabled;
-                break;
-            case 's':
-                dotMatchesNewline = enabled;
-                break;
-            case 'U':
-                swapGreed = enabled;
-                break;
-            case 'R':
-                crlf = enabled;
-                break;
-            case 'u':
-                utf8 = enabled;
-                unicodeClasses = enabled;
-                break;
-        }
+            'i' => this with { CaseInsensitive = enabled },
+            'm' => this with { MultiLine = enabled },
+            's' => this with { DotMatchesNewline = enabled },
+            'U' => this with { SwapGreed = enabled },
+            'R' => this with { Crlf = enabled },
+            'u' => this with { Utf8 = enabled, UnicodeClasses = enabled },
+            _ => this,
+        };
     }
 }

@@ -287,14 +287,14 @@ internal sealed class RegexPackedLiteralSetScanner
         int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
         long total = 0;
-        var previous0 = Vector256.Create(byte.MaxValue);
-        var previous1 = Vector256.Create(byte.MaxValue);
-        var previous2 = Vector256.Create(byte.MaxValue);
+        RegexPackedLiteralSetPreviousMasks<Vector256<byte>> previous = new() { First = Vector256.Create(byte.MaxValue), Second = Vector256.Create(byte.MaxValue), Third = Vector256.Create(byte.MaxValue) };
+
+
         int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
         while (offset <= unrolledEnd)
         {
             var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous);
             if (Avx2.CompareEqual(firstCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -312,7 +312,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous);
             if (Avx2.CompareEqual(secondCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -330,7 +330,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous);
             if (Avx2.CompareEqual(thirdCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -348,7 +348,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous);
             if (Avx2.CompareEqual(fourthCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -370,7 +370,7 @@ internal sealed class RegexPackedLiteralSetScanner
         while (offset <= vectorEnd)
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> candidates = CandidateVector256(chunk, ref previous);
             if (Avx2.CompareEqual(candidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -399,13 +399,13 @@ internal sealed class RegexPackedLiteralSetScanner
         int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector128<byte>.Count;
         long total = 0;
-        var previous0 = Vector128.Create(byte.MaxValue);
-        var previous1 = Vector128.Create(byte.MaxValue);
-        var previous2 = Vector128.Create(byte.MaxValue);
+        RegexPackedLiteralSetPreviousMasks<Vector128<byte>> previous = new() { First = Vector128.Create(byte.MaxValue), Second = Vector128.Create(byte.MaxValue), Third = Vector128.Create(byte.MaxValue) };
+
+
         while (offset <= vectorEnd)
         {
             var chunk = Vector128.LoadUnsafe(ref reference, (nuint)offset);
-            Vector128<byte> candidates = CandidateVector128(chunk, ref previous0, ref previous1, ref previous2);
+            Vector128<byte> candidates = CandidateVector128(chunk, ref previous);
             if (Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() != 0xFFFF)
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
@@ -666,14 +666,14 @@ internal sealed class RegexPackedLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
-        var previous0 = Vector256.Create(byte.MaxValue);
-        var previous1 = Vector256.Create(byte.MaxValue);
-        var previous2 = Vector256.Create(byte.MaxValue);
+        RegexPackedLiteralSetPreviousMasks<Vector256<byte>> previous = new() { First = Vector256.Create(byte.MaxValue), Second = Vector256.Create(byte.MaxValue), Third = Vector256.Create(byte.MaxValue) };
+
+
         int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
         while (offset <= unrolledEnd)
         {
             var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous);
             if (TryGetFirstCandidate(firstCandidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -681,7 +681,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous);
             if (TryGetFirstCandidate(secondCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -689,7 +689,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous);
             if (TryGetFirstCandidate(thirdCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -697,7 +697,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector256<byte>.Count;
             var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous);
             if (TryGetFirstCandidate(fourthCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -709,7 +709,7 @@ internal sealed class RegexPackedLiteralSetScanner
         while (offset <= vectorEnd)
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
+            Vector256<byte> candidates = CandidateVector256(chunk, ref previous);
             if (TryGetFirstCandidate(candidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -726,13 +726,13 @@ internal sealed class RegexPackedLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector128<byte>.Count;
-        var previous0 = Vector128.Create(byte.MaxValue);
-        var previous1 = Vector128.Create(byte.MaxValue);
-        var previous2 = Vector128.Create(byte.MaxValue);
+        RegexPackedLiteralSetPreviousMasks<Vector128<byte>> previous = new() { First = Vector128.Create(byte.MaxValue), Second = Vector128.Create(byte.MaxValue), Third = Vector128.Create(byte.MaxValue) };
+
+
         while (offset <= vectorEnd)
         {
             var chunk = Vector128.LoadUnsafe(ref reference, (nuint)offset);
-            Vector128<byte> candidates = CandidateVector128(chunk, ref previous0, ref previous1, ref previous2);
+            Vector128<byte> candidates = CandidateVector128(chunk, ref previous);
             if (TryGetFirstCandidate(candidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
             {
                 return candidateStart;
@@ -817,9 +817,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
     private Vector256<byte> CandidateVector256(
         Vector256<byte> chunk,
-        ref Vector256<byte> previous0,
-        ref Vector256<byte> previous1,
-        ref Vector256<byte> previous2)
+        ref RegexPackedLiteralSetPreviousMasks<Vector256<byte>> previous)
     {
         var lowNibbleMask = Vector256.Create((byte)0x0F);
         Vector256<byte> lowNibbles = Avx2.And(chunk, lowNibbleMask);
@@ -838,21 +836,19 @@ internal sealed class RegexPackedLiteralSetScanner
             Avx2.Shuffle(lowMasks256[3], lowNibbles),
             Avx2.Shuffle(highMasks256[3], highNibbles));
 
-        Vector256<byte> aligned0 = ShiftInThreeBytes(candidate0, previous0);
-        Vector256<byte> aligned1 = ShiftInTwoBytes(candidate1, previous1);
-        Vector256<byte> aligned2 = ShiftInOneByte(candidate2, previous2);
-        previous0 = candidate0;
-        previous1 = candidate1;
-        previous2 = candidate2;
+        Vector256<byte> aligned0 = ShiftInThreeBytes(candidate0, previous.First);
+        Vector256<byte> aligned1 = ShiftInTwoBytes(candidate1, previous.Second);
+        Vector256<byte> aligned2 = ShiftInOneByte(candidate2, previous.Third);
+        previous.First = candidate0;
+        previous.Second = candidate1;
+        previous.Third = candidate2;
 
         return Avx2.And(Avx2.And(aligned0, aligned1), Avx2.And(aligned2, candidate3));
     }
 
     private Vector128<byte> CandidateVector128(
         Vector128<byte> chunk,
-        ref Vector128<byte> previous0,
-        ref Vector128<byte> previous1,
-        ref Vector128<byte> previous2)
+        ref RegexPackedLiteralSetPreviousMasks<Vector128<byte>> previous)
     {
         var lowNibbleMask = Vector128.Create((byte)0x0F);
         Vector128<byte> lowNibbles = Sse2.And(chunk, lowNibbleMask);
@@ -871,12 +867,12 @@ internal sealed class RegexPackedLiteralSetScanner
             Ssse3.Shuffle(lowMasks128[3], lowNibbles),
             Ssse3.Shuffle(highMasks128[3], highNibbles));
 
-        Vector128<byte> aligned0 = Ssse3.AlignRight(candidate0, previous0, 13);
-        Vector128<byte> aligned1 = Ssse3.AlignRight(candidate1, previous1, 14);
-        Vector128<byte> aligned2 = Ssse3.AlignRight(candidate2, previous2, 15);
-        previous0 = candidate0;
-        previous1 = candidate1;
-        previous2 = candidate2;
+        Vector128<byte> aligned0 = Ssse3.AlignRight(candidate0, previous.First, 13);
+        Vector128<byte> aligned1 = Ssse3.AlignRight(candidate1, previous.Second, 14);
+        Vector128<byte> aligned2 = Ssse3.AlignRight(candidate2, previous.Third, 15);
+        previous.First = candidate0;
+        previous.Second = candidate1;
+        previous.Third = candidate2;
 
         return Sse2.And(Sse2.And(aligned0, aligned1), Sse2.And(aligned2, candidate3));
     }

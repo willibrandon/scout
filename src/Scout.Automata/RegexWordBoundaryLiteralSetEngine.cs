@@ -497,66 +497,49 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         ref RegexCompileOptions leadingBoundaryOptions,
         ref RegexCompileOptions trailingBoundaryOptions)
     {
-        if (root is RegexAlternationNode alternation)
+        if (root is not RegexAlternationNode alternation)
         {
-            bool sawBranch = false;
-            for (int index = 0; index < alternation.Alternatives.Count; index++)
-            {
-                if (!TryCollectWordBoundaryBranch(
-                        alternation.Alternatives[index],
-                        options,
-                        literals,
-                        ref leadingBoundaryOptions,
-                        ref trailingBoundaryOptions,
-                        ref sawBranch))
-                {
-                    return false;
-                }
-            }
-
-            return sawBranch;
+            return TryCollectWordBoundaryBranch(root, options, literals,
+                out leadingBoundaryOptions, out trailingBoundaryOptions);
         }
 
-        bool sawSingle = false;
-        return TryCollectWordBoundaryBranch(
-            root,
-            options,
-            literals,
-            ref leadingBoundaryOptions,
-            ref trailingBoundaryOptions,
-            ref sawSingle);
+        bool sawBranch = false;
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            if (!TryCollectWordBoundaryBranch(alternation.Alternatives[index], options, literals,
+                out RegexCompileOptions leading, out RegexCompileOptions trailing))
+            {
+                return false;
+            }
+
+            if (sawBranch && (!SameBoundaryOptions(leadingBoundaryOptions, leading) ||
+                !SameBoundaryOptions(trailingBoundaryOptions, trailing)))
+            {
+                return false;
+            }
+
+            leadingBoundaryOptions = leading;
+            trailingBoundaryOptions = trailing;
+            sawBranch = true;
+        }
+
+        return sawBranch;
     }
 
     private static bool TryCollectWordBoundaryBranch(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         List<byte[]> literals,
-        ref RegexCompileOptions leadingBoundaryOptions,
-        ref RegexCompileOptions trailingBoundaryOptions,
-        ref bool sawBranch)
+        out RegexCompileOptions leadingBoundaryOptions,
+        out RegexCompileOptions trailingBoundaryOptions)
     {
-        if (!TryUnwrapWithOptions(node, options, out node, out options) ||
-            node is not RegexSequenceNode sequence ||
-            sequence.Nodes.Count != 3 ||
-            !TryGetWordBoundaryOptions(sequence.Nodes[0], options, out RegexCompileOptions branchLeadingBoundaryOptions) ||
-            !TryGetWordBoundaryOptions(sequence.Nodes[2], options, out RegexCompileOptions branchTrailingBoundaryOptions))
-        {
-            return false;
-        }
-
-        if (!sawBranch)
-        {
-            leadingBoundaryOptions = branchLeadingBoundaryOptions;
-            trailingBoundaryOptions = branchTrailingBoundaryOptions;
-            sawBranch = true;
-        }
-        else if (!SameBoundaryOptions(leadingBoundaryOptions, branchLeadingBoundaryOptions) ||
-            !SameBoundaryOptions(trailingBoundaryOptions, branchTrailingBoundaryOptions))
-        {
-            return false;
-        }
-
-        return TryExpandLiteralLanguage(sequence.Nodes[1], options, literals);
+        leadingBoundaryOptions = options;
+        trailingBoundaryOptions = options;
+        return TryUnwrapWithOptions(node, options, out node, out options) &&
+            node is RegexSequenceNode sequence && sequence.Nodes.Count == 3 &&
+            TryGetWordBoundaryOptions(sequence.Nodes[0], options, out leadingBoundaryOptions) &&
+            TryGetWordBoundaryOptions(sequence.Nodes[2], options, out trailingBoundaryOptions) &&
+            TryExpandLiteralLanguage(sequence.Nodes[1], options, literals);
     }
 
     private static bool SameBoundaryOptions(RegexCompileOptions left, RegexCompileOptions right)

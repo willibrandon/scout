@@ -12,14 +12,14 @@ public sealed class FileWalkerApiTests
     public void FileWalkerAppliesDefaultIgnoreRules()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        Directory.CreateDirectory(Path.Combine(root, "ignored"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored/\n*.tmp\n");
-        File.WriteAllText(Path.Combine(root, ".hidden"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "main.cs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "scratch.tmp"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "ignored", "file.txt"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        Directory.CreateDirectory(Path.Join(root, "ignored"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "ignored/\n*.tmp\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "main.cs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "scratch.tmp"), string.Empty);
+        File.WriteAllText(Path.Join(root, "ignored", "file.txt"), string.Empty);
 
         var walker = new FileWalker(new FileWalkerOptions { Sort = FileWalkSort.FileName });
 
@@ -33,13 +33,13 @@ public sealed class FileWalkerApiTests
     public void FileWalkerOptionsControlFiltering()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        Directory.CreateDirectory(Path.Combine(root, "ignored"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored/\n");
-        File.WriteAllText(Path.Combine(root, ".hidden"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "main.cs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "ignored", "file.txt"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        Directory.CreateDirectory(Path.Join(root, "ignored"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "ignored/\n");
+        File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "main.cs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "ignored", "file.txt"), string.Empty);
 
         var options = new FileWalkerOptions
         {
@@ -58,7 +58,7 @@ public sealed class FileWalkerApiTests
     public void FileWalkEntryExposesMetadata()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "file.txt");
+        string path = Path.Join(root, "file.txt");
         File.WriteAllText(path, "hello");
         var walker = new FileWalker();
 
@@ -89,7 +89,7 @@ public sealed class FileWalkerApiTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-filewalker-tests-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-filewalker-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

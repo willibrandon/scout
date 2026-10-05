@@ -1045,11 +1045,6 @@ public sealed class RegexCorpusTests
             }
 
             matches.Add(match.Value);
-            if (anchored && overlapping)
-            {
-                break;
-            }
-
             if (match.Value.Length == 0)
             {
                 startAt = match.Value.Start + 1;

@@ -15,7 +15,7 @@ public sealed class Issue37InlineFlagControlDifferentialTests
         directory.CreateFile(
             "haystack.txt",
             "Scout one\nnot Scout\nScout two\n");
-        string haystack = Path.Combine(directory.RootPath, "haystack.txt");
+        string haystack = Path.Join(directory.RootPath, "haystack.txt");
         string[] patterns = ["(?m)^Scout.*$", "(?m:^Scout.*$)"];
 
         for (int index = 0; index < patterns.Length; index++)

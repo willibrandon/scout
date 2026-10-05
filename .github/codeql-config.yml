@@ -1,0 +1,6 @@
+name: Scout CodeQL configuration
+
+# Run the full suite without path or query exclusions. Third-party native findings
+# and reviewed inapplicable C# reports remain visible. Applicable findings fail CI.
+queries:
+  - uses: security-and-quality

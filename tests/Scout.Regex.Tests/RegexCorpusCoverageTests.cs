@@ -83,16 +83,7 @@ public sealed class RegexCorpusCoverageTests
 
     private static string[] Difference(SortedSet<string> left, SortedSet<string> right)
     {
-        var difference = new List<string>();
-        foreach (string value in left)
-        {
-            if (!right.Contains(value))
-            {
-                difference.Add(value);
-            }
-        }
-
-        return difference.ToArray();
+        return left.Except(right, StringComparer.Ordinal).ToArray();
     }
 
     private static (string RelativePath, int Count)[] CountByRelativePath(IEnumerable<string> keys)
