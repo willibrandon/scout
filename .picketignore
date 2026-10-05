@@ -1,0 +1,29 @@
+# Add only reviewed false-positive finding fingerprints (picket:v1:<sha256>).
+
+# bench/Scout.Benchmarks/BoundedUrlCaptureBenchmarks.cs
+# Synthetic database URL used to benchmark bounded URL capture (issue #34).
+picket:v1:3dc8557ded38ff9b24dbd2c9e67e2dc5a8c529253107bcb02bffcc80c9239404
+
+# tests/Scout.Foundation.Tests/BoundedUrlCaptureApiTests.cs
+# Synthetic database URL used by bounded URL capture regression tests.
+picket:v1:f072e5fc162bf2a77054580a97359b17c03188646d6243ce32d0f4845c173b9f
+
+# tests/Scout.Foundation.Tests/BoundedUrlCaptureApiTests.cs
+# Synthetic database URL used by bounded URL capture regression tests.
+picket:v1:1951a1e652ce137ab9075cee9b9a82332e8496d4904a3388046b102167c80e11
+
+# tests/Scout.Foundation.Tests/ByteRegexApiTests.cs
+# Sequential sample token used to test bounded assignment captures.
+picket:v1:01ab62c8e498e1ea16f524899bdaa608157c1377b79765e287d59f1716c86e09
+
+# tests/Scout.Foundation.Tests/ByteRegexApiTests.cs
+# Sequential sample token used to test repeated bounded assignment candidates.
+picket:v1:d1b8591d93d025398a45381d0ea9bb86f1033dcc5bca42d20dbd14943a0337fb
+
+# tests/Scout.Foundation.Tests/RegexAutomatonTests.cs
+# Alphabetical sample key used to test fixed-width alternation captures.
+picket:v1:a8644338dd6cc3dbea6575acfdc41c6d8337f9072853de577a5baf535b725c45
+
+# tests/Scout.Foundation.Tests/RegexAutomatonTests.cs
+# Repeated hexadecimal sample token used by prefix-gate and NFA regression tests.
+picket:v1:b0cc8e0f03451eb8a40937092c26f6dae371a7b2552178cddc13223be66366ef

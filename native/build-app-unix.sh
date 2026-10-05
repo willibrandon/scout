@@ -226,6 +226,8 @@ else
     "$NATIVE_CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
 
+cp "$ROOT/src/Scout.App/obj/Release/net10.0/$RID/native/scout.mstat" "$BIN/scout-real.mstat"
+
 SOURCE_COMMIT="$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)"
 SOURCE_FINGERPRINT="$(sh "$ROOT/eng/source-fingerprint.sh")"
 SOURCE_DIRTY="0"

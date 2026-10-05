@@ -23,6 +23,32 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Scan for secrets
+        uses: willibrandon/picket@v0.2.12
+        with:
+          ignore-path: .picketignore
+          cache-mode: secret-hash-only
+          fail-on: findings
+          redact: 100
+          timeout: 300
+          upload-sarif: true
+          report-directory: ${{ runner.temp }}/picket-results
+      - name: Upload secret scan reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: picket-reports
+          path: ${{ runner.temp }}/picket-results
+
   library-packages:
     name: package consumers (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}
@@ -74,6 +100,9 @@ jobs:
 
   linux-musl-arm64:
     name: Alpine ARM64 native and package gates
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 360
     steps:
@@ -92,6 +121,14 @@ jobs:
           path: |
             artifacts/prereqs/linux-musl-arm64
             artifacts/package-consumers/linux-musl-arm64/results.json
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0.26.0
+        with:
+          target: artifacts/bin/linux-musl-arm64/scout-real
+          baseline-key: scout-linux-musl-arm64
+          budgets: max=15mb,growth=5%
+          top: '20'
+          artifact-name: dotsider-size-check-linux-musl-arm64
 
   portable-build-linux:
     name: portable build (${{ matrix.rid }})
@@ -179,6 +216,9 @@ jobs:
 
   linux-arm64-host:
     name: Linux ARM hosted gates
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -229,6 +269,14 @@ jobs:
         run: |
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/linux-arm64/scout --shell bash --shell zsh --shell fish
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0.26.0
+        with:
+          target: artifacts/bin/linux-arm64/scout-real
+          baseline-key: scout-linux-arm64
+          budgets: max=15mb,growth=5%
+          top: '20'
+          artifact-name: dotsider-size-check-linux-arm64
 
   portable-build-host:
     name: portable build (${{ matrix.rid }})
@@ -289,6 +337,9 @@ jobs:
 
   native-linux:
     name: native Unix link (${{ matrix.rid }})
+    permissions:
+      actions: read
+      contents: read
     runs-on: ${{ matrix.runner }}
     container:
       image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
@@ -352,9 +403,20 @@ jobs:
         run: |
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0.26.0
+        with:
+          target: artifacts/bin/${{ matrix.rid }}/scout-real
+          baseline-key: scout-${{ matrix.rid }}
+          budgets: max=15mb,growth=5%
+          top: '20'
+          artifact-name: dotsider-size-check-${{ matrix.rid }}
 
   native-macos:
     name: native Unix link (${{ matrix.rid }})
+    permissions:
+      actions: read
+      contents: read
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -380,9 +442,20 @@ jobs:
         run: |
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0.26.0
+        with:
+          target: artifacts/bin/${{ matrix.rid }}/scout-real
+          baseline-key: scout-${{ matrix.rid }}
+          budgets: max=15mb,growth=5%
+          top: '20'
+          artifact-name: dotsider-size-check-${{ matrix.rid }}
 
   native-windows:
     name: native Windows link (${{ matrix.rid }})
+    permissions:
+      actions: read
+      contents: read
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -421,6 +494,14 @@ jobs:
           python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
       - name: Build and run the Windows differential test host
         run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+      - name: Check Native AOT size
+        uses: willibrandon/dotsider@v0.26.0
+        with:
+          target: artifacts/bin/${{ matrix.rid }}/scout.exe
+          baseline-key: scout-${{ matrix.rid }}
+          budgets: max=15mb,growth=5%
+          top: '20'
+          artifact-name: dotsider-size-check-${{ matrix.rid }}
 
   release-gates:
     name: release gates dispatch
@@ -429,6 +510,7 @@ jobs:
       actions: write
       contents: read
     needs:
+      - secret-scan
       - library-packages
       - linux-musl-arm64
       - portable-build-linux

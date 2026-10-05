@@ -155,6 +155,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "link.exe failed for $OutputExe."
 }
 
+Copy-Item -LiteralPath (Join-Path $Root "src\Scout.App\obj\Release\net10.0\$Rid\native\scout.mstat") -Destination (Join-Path $Bin "scout.mstat")
+
 $VersionOutput = @(& $OutputExe -V)
 if ($LASTEXITCODE -ne 0 -or $VersionOutput.Count -ne 1 -or $VersionOutput[0] -ne $ScoutShortVersion) {
     throw "Unexpected scout -V output: $VersionOutput"
