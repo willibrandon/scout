@@ -18,18 +18,55 @@ public sealed partial class PinnedConfigurationTests
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
-    /// Verifies the SDK pin uses the exact .NET 10 SDK required by the design.
+    /// Verifies SDK feature updates are allowed and validation records the minimum SDK.
     /// </summary>
     [Fact]
-    public void GlobalJsonPinsExactSdk()
+    public void GlobalJsonAllowsSdkFeatureUpdates()
     {
         string root = FindRepositoryRoot();
         string json = File.ReadAllText(Path.Join(root, "global.json"));
         using var document = JsonDocument.Parse(json);
 
         JsonElement sdk = document.RootElement.GetProperty("sdk");
-        Assert.Equal("10.0.102", sdk.GetProperty("version").GetString());
-        Assert.Equal("disable", sdk.GetProperty("rollForward").GetString());
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        Assert.Equal(ReadTopLevelTomlValue(prerequisiteLock, "dotnet_sdk"), sdk.GetProperty("version").GetString());
+        Assert.Equal("latestFeature", sdk.GetProperty("rollForward").GetString());
+    }
+
+    /// <summary>
+    /// Verifies each supported RID has archives and checksums for the recorded toolchain.
+    /// </summary>
+    [Theory]
+    [InlineData("dotnet_sdk_archive", "dotnet_sdk", "Sdk", "sdk")]
+    [InlineData("dotnet_runtime_archive", "dotnet_host_runtime", "Runtime", "runtime")]
+    public void DotnetArchivesMatchDeclaredVersion(string table, string versionKey, string downloadFolder, string archiveName)
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
+        string version = ReadTopLevelTomlValue(prerequisiteLock, versionKey);
+        var remainingRids = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "linux-x64", "linux-arm64", "linux-musl-arm64", "osx-x64", "osx-arm64", "win-x64", "win-arm64",
+        };
+
+        foreach (string section in prerequisiteLock.Split("[[", StringSplitOptions.None).Skip(1))
+        {
+            if (!section.StartsWith(table + "]]\n", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string values = section[(section.IndexOf('\n') + 1)..];
+            string rid = ReadTopLevelTomlValue(values, "rid");
+            Assert.True(remainingRids.Remove(rid), "Unexpected or duplicate archive RID: " + rid);
+            string extension = rid.StartsWith("win-", StringComparison.Ordinal) ? "zip" : "tar.gz";
+            Assert.Equal($"https://builds.dotnet.microsoft.com/dotnet/{downloadFolder}/{version}/dotnet-{archiveName}-{version}-{rid}.{extension}", ReadTopLevelTomlValue(values, "url"));
+            string checksum = ReadTopLevelTomlValue(values, "sha512");
+            Assert.Equal(128, checksum.Length);
+            Assert.True(checksum.All(char.IsAsciiHexDigit));
+        }
+
+        Assert.Empty(remainingRids);
     }
 
     /// <summary>
@@ -51,14 +88,13 @@ public sealed partial class PinnedConfigurationTests
         string performanceJob = releaseGateWorkflow[performanceJobStart..performanceJobEnd];
 
         Assert.Contains("[[dotnet_sdk_archive]]", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("dotnet_host_runtime = \"10.0.10\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("nativeaot_runtime_framework = \"10.0.2\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("rid = \"osx-arm64\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("url = \"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha512 = \"5adb12a72ccfd327fe94ce99104ee7b9b56dbe40e354440a0b28313a4996ff34cc8560d605c1f30c247d364ae429de55d8c3b30ea19da04a716a059eb62b98ed\"", prerequisiteLock, StringComparison.Ordinal);
+        string sdkVersion = ReadTopLevelTomlValue(prerequisiteLock, "dotnet_sdk");
+        Assert.Contains($"url = \"https://builds.dotnet.microsoft.com/dotnet/Sdk/{sdkVersion}/dotnet-sdk-{sdkVersion}-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("[[dotnet_runtime_archive]]", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("url = \"https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha512 = \"79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85\"", prerequisiteLock, StringComparison.Ordinal);
+        string hostRuntime = ReadTopLevelTomlValue(prerequisiteLock, "dotnet_host_runtime");
+        Assert.Contains($"url = \"https://builds.dotnet.microsoft.com/dotnet/Runtime/{hostRuntime}/dotnet-runtime-{hostRuntime}-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("verify_archive_sha512", setupSdk, StringComparison.Ordinal);
         Assert.Contains("--list-sdks", setupSdk, StringComparison.Ordinal);
         Assert.Contains("--list-runtimes", setupSdk, StringComparison.Ordinal);
@@ -140,7 +176,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("libc-bin=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet-version: |\n            9.0.x\n            10.0.102", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet-version: |\n            9.0.x\n            10.0.x", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("Portable tests", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore", workflow, StringComparison.Ordinal);
@@ -628,21 +664,38 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the centrally pinned package versions named by the design.
+    /// Verifies solution dependencies use central package versions without duplicating them.
     /// </summary>
     [Fact]
-    public void CentralPackageVersionsPinToolchainAndTests()
+    public void SolutionDependenciesUseCentralPackageVersions()
     {
         string root = FindRepositoryRoot();
         var document = XDocument.Load(Path.Join(root, "Directory.Packages.props"));
 
-        AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
-        AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
-        AssertPackageVersion(document, "Microsoft.SourceLink.GitHub", "10.0.111");
-        AssertPackageVersion(document, "Microsoft.VisualStudio.Threading.Analyzers", "17.14.15");
-        AssertPackageVersion(document, "BenchmarkDotNet", "0.15.8");
-        AssertPackageVersion(document, "SharpFuzz", "2.2.0");
-        AssertPackageVersion(document, "xunit.v3", "3.2.2");
+        Assert.Equal("true", document.Descendants("ManagePackageVersionsCentrally").Single().Value);
+        var packageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (XElement package in document.Descendants("PackageVersion"))
+        {
+            string? packageId = package.Attribute("Include")?.Value;
+            Assert.False(string.IsNullOrWhiteSpace(packageId));
+            Assert.False(string.IsNullOrWhiteSpace(package.Attribute("Version")?.Value));
+            Assert.True(packageIds.Add(packageId), "Duplicate central package version: " + packageId);
+        }
+
+        Assert.NotEmpty(packageIds);
+        var solution = XDocument.Load(Path.Join(root, "Scout.slnx"));
+        IEnumerable<XDocument> projects = solution.Descendants("Project")
+            .Select(project => XDocument.Load(Path.Join(root, project.Attribute("Path")!.Value)))
+            .Append(XDocument.Load(Path.Join(root, "Directory.Build.props")))
+            .Append(XDocument.Load(Path.Join(root, "Directory.Build.targets")));
+        foreach (XElement reference in projects.SelectMany(static project => project.Descendants("PackageReference")))
+        {
+            string? packageId = reference.Attribute("Include")?.Value;
+            Assert.False(string.IsNullOrWhiteSpace(packageId));
+            Assert.Contains(packageId, packageIds);
+            Assert.Null(reference.Attribute("Version"));
+            Assert.Null(reference.Element("Version"));
+        }
     }
 
     /// <summary>
@@ -1750,7 +1803,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("pack-library-packages:", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("name: pack library packages", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("9.0.x", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("10.0.102", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("10.0.x", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("src/Scout.Regex/Scout.Regex.csproj", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("src/Scout.Globbing/Scout.Globbing.csproj", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("src/Scout.Ignore/Scout.Ignore.csproj", releaseWorkflow, StringComparison.Ordinal);
@@ -2237,7 +2290,7 @@ public sealed partial class PinnedConfigurationTests
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "role = \"source generators and repository policy analyzers\"",
                 "name = \"Microsoft.CodeAnalysis.CSharp\"",
-                "version = \"5.0.0\"",
+                "version_source = \"Directory.Packages.props\"",
                 "crates/core/flags/defs.rs",
                 "tests/*.rs",
                 "rgtest!",
@@ -3869,21 +3922,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("upstream/ripgrep-e89fff89/tests/** -whitespace", attributes, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
-    }
-
-    private static void AssertPackageVersion(XDocument document, string packageId, string expectedVersion)
-    {
-        foreach (XElement element in document.Descendants("PackageVersion"))
-        {
-            string? include = element.Attribute("Include")?.Value;
-            if (string.Equals(include, packageId, StringComparison.Ordinal))
-            {
-                Assert.Equal(expectedVersion, element.Attribute("Version")?.Value);
-                return;
-            }
-        }
-
-        throw new InvalidOperationException($"Package '{packageId}' was not found.");
     }
 
     private static void AssertPackage(XDocument document, string packageId, string targetFrameworks)

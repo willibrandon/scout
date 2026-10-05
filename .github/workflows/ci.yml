@@ -47,7 +47,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Install Linux AOT prerequisites
         if: runner.os == 'Linux'
         run: eng/install-linux-host-prereqs.sh
@@ -82,7 +82,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/scout" -w /scout \
             -e GITHUB_ACTIONS=true \
-            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine3.22-arm64v8 \
             sh -c 'apk add --no-cache bash && bash eng/run-musl-gates.sh'
       - name: Upload musl validation receipts
         if: always()
@@ -145,7 +145,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: MSBuild warning gates
@@ -189,7 +189,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: MSBuild warning gates
@@ -255,7 +255,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: MSBuild warning gates
@@ -342,7 +342,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Link native entry spike
         run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Link native executable
@@ -370,7 +370,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Link native entry spike
         run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Link native executable
@@ -404,7 +404,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Link native executable
         shell: cmd
         run: |

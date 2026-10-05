@@ -310,7 +310,7 @@ This is the only accepted runtime carve-out from byte-identical output: no accep
   - **Default `TargetFramework`** = `net10.0` for the CLI and internal app/test projects.
   - **Library `TargetFrameworks`** = `net9.0;net10.0` for the supported reusable package stack.
   - **`LangVersion`** = `14.0` (the C# version shipping with .NET 10; never `latest`/`preview`).
-  - **SDK** pinned in `global.json` to **`10.0.102`** with `"rollForward": "disable"` so only that exact SDK builds the repo. This is the SDK that actually built the verified spikes (§4.1.1); CI fails if the installed SDK differs. (Bumped only via the documented sync policy.)
+  - **SDK** selected by `global.json` with a **`10.0.401`** minimum and `"rollForward": "latestFeature"`. Local builds and CI accept newer stable .NET 10 feature bands so compiler and analyzer updates can build together. CI installs `10.0.x`; reproducible validation records its SDK archive and checksum in `tests/PREREQS.lock`. The original spike transcripts retain the SDK used at the time (§4.1.1).
   - **Runtime / ILCompiler pack** pinned to **`10.0.2`** (`RuntimeFrameworkVersion` = `10.0.2`; `Microsoft.DotNet.ILCompiler` = `10.0.2`; the NativeAOT runtime pack `microsoft.netcore.app.runtime.nativeaot.<rid>` = `10.0.2`) in `Directory.Packages.props` — the exact pack the spikes linked against (Appendix A/B).
   - **`Deterministic`** = `true`, `ContinuousIntegrationBuild` = `true`, `InvariantTimezone` = `true`, `InvariantGlobalization` = `true`.
 
@@ -325,7 +325,7 @@ Supported reusable libraries: `net9.0;net10.0`, `IsAotCompatible=true`. Only `Sc
 ```
 scout/
   Scout.slnx
-  global.json                  # SDK pinned, rollForward: disable
+  global.json                  # minimum SDK, rollForward: latestFeature
   Directory.Build.props        # nullable, warnaserror, pinned LangVersion, doc-gen, no-suppression props
   Directory.Packages.props     # central package management, pinned versions
   .globalconfig / .editorconfig# analyzer severities (only ever stricter), one-type-per-file rule
@@ -506,7 +506,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **Performance** = hard release gates (§9).
 - **Milestones** = internal gates; only v1.0 ships (§10).
 - **Globalization** = `InvariantGlobalization=true`, own Unicode tables (§5.1).
-- **Toolchain pins** = CLI/default `net10.0`, library `net9.0;net10.0`, C# `14.0`, SDK `10.0.102` (`rollForward: disable`), runtime/ILCompiler `10.0.2` for `net10.0`, deterministic build (§5.1) — the exact versions the verified spikes used.
+- **Toolchain configuration** = CLI/default `net10.0`, library `net9.0;net10.0`, C# `14.0`, minimum SDK `10.0.401` (`rollForward: latestFeature`), runtime/ILCompiler `10.0.2` for `net10.0`, deterministic build (§5.1). SDK archives for reproducible validation are recorded once in `tests/PREREQS.lock`; dependency updates are validated by builds and behavior tests rather than duplicate version assertions.
 - **PCRE2** = `pcre2` 0.2.11 / `pcre2-sys` 0.2.10, bundled **PCRE2 10.46**, static-linked per RID (§4.3).
 - **Unix `argv`** = a single statically-linked **C entry shim** across all Unix; no `/proc` dependency (§4.1).
 - **SIMD baseline** = SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64) as the shipped baseline; **AVX-512 paths are included and additive**, gated by `Avx512*.IsSupported`, and delivered **before** Release — not deferred past v1.
