@@ -23,7 +23,7 @@ jobs:
           docker run --rm -v "$PWD:/scout" -w /scout \
             -e GITHUB_ACTIONS=true \
             -e SCOUT_HOST_RID=linux-musl-arm64 \
-            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine3.22-arm64v8 \
             sh -c 'apk add --no-cache bash build-base clang curl git zip zlib-dev && eng/capture-ripgrep-oracle.sh'
       - name: Upload ripgrep oracle archive
         uses: actions/upload-artifact@v7
