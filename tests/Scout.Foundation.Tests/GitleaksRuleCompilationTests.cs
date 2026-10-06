@@ -6,6 +6,7 @@ namespace Scout;
 /// <summary>
 /// Verifies compilation of the representative Gitleaks assignment rule from issue #49.
 /// </summary>
+[TestClass]
 public sealed class GitleaksRuleCompilationTests()
 {
     private const long CompileAllocationLimit = 320 * 1024;
@@ -16,10 +17,10 @@ public sealed class GitleaksRuleCompilationTests()
     /// Verifies every public engine mode preserves the rule's match and capture semantics.
     /// </summary>
     /// <param name="engineMode">The public engine mode under test.</param>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void CompilesAndMatchesAcrossEngineModes(ByteRegexEngineMode engineMode)
     {
         string secret = new('a', 64);
@@ -31,21 +32,21 @@ public sealed class GitleaksRuleCompilationTests()
 
         ByteRegexCaptures? captures = regex.FindCaptures(matching);
 
-        Assert.NotNull(captures);
-        Assert.Equal(new ByteRegexMatch(0, matching.Length), captures.Match);
-        Assert.Equal(new ByteRegexMatch(11, 64), captures.GetGroup(1));
-        Assert.True(captures.GetGroup(1)!.Value.Value(matching).SequenceEqual(Encoding.ASCII.GetBytes(secret)));
-        Assert.Null(regex.Find(tooShort));
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(new ByteRegexMatch(0, matching.Length), captures.Match);
+        Assert.AreEqual(new ByteRegexMatch(11, 64), captures.GetGroup(1));
+        Assert.IsTrue(captures.GetGroup(1)!.Value.Value(matching).SequenceEqual(Encoding.ASCII.GetBytes(secret)));
+        Assert.IsNull(regex.Find(tooShort));
     }
 
     /// <summary>
     /// Verifies the repeated Unicode class and case-folded secret class retain scalar semantics.
     /// </summary>
     /// <param name="engineMode">The public engine mode under test.</param>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void MatchesUnicodeAndCaseFoldedInputAcrossEngineModes(ByteRegexEngineMode engineMode)
     {
         const string Prefix = "Kname.";
@@ -57,20 +58,20 @@ public sealed class GitleaksRuleCompilationTests()
 
         ByteRegexCaptures? captures = regex.FindCaptures(matching);
 
-        Assert.NotNull(captures);
-        Assert.Equal(new ByteRegexMatch(0, matching.Length), captures.Match);
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(new ByteRegexMatch(0, matching.Length), captures.Match);
         int secretStart = Encoding.UTF8.GetByteCount($"{Prefix}coinbase = ");
-        Assert.Equal(new ByteRegexMatch(secretStart, 64), captures.GetGroup(1));
+        Assert.AreEqual(new ByteRegexMatch(secretStart, 64), captures.GetGroup(1));
     }
 
     /// <summary>
     /// Verifies repeated compilation stays within a bounded allocation budget in every public mode.
     /// </summary>
     /// <param name="engineMode">The public engine mode under test.</param>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void CompileAllocationsStayBoundedAcrossEngineModes(ByteRegexEngineMode engineMode)
     {
         var options = new ByteRegexOptions { EngineMode = engineMode };
@@ -82,15 +83,15 @@ public sealed class GitleaksRuleCompilationTests()
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         GC.KeepAlive(regex);
-        Assert.True(
-            allocated <= CompileAllocationLimit,
+        Assert.IsLessThanOrEqualTo(
+            CompileAllocationLimit, allocated,
             $"Expected compilation to allocate at most {CompileAllocationLimit} bytes, but it allocated {allocated} bytes.");
     }
 
     /// <summary>
     /// Verifies bounded copies of one authoritative class share its canonical scalar payload.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BoundedAuthoritativeClassCopiesShareScalarRanges()
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?i)[\w.-]{0,50}?"u8);
@@ -110,42 +111,42 @@ public sealed class GitleaksRuleCompilationTests()
             .Select(static state => state.ScalarRanges!)
             .ToArray();
 
-        Assert.Equal(50, payloads.Length);
-        Assert.All(payloads, payload => Assert.Same(payloads[0], payload));
+        Assert.HasCount(50, payloads);
+        TestAssert.All(payloads, payload => Assert.AreSame(payloads[0], payload));
     }
 
     /// <summary>
     /// Verifies scalar-plan reuse remains separated by every option that changes class semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScalarPlanCacheSeparatesSemanticOptions()
     {
         var cache = new RegexScalarAtomPlanCache();
-        RegexAtomNode caseAtom = Assert.IsType<RegexAtomNode>(
+        RegexAtomNode caseAtom = Assert.IsExactInstanceOfType<RegexAtomNode>(
             RegexSyntaxParser.Parse("[k]"u8).Root);
         RegexCompileOptions caseSensitive = CreateOptions(caseInsensitive: false);
         RegexCompileOptions caseInsensitive = CreateOptions(caseInsensitive: true);
 
-        Assert.True(cache.TryGet(caseAtom, caseSensitive, out RegexScalarAtomPlan? sensitivePlan));
-        Assert.True(cache.TryGet(caseAtom, caseInsensitive, out RegexScalarAtomPlan? insensitivePlan));
-        Assert.True(cache.TryGet(caseAtom, caseSensitive, out RegexScalarAtomPlan? cachedSensitivePlan));
-        Assert.Same(sensitivePlan, cachedSensitivePlan);
-        Assert.NotSame(sensitivePlan, insensitivePlan);
-        Assert.False(ContainsScalar(sensitivePlan!.Ranges, 0x212A));
-        Assert.True(ContainsScalar(insensitivePlan!.Ranges, 0x212A));
+        Assert.IsTrue(cache.TryGet(caseAtom, caseSensitive, out RegexScalarAtomPlan? sensitivePlan));
+        Assert.IsTrue(cache.TryGet(caseAtom, caseInsensitive, out RegexScalarAtomPlan? insensitivePlan));
+        Assert.IsTrue(cache.TryGet(caseAtom, caseSensitive, out RegexScalarAtomPlan? cachedSensitivePlan));
+        Assert.AreSame(sensitivePlan, cachedSensitivePlan);
+        Assert.AreNotSame(sensitivePlan, insensitivePlan);
+        Assert.IsFalse(ContainsScalar(sensitivePlan!.Ranges, 0x212A));
+        Assert.IsTrue(ContainsScalar(insensitivePlan!.Ranges, 0x212A));
 
-        RegexAtomNode wordAtom = Assert.IsType<RegexAtomNode>(
+        RegexAtomNode wordAtom = Assert.IsExactInstanceOfType<RegexAtomNode>(
             RegexSyntaxParser.Parse(@"[\w]"u8).Root);
         RegexCompileOptions unicode = CreateOptions(utf8: true, unicodeClasses: true);
         RegexCompileOptions ascii = CreateOptions(utf8: false, unicodeClasses: false);
 
-        Assert.True(cache.TryGet(wordAtom, unicode, out RegexScalarAtomPlan? unicodePlan));
-        Assert.True(cache.TryGet(wordAtom, ascii, out RegexScalarAtomPlan? asciiPlan));
-        Assert.NotSame(unicodePlan, asciiPlan);
-        Assert.True(ContainsScalar(unicodePlan!.Ranges, 0x03B1));
-        Assert.False(ContainsScalar(asciiPlan!.Ranges, 0x03B1));
+        Assert.IsTrue(cache.TryGet(wordAtom, unicode, out RegexScalarAtomPlan? unicodePlan));
+        Assert.IsTrue(cache.TryGet(wordAtom, ascii, out RegexScalarAtomPlan? asciiPlan));
+        Assert.AreNotSame(unicodePlan, asciiPlan);
+        Assert.IsTrue(ContainsScalar(unicodePlan!.Ranges, 0x03B1));
+        Assert.IsFalse(ContainsScalar(asciiPlan!.Ranges, 0x03B1));
 
-        RegexAtomNode whitespaceAtom = Assert.IsType<RegexAtomNode>(
+        RegexAtomNode whitespaceAtom = Assert.IsExactInstanceOfType<RegexAtomNode>(
             RegexSyntaxParser.Parse(@"[\s]"u8).Root);
         RegexCompileOptions unrestricted = CreateOptions();
         RegexCompileOptions excludeLf = CreateOptions(
@@ -155,16 +156,16 @@ public sealed class GitleaksRuleCompilationTests()
             excludeLineTerminators: true,
             excludeCrLf: true);
 
-        Assert.True(cache.TryGet(whitespaceAtom, unrestricted, out RegexScalarAtomPlan? unrestrictedPlan));
-        Assert.True(cache.TryGet(whitespaceAtom, excludeLf, out RegexScalarAtomPlan? excludeLfPlan));
-        Assert.True(cache.TryGet(whitespaceAtom, excludeCrLf, out RegexScalarAtomPlan? excludeCrLfPlan));
-        Assert.NotSame(unrestrictedPlan, excludeLfPlan);
-        Assert.NotSame(excludeLfPlan, excludeCrLfPlan);
-        Assert.True(ContainsScalar(unrestrictedPlan!.Ranges, '\n'));
-        Assert.False(ContainsScalar(excludeLfPlan!.Ranges, '\n'));
-        Assert.True(ContainsScalar(excludeLfPlan.Ranges, '\r'));
-        Assert.False(ContainsScalar(excludeCrLfPlan!.Ranges, '\n'));
-        Assert.False(ContainsScalar(excludeCrLfPlan.Ranges, '\r'));
+        Assert.IsTrue(cache.TryGet(whitespaceAtom, unrestricted, out RegexScalarAtomPlan? unrestrictedPlan));
+        Assert.IsTrue(cache.TryGet(whitespaceAtom, excludeLf, out RegexScalarAtomPlan? excludeLfPlan));
+        Assert.IsTrue(cache.TryGet(whitespaceAtom, excludeCrLf, out RegexScalarAtomPlan? excludeCrLfPlan));
+        Assert.AreNotSame(unrestrictedPlan, excludeLfPlan);
+        Assert.AreNotSame(excludeLfPlan, excludeCrLfPlan);
+        Assert.IsTrue(ContainsScalar(unrestrictedPlan!.Ranges, '\n'));
+        Assert.IsFalse(ContainsScalar(excludeLfPlan!.Ranges, '\n'));
+        Assert.IsTrue(ContainsScalar(excludeLfPlan.Ranges, '\r'));
+        Assert.IsFalse(ContainsScalar(excludeCrLfPlan!.Ranges, '\n'));
+        Assert.IsFalse(ContainsScalar(excludeCrLfPlan.Ranges, '\r'));
     }
 
     /// <summary>
@@ -173,13 +174,13 @@ public sealed class GitleaksRuleCompilationTests()
     /// <param name="pattern">The repeated authoritative pattern.</param>
     /// <param name="haystack">The UTF-8 haystack.</param>
     /// <param name="expectedLength">The expected byte length.</param>
-    [Theory]
-    [InlineData("(?i:[A-Z--AEIOU]{2,4})", "bcdf", 4)]
-    [InlineData(@"(?:[\w&&\p{Latin}]){2,4}", "abδ", 2)]
-    [InlineData(@"(?:\p{Greek}){2,4}", "αβ!", 4)]
-    [InlineData(@"(?:\x{100}){2,4}", "ĀĀ!", 4)]
-    [InlineData("(?:[^a]){2,4}", "βγa", 4)]
-    [InlineData("(?:[a-f~~d-z]){2,4}", "gh!", 2)]
+    [TestMethod]
+    [DataRow("(?i:[A-Z--AEIOU]{2,4})", "bcdf", 4)]
+    [DataRow(@"(?:[\w&&\p{Latin}]){2,4}", "abδ", 2)]
+    [DataRow(@"(?:\p{Greek}){2,4}", "αβ!", 4)]
+    [DataRow(@"(?:\x{100}){2,4}", "ĀĀ!", 4)]
+    [DataRow("(?:[^a]){2,4}", "βγa", 4)]
+    [DataRow("(?:[a-f~~d-z]){2,4}", "gh!", 2)]
     public void RepeatedAuthoritativeAtomPlansPreserveSemantics(
         string pattern,
         string haystack,
@@ -188,13 +189,13 @@ public sealed class GitleaksRuleCompilationTests()
         RegexMatch? match = RegexAutomaton.Compile(Encoding.UTF8.GetBytes(pattern))
             .Find(Encoding.UTF8.GetBytes(haystack));
 
-        Assert.Equal(new RegexMatch(0, expectedLength), match);
+        Assert.AreEqual(new RegexMatch(0, expectedLength), match);
     }
 
     /// <summary>
     /// Verifies retained-NFA budgets count one shared scalar payload for repeated states.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RetainedBudgetCountsSharedScalarPayloadOnce()
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?i)[\w.-]{0,50}?"u8);
@@ -221,17 +222,17 @@ public sealed class GitleaksRuleCompilationTests()
                     state.SparseTransitions.Length);
         }
 
-        RegexScalarRange[] sharedRanges = Assert.Single(scalarRangePayloads);
+        RegexScalarRange[] sharedRanges = Assert.ContainsSingle(scalarRangePayloads);
         expectedBytes += (ulong)sharedRanges.Length * (sizeof(int) * 2);
         var exactBudget = new RegexNfaConstructionBudget(retainedBytes);
         var insufficientBudget = new RegexNfaConstructionBudget(retainedBytes - 1);
 
         exactBudget.ReserveRetainedNfa(nfa);
 
-        Assert.Equal(expectedBytes, retainedBytes);
-        Assert.Equal(retainedBytes, exactBudget.UsedBytes);
-        Assert.Throws<InsufficientMemoryException>(() => insufficientBudget.ReserveRetainedNfa(nfa));
-        Assert.Equal(0UL, insufficientBudget.UsedBytes);
+        Assert.AreEqual(expectedBytes, retainedBytes);
+        Assert.AreEqual(retainedBytes, exactBudget.UsedBytes);
+        Assert.ThrowsExactly<InsufficientMemoryException>(() => insufficientBudget.ReserveRetainedNfa(nfa));
+        Assert.AreEqual(0UL, insufficientBudget.UsedBytes);
     }
 
     private static RegexCompileOptions CreateOptions(

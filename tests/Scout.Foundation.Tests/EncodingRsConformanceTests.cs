@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies Scout decoders against the pinned <c>encoding_rs</c> decode vectors.
 /// </summary>
+[TestClass]
 public sealed class EncodingRsConformanceTests
 {
     private static readonly string EncodingRsTestDataRoot = Path.Join(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_data");
@@ -12,24 +13,24 @@ public sealed class EncodingRsConformanceTests
     /// <summary>
     /// Gets the upstream decode-vector cases Scout currently supports.
     /// </summary>
-    public static TheoryData<SearchEncodingKind, string, string> DecodeVectorCases()
+    public static IEnumerable<(SearchEncodingKind Encoding, string InputFile, string ExpectedFile)> DecodeVectorCases()
     {
-        return new TheoryData<SearchEncodingKind, string, string>
-        {
-            { SearchEncodingKind.Big5, "big5_in.txt", "big5_in_ref.txt" },
-            { SearchEncodingKind.EucKr, "euc_kr_in.txt", "euc_kr_in_ref.txt" },
-            { SearchEncodingKind.Gb18030, "gb18030_in.txt", "gb18030_in_ref.txt" },
-            { SearchEncodingKind.Iso2022Jp, "iso_2022_jp_in.txt", "iso_2022_jp_in_ref.txt" },
-            { SearchEncodingKind.EucJp, "jis0208_in.txt", "jis0208_in_ref.txt" },
-            { SearchEncodingKind.EucJp, "jis0212_in.txt", "jis0212_in_ref.txt" },
-            { SearchEncodingKind.ShiftJis, "shift_jis_in.txt", "shift_jis_in_ref.txt" },
-        };
+        return
+        [
+            (SearchEncodingKind.Big5, "big5_in.txt", "big5_in_ref.txt"),
+            (SearchEncodingKind.EucKr, "euc_kr_in.txt", "euc_kr_in_ref.txt"),
+            (SearchEncodingKind.Gb18030, "gb18030_in.txt", "gb18030_in_ref.txt"),
+            (SearchEncodingKind.Iso2022Jp, "iso_2022_jp_in.txt", "iso_2022_jp_in_ref.txt"),
+            (SearchEncodingKind.EucJp, "jis0208_in.txt", "jis0208_in_ref.txt"),
+            (SearchEncodingKind.EucJp, "jis0212_in.txt", "jis0212_in_ref.txt"),
+            (SearchEncodingKind.ShiftJis, "shift_jis_in.txt", "shift_jis_in_ref.txt"),
+        ];
     }
 
     /// <summary>
     /// Verifies the conformance catalog covers every upstream decode vector.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DecodeVectorCatalogTracksEncodingRsTestData()
     {
         var upstream = new List<string>();
@@ -40,7 +41,7 @@ public sealed class EncodingRsConformanceTests
 
         upstream.Sort(StringComparer.Ordinal);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             [
                 "big5_in.txt",
                 "euc_kr_in.txt",
@@ -56,7 +57,7 @@ public sealed class EncodingRsConformanceTests
     /// <summary>
     /// Verifies the upstream decode-vector files are pinned by hash.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DecodeVectorFilesMatchPinnedHashes()
     {
         (string Name, string FileName, string Sha256)[] vectors =
@@ -87,7 +88,7 @@ public sealed class EncodingRsConformanceTests
             Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
             byte[] hash = SHA256.HashData(File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, fileName)));
-            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            Assert.AreEqual(expectedSha256, Convert.ToHexString(hash));
         }
     }
 
@@ -97,8 +98,8 @@ public sealed class EncodingRsConformanceTests
     /// <param name="encodingKind">The Scout encoding kind under test.</param>
     /// <param name="inputFile">The upstream encoded input vector.</param>
     /// <param name="expectedFile">The upstream UTF-8 reference vector.</param>
-    [Theory]
-    [MemberData(nameof(DecodeVectorCases))]
+    [TestMethod]
+    [DynamicData(nameof(DecodeVectorCases))]
     public void DecodeMatchesEncodingRsReferenceOutput(SearchEncodingKind encodingKind, string inputFile, string expectedFile)
     {
         byte[] input = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, inputFile));
@@ -106,7 +107,7 @@ public sealed class EncodingRsConformanceTests
 
         byte[] actual = SearchEncoding.Decode(input, encodingKind);
 
-        Assert.Equal(expected, actual);
+        Assert.AreSequenceEqual(expected, actual);
     }
 
     /// <summary>
@@ -115,8 +116,8 @@ public sealed class EncodingRsConformanceTests
     /// <param name="encodingKind">The Scout encoding kind under test.</param>
     /// <param name="inputFile">The upstream encoded input vector.</param>
     /// <param name="expectedFile">The upstream UTF-8 reference vector.</param>
-    [Theory]
-    [MemberData(nameof(DecodeVectorCases))]
+    [TestMethod]
+    [DynamicData(nameof(DecodeVectorCases))]
     public void StreamingDecodeMatchesEncodingRsReferenceOutput(SearchEncodingKind encodingKind, string inputFile, string expectedFile)
     {
         byte[] input = File.ReadAllBytes(Path.Join(EncodingRsTestDataRoot, inputFile));
@@ -125,7 +126,7 @@ public sealed class EncodingRsConformanceTests
 
         byte[] actual = SearchEncodingReader.ReadToEnd(stream, encodingKind);
 
-        Assert.Equal(expected, actual);
+        Assert.AreSequenceEqual(expected, actual);
     }
 
     private static string FindRepositoryRoot()

@@ -6,87 +6,88 @@ namespace Scout;
 /// <summary>
 /// Verifies byte-oriented glob behavior.
 /// </summary>
+[TestClass]
 public sealed class GlobTests
 {
     /// <summary>
     /// Verifies literal matching preserves arbitrary bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralMatchesArbitraryBytes()
     {
         var glob = Glob.Parse([0x66, 0xff, 0x6f]);
 
-        Assert.True(glob.IsMatch([0x66, 0xff, 0x6f]));
-        Assert.False(glob.IsMatch([0x66, 0xef, 0x6f]));
+        Assert.IsTrue(glob.IsMatch([0x66, 0xff, 0x6f]));
+        Assert.IsFalse(glob.IsMatch([0x66, 0xef, 0x6f]));
     }
 
     /// <summary>
     /// Verifies glob metacharacters are escaped with upstream bracket classes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EscapeWrapsGlobMetacharacters()
     {
-        Assert.Equal("foo"u8.ToArray(), Glob.Escape("foo"u8));
-        Assert.Equal("foo[*]"u8.ToArray(), Glob.Escape("foo*"u8));
-        Assert.Equal("[[][]]"u8.ToArray(), Glob.Escape("[]"u8));
-        Assert.Equal("[*][?]"u8.ToArray(), Glob.Escape("*?"u8));
-        Assert.Equal("src/[*][*]/[*].rs"u8.ToArray(), Glob.Escape("src/**/*.rs"u8));
-        Assert.Equal("bar[[]ab[]]baz"u8.ToArray(), Glob.Escape("bar[ab]baz"u8));
-        Assert.Equal("bar[[]!![]]!baz"u8.ToArray(), Glob.Escape("bar[!!]!baz"u8));
-        Assert.Equal("foo[{]bar[}]"u8.ToArray(), Glob.Escape("foo{bar}"u8));
+        Assert.AreSequenceEqual("foo"u8.ToArray(), Glob.Escape("foo"u8));
+        Assert.AreSequenceEqual("foo[*]"u8.ToArray(), Glob.Escape("foo*"u8));
+        Assert.AreSequenceEqual("[[][]]"u8.ToArray(), Glob.Escape("[]"u8));
+        Assert.AreSequenceEqual("[*][?]"u8.ToArray(), Glob.Escape("*?"u8));
+        Assert.AreSequenceEqual("src/[*][*]/[*].rs"u8.ToArray(), Glob.Escape("src/**/*.rs"u8));
+        Assert.AreSequenceEqual("bar[[]ab[]]baz"u8.ToArray(), Glob.Escape("bar[ab]baz"u8));
+        Assert.AreSequenceEqual("bar[[]!![]]!baz"u8.ToArray(), Glob.Escape("bar[!!]!baz"u8));
+        Assert.AreSequenceEqual("foo[{]bar[}]"u8.ToArray(), Glob.Escape("foo{bar}"u8));
     }
 
     /// <summary>
     /// Verifies single-star wildcards cross separators with globset defaults.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StarCrossesSeparatorByDefault()
     {
         var glob = Glob.Parse("src/*.cs"u8.ToArray());
 
-        Assert.True(glob.IsMatch("src/App.cs"u8));
-        Assert.True(glob.IsMatch("src/App/Program.cs"u8));
+        Assert.IsTrue(glob.IsMatch("src/App.cs"u8));
+        Assert.IsTrue(glob.IsMatch("src/App/Program.cs"u8));
     }
 
     /// <summary>
     /// Verifies literal-separator mode prevents wildcards from crossing separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSeparatorBlocksWildcardSeparatorMatches()
     {
         var glob = Glob.Parse("src/*.cs"u8.ToArray(), new GlobOptions(literalSeparator: true));
 
-        Assert.True(glob.IsMatch("src/App.cs"u8));
-        Assert.False(glob.IsMatch("src/App/Program.cs"u8));
+        Assert.IsTrue(glob.IsMatch("src/App.cs"u8));
+        Assert.IsFalse(glob.IsMatch("src/App/Program.cs"u8));
     }
 
     /// <summary>
     /// Verifies double-star wildcards cross separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DoubleStarCrossesSeparator()
     {
         var glob = Glob.Parse("src/**.cs"u8.ToArray());
 
-        Assert.True(glob.IsMatch("src/App/Program.cs"u8));
+        Assert.IsTrue(glob.IsMatch("src/App/Program.cs"u8));
     }
 
     /// <summary>
     /// Verifies double-star followed by a separator can match zero directory levels.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DoubleStarSlashCanMatchZeroDirectories()
     {
         var glob = Glob.Parse("**/foo"u8.ToArray());
 
-        Assert.True(glob.IsMatch("foo"u8));
-        Assert.True(glob.IsMatch("src/foo"u8));
+        Assert.IsTrue(glob.IsMatch("foo"u8));
+        Assert.IsTrue(glob.IsMatch("src/foo"u8));
     }
 
     /// <summary>
     /// Verifies non-component double stars are ordinary stars.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonComponentDoubleStarsAreOrdinaryStars()
     {
         var middle = Glob.Parse("a**b"u8.ToArray(), new GlobOptions(literalSeparator: true));
@@ -94,69 +95,69 @@ public sealed class GlobTests
         var suffix = Glob.Parse("a**"u8.ToArray(), new GlobOptions(literalSeparator: true));
         var recursive = Glob.Parse("a/**"u8.ToArray(), new GlobOptions(literalSeparator: true));
 
-        Assert.False(middle.IsMatch("a/x/b"u8));
-        Assert.False(prefix.IsMatch("x/a"u8));
-        Assert.False(suffix.IsMatch("a/x"u8));
-        Assert.True(recursive.IsMatch("a/x/b"u8));
+        Assert.IsFalse(middle.IsMatch("a/x/b"u8));
+        Assert.IsFalse(prefix.IsMatch("x/a"u8));
+        Assert.IsFalse(suffix.IsMatch("a/x"u8));
+        Assert.IsTrue(recursive.IsMatch("a/x/b"u8));
     }
 
     /// <summary>
     /// Verifies question mark matches one non-separator byte.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuestionMatchesOneByte()
     {
         var glob = Glob.Parse("file?.txt"u8.ToArray());
 
-        Assert.True(glob.IsMatch("file1.txt"u8));
-        Assert.False(glob.IsMatch("file12.txt"u8));
+        Assert.IsTrue(glob.IsMatch("file1.txt"u8));
+        Assert.IsFalse(glob.IsMatch("file12.txt"u8));
     }
 
     /// <summary>
     /// Verifies character classes include ranges and negation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CharacterClassSupportsRangesAndNegation()
     {
-        Assert.True(Glob.Parse("file[0-9].txt"u8.ToArray()).IsMatch("file7.txt"u8));
-        Assert.True(Glob.Parse("file[!0-9].txt"u8.ToArray()).IsMatch("filex.txt"u8));
-        Assert.False(Glob.Parse("file[!0-9].txt"u8.ToArray()).IsMatch("file7.txt"u8));
+        Assert.IsTrue(Glob.Parse("file[0-9].txt"u8.ToArray()).IsMatch("file7.txt"u8));
+        Assert.IsTrue(Glob.Parse("file[!0-9].txt"u8.ToArray()).IsMatch("filex.txt"u8));
+        Assert.IsFalse(Glob.Parse("file[!0-9].txt"u8.ToArray()).IsMatch("file7.txt"u8));
     }
 
     /// <summary>
     /// Verifies character classes accept upstream's leading bracket and hyphen edge cases.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CharacterClassSupportsBracketAndHyphenLiterals()
     {
-        Assert.True(Glob.Parse("[]]"u8.ToArray()).IsMatch("]"u8));
-        Assert.True(Glob.Parse("[!]]"u8.ToArray()).IsMatch("x"u8));
-        Assert.False(Glob.Parse("[!]]"u8.ToArray()).IsMatch("]"u8));
-        Assert.True(Glob.Parse("[a-]"u8.ToArray()).IsMatch("-"u8));
-        Assert.True(Glob.Parse("[-a-z]"u8.ToArray()).IsMatch("-"u8));
-        Assert.True(Glob.Parse("[]-z]"u8.ToArray()).IsMatch("^"u8));
+        Assert.IsTrue(Glob.Parse("[]]"u8.ToArray()).IsMatch("]"u8));
+        Assert.IsTrue(Glob.Parse("[!]]"u8.ToArray()).IsMatch("x"u8));
+        Assert.IsFalse(Glob.Parse("[!]]"u8.ToArray()).IsMatch("]"u8));
+        Assert.IsTrue(Glob.Parse("[a-]"u8.ToArray()).IsMatch("-"u8));
+        Assert.IsTrue(Glob.Parse("[-a-z]"u8.ToArray()).IsMatch("-"u8));
+        Assert.IsTrue(Glob.Parse("[]-z]"u8.ToArray()).IsMatch("^"u8));
     }
 
     /// <summary>
     /// Verifies backslashes inside character classes are literal bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CharacterClassTreatsBackslashAsLiteral()
     {
         var backslashThenBracket = Glob.Parse("[\\]]"u8.ToArray());
         var backslashOrHyphen = Glob.Parse("[\\-]"u8.ToArray());
 
-        Assert.True(backslashThenBracket.IsMatch("\\]"u8));
-        Assert.False(backslashThenBracket.IsMatch("]"u8));
-        Assert.True(backslashOrHyphen.IsMatch("\\"u8));
-        Assert.True(backslashOrHyphen.IsMatch("-"u8));
-        Assert.False(backslashOrHyphen.IsMatch("]"u8));
+        Assert.IsTrue(backslashThenBracket.IsMatch("\\]"u8));
+        Assert.IsFalse(backslashThenBracket.IsMatch("]"u8));
+        Assert.IsTrue(backslashOrHyphen.IsMatch("\\"u8));
+        Assert.IsTrue(backslashOrHyphen.IsMatch("-"u8));
+        Assert.IsFalse(backslashOrHyphen.IsMatch("]"u8));
     }
 
     /// <summary>
     /// Verifies malformed glob syntax reports upstream parse error kinds.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParseReportsMalformedPatterns()
     {
         AssertParseError("["u8.ToArray(), GlobParseErrorKind.UnclosedClass);
@@ -175,81 +176,81 @@ public sealed class GlobTests
     /// <summary>
     /// Verifies unclosed character classes can opt into literal treatment.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AllowUnclosedClassTreatsClassAsLiteral()
     {
         var options = new GlobOptions(allowUnclosedClass: true);
 
-        Assert.True(Glob.Parse("["u8.ToArray(), options).IsMatch("["u8));
-        Assert.True(Glob.Parse("[abc"u8.ToArray(), options).IsMatch("[abc"u8));
-        Assert.True(Glob.Parse("[]"u8.ToArray(), options).IsMatch("[]"u8));
-        Assert.True(Glob.Parse("[!]"u8.ToArray(), options).IsMatch("[!]"u8));
+        Assert.IsTrue(Glob.Parse("["u8.ToArray(), options).IsMatch("["u8));
+        Assert.IsTrue(Glob.Parse("[abc"u8.ToArray(), options).IsMatch("[abc"u8));
+        Assert.IsTrue(Glob.Parse("[]"u8.ToArray(), options).IsMatch("[]"u8));
+        Assert.IsTrue(Glob.Parse("[!]"u8.ToArray(), options).IsMatch("[!]"u8));
     }
 
     /// <summary>
     /// Verifies brace alternatives match any listed alternative.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BraceAlternativesMatchListedPatterns()
     {
         var glob = Glob.Parse("*.{cs,fs}"u8.ToArray());
 
-        Assert.True(glob.IsMatch("Program.cs"u8));
-        Assert.True(glob.IsMatch("Program.fs"u8));
-        Assert.False(glob.IsMatch("Program.vb"u8));
+        Assert.IsTrue(glob.IsMatch("Program.cs"u8));
+        Assert.IsTrue(glob.IsMatch("Program.fs"u8));
+        Assert.IsFalse(glob.IsMatch("Program.vb"u8));
     }
 
     /// <summary>
     /// Verifies empty brace alternatives match upstream defaults and opt-in behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyBraceAlternativesRequireOptInWhenMixedWithNonEmptyAlternatives()
     {
-        Assert.True(Glob.Parse("{}"u8.ToArray()).IsMatch(ReadOnlySpan<byte>.Empty));
-        Assert.True(Glob.Parse("{,}"u8.ToArray()).IsMatch(ReadOnlySpan<byte>.Empty));
-        Assert.False(Glob.Parse("foo{,.txt}"u8.ToArray()).IsMatch("foo"u8));
-        Assert.True(Glob.Parse("foo{,.txt}"u8.ToArray()).IsMatch("foo.txt"u8));
+        Assert.IsTrue(Glob.Parse("{}"u8.ToArray()).IsMatch(ReadOnlySpan<byte>.Empty));
+        Assert.IsTrue(Glob.Parse("{,}"u8.ToArray()).IsMatch(ReadOnlySpan<byte>.Empty));
+        Assert.IsFalse(Glob.Parse("foo{,.txt}"u8.ToArray()).IsMatch("foo"u8));
+        Assert.IsTrue(Glob.Parse("foo{,.txt}"u8.ToArray()).IsMatch("foo.txt"u8));
 
         var emptyAlternates = Glob.Parse("foo{,.txt}"u8.ToArray(), new GlobOptions(emptyAlternates: true));
 
-        Assert.True(emptyAlternates.IsMatch("foo"u8));
-        Assert.True(emptyAlternates.IsMatch("foo.txt"u8));
+        Assert.IsTrue(emptyAlternates.IsMatch("foo"u8));
+        Assert.IsTrue(emptyAlternates.IsMatch("foo.txt"u8));
     }
 
     /// <summary>
     /// Verifies backslash escapes glob metacharacters.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BackslashEscapesMetacharacters()
     {
         var glob = Glob.Parse("literal\\*.txt"u8.ToArray());
 
-        Assert.True(glob.IsMatch("literal*.txt"u8));
-        Assert.False(glob.IsMatch("literal-test.txt"u8));
+        Assert.IsTrue(glob.IsMatch("literal*.txt"u8));
+        Assert.IsFalse(glob.IsMatch("literal-test.txt"u8));
     }
 
     /// <summary>
     /// Verifies ASCII case-insensitive glob options fold only ASCII case.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveMatchesAsciiCase()
     {
         var glob = Glob.Parse("SRC/*.CS"u8.ToArray(), new GlobOptions(asciiCaseInsensitive: true));
 
-        Assert.True(glob.IsMatch("src/app.cs"u8));
-        Assert.False(Glob.Parse([0xc0], new GlobOptions(asciiCaseInsensitive: true)).IsMatch([0xe0]));
+        Assert.IsTrue(glob.IsMatch("src/app.cs"u8));
+        Assert.IsFalse(Glob.Parse([0xc0], new GlobOptions(asciiCaseInsensitive: true)).IsMatch([0xe0]));
     }
 
     /// <summary>
     /// Verifies Windows separators can include slash and backslash.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WindowsOptionsTreatBackslashAsSeparator()
     {
         var glob = Glob.Parse("src\\*.cs"u8.ToArray(), GlobOptions.WindowsLiteralSeparator);
 
-        Assert.True(glob.IsMatch("src\\App.cs"u8));
-        Assert.False(glob.IsMatch("src\\App\\Program.cs"u8));
+        Assert.IsTrue(glob.IsMatch("src\\App.cs"u8));
+        Assert.IsFalse(glob.IsMatch("src\\App\\Program.cs"u8));
     }
 
     /// <summary>
@@ -258,43 +259,43 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="path">The candidate path.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("a*b*c", "a___b___c", "default")]
-    [InlineData("abc*abc*abc", "abcabcabcabcabcabcabc", "default")]
-    [InlineData("some/**/needle.txt", "some/needle.txt", "default")]
-    [InlineData("some/**/needle.txt", "some/one/two/needle.txt", "default")]
-    [InlineData("some/**/**/needle.txt", "some/other/needle.txt", "default")]
-    [InlineData("**", ".asdf", "default")]
-    [InlineData("**", "/x/.asdf", "default")]
-    [InlineData("**/test", "test", "default")]
-    [InlineData("/**/test", "/test", "default")]
-    [InlineData("**/.*", "abc/.abc", "default")]
-    [InlineData(".*/**", ".abc/abc", "default")]
-    [InlineData("test/**", "test/", "default")]
-    [InlineData("test/**", "test/one/two", "default")]
-    [InlineData("some/*/needle.txt", "some/one/needle.txt", "default")]
-    [InlineData("*some/path/to/hello.txt", "a/bigger/some/path/to/hello.txt", "default")]
-    [InlineData("_[[]_[]]_[?]_[*]_!_", "_[_]_?_*_!_", "default")]
-    [InlineData("{**/src/**,foo}", "abc/src/bar", "default")]
-    [InlineData("{[}],foo}", "}", "default")]
-    [InlineData("{a,b{c,d}}", "bd", "default")]
-    [InlineData("foo{,.txt}", "foo", "empty-alternates")]
-    [InlineData("aBcDeFg", "ABCDEFG", "case-insensitive")]
-    [InlineData("abc/def", "abc/def", "literal-separator")]
-    [InlineData("abc[/]def", "abc/def", "literal-separator")]
-    [InlineData("\\[", "[", "backslash-escapes")]
-    [InlineData("\\?", "?", "backslash-escapes")]
-    [InlineData("\\*", "*", "backslash-escapes")]
-    [InlineData("\\[a-z]", "\\a", "no-backslash-escapes")]
-    [InlineData("\\?", "\\a", "no-backslash-escapes")]
-    [InlineData("\\*", "\\\\", "no-backslash-escapes")]
+    [TestMethod]
+    [DataRow("a*b*c", "a___b___c", "default")]
+    [DataRow("abc*abc*abc", "abcabcabcabcabcabcabc", "default")]
+    [DataRow("some/**/needle.txt", "some/needle.txt", "default")]
+    [DataRow("some/**/needle.txt", "some/one/two/needle.txt", "default")]
+    [DataRow("some/**/**/needle.txt", "some/other/needle.txt", "default")]
+    [DataRow("**", ".asdf", "default")]
+    [DataRow("**", "/x/.asdf", "default")]
+    [DataRow("**/test", "test", "default")]
+    [DataRow("/**/test", "/test", "default")]
+    [DataRow("**/.*", "abc/.abc", "default")]
+    [DataRow(".*/**", ".abc/abc", "default")]
+    [DataRow("test/**", "test/", "default")]
+    [DataRow("test/**", "test/one/two", "default")]
+    [DataRow("some/*/needle.txt", "some/one/needle.txt", "default")]
+    [DataRow("*some/path/to/hello.txt", "a/bigger/some/path/to/hello.txt", "default")]
+    [DataRow("_[[]_[]]_[?]_[*]_!_", "_[_]_?_*_!_", "default")]
+    [DataRow("{**/src/**,foo}", "abc/src/bar", "default")]
+    [DataRow("{[}],foo}", "}", "default")]
+    [DataRow("{a,b{c,d}}", "bd", "default")]
+    [DataRow("foo{,.txt}", "foo", "empty-alternates")]
+    [DataRow("aBcDeFg", "ABCDEFG", "case-insensitive")]
+    [DataRow("abc/def", "abc/def", "literal-separator")]
+    [DataRow("abc[/]def", "abc/def", "literal-separator")]
+    [DataRow("\\[", "[", "backslash-escapes")]
+    [DataRow("\\?", "?", "backslash-escapes")]
+    [DataRow("\\*", "*", "backslash-escapes")]
+    [DataRow("\\[a-z]", "\\a", "no-backslash-escapes")]
+    [DataRow("\\?", "\\a", "no-backslash-escapes")]
+    [DataRow("\\*", "\\\\", "no-backslash-escapes")]
     public void UpstreamMatchMatrixMatches(string pattern, string path, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
         var set = GlobSet.Create([glob]);
 
-        Assert.True(glob.IsMatch(Bytes(path)));
-        Assert.True(set.IsMatch(Bytes(path)));
+        Assert.IsTrue(glob.IsMatch(Bytes(path)));
+        Assert.IsTrue(set.IsMatch(Bytes(path)));
     }
 
     /// <summary>
@@ -303,36 +304,36 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="path">The candidate path.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("a*b*c", "abcd", "default")]
-    [InlineData("abc*abc*abc", "abcabcabcabcabcabcabca", "default")]
-    [InlineData("some/**/needle.txt", "some/other/notthis.txt", "default")]
-    [InlineData("/**/test", "test", "default")]
-    [InlineData("/**/test", "/one/notthis", "default")]
-    [InlineData("**/.*", "ab.c", "default")]
-    [InlineData("**/.*", "abc/ab.c", "default")]
-    [InlineData(".*/**", ".abc", "default")]
-    [InlineData("foo/**", "foo", "default")]
-    [InlineData("*hello.txt", "hello.txt-and-then-some", "default")]
-    [InlineData("*some/path/to/hello.txt", "some/other/path/to/hello.txt", "default")]
-    [InlineData("a", "foo/a", "default")]
-    [InlineData("./foo", "foo", "default")]
-    [InlineData("**/foo", "foofoo", "default")]
-    [InlineData("**/foo/bar", "foofoo/bar", "default")]
-    [InlineData("/*.c", "mozilla-sha1/sha1.c", "default")]
-    [InlineData("*.c", "mozilla-sha1/sha1.c", "literal-separator")]
-    [InlineData("**/m4/ltoptions.m4", "csharp/src/packages/repositories.config", "literal-separator")]
-    [InlineData("some/*/needle.txt", "some/one/two/needle.txt", "literal-separator")]
-    [InlineData("abc?def", "abc/def", "literal-separator")]
-    [InlineData("abc*def", "abc/def", "literal-separator")]
-    [InlineData("foo{,.txt}", "foo", "default")]
+    [TestMethod]
+    [DataRow("a*b*c", "abcd", "default")]
+    [DataRow("abc*abc*abc", "abcabcabcabcabcabcabca", "default")]
+    [DataRow("some/**/needle.txt", "some/other/notthis.txt", "default")]
+    [DataRow("/**/test", "test", "default")]
+    [DataRow("/**/test", "/one/notthis", "default")]
+    [DataRow("**/.*", "ab.c", "default")]
+    [DataRow("**/.*", "abc/ab.c", "default")]
+    [DataRow(".*/**", ".abc", "default")]
+    [DataRow("foo/**", "foo", "default")]
+    [DataRow("*hello.txt", "hello.txt-and-then-some", "default")]
+    [DataRow("*some/path/to/hello.txt", "some/other/path/to/hello.txt", "default")]
+    [DataRow("a", "foo/a", "default")]
+    [DataRow("./foo", "foo", "default")]
+    [DataRow("**/foo", "foofoo", "default")]
+    [DataRow("**/foo/bar", "foofoo/bar", "default")]
+    [DataRow("/*.c", "mozilla-sha1/sha1.c", "default")]
+    [DataRow("*.c", "mozilla-sha1/sha1.c", "literal-separator")]
+    [DataRow("**/m4/ltoptions.m4", "csharp/src/packages/repositories.config", "literal-separator")]
+    [DataRow("some/*/needle.txt", "some/one/two/needle.txt", "literal-separator")]
+    [DataRow("abc?def", "abc/def", "literal-separator")]
+    [DataRow("abc*def", "abc/def", "literal-separator")]
+    [DataRow("foo{,.txt}", "foo", "default")]
     public void UpstreamNonMatchMatrixDoesNotMatch(string pattern, string path, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
         var set = GlobSet.Create([glob]);
 
-        Assert.False(glob.IsMatch(Bytes(path)));
-        Assert.False(set.IsMatch(Bytes(path)));
+        Assert.IsFalse(glob.IsMatch(Bytes(path)));
+        Assert.IsFalse(set.IsMatch(Bytes(path)));
     }
 
     /// <summary>
@@ -341,15 +342,15 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expected">The expected extracted literal, or <see langword="null" />.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("foo", "foo", "default")]
-    [InlineData("/foo", "/foo", "default")]
-    [InlineData("/foo/", "/foo/", "default")]
-    [InlineData("/foo/bar", "/foo/bar", "default")]
-    [InlineData("*.foo", null, "default")]
-    [InlineData("foo/bar", "foo/bar", "default")]
-    [InlineData("**/foo/bar", null, "default")]
-    [InlineData("foo", null, "case-insensitive")]
+    [TestMethod]
+    [DataRow("foo", "foo", "default")]
+    [DataRow("/foo", "/foo", "default")]
+    [DataRow("/foo/", "/foo/", "default")]
+    [DataRow("/foo/bar", "/foo/bar", "default")]
+    [DataRow("*.foo", null, "default")]
+    [DataRow("foo/bar", "foo/bar", "default")]
+    [DataRow("**/foo/bar", null, "default")]
+    [DataRow("foo", null, "case-insensitive")]
     public void LiteralStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
@@ -363,14 +364,14 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expected">The expected extracted extension, or <see langword="null" />.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("**/*.rs", ".rs", "default")]
-    [InlineData("**/*.rs.bak", null, "default")]
-    [InlineData("*.rs", ".rs", "default")]
-    [InlineData("a*.rs", null, "default")]
-    [InlineData("/*.c", null, "default")]
-    [InlineData("*.c", null, "literal-separator")]
-    [InlineData("*.c", ".c", "default")]
+    [TestMethod]
+    [DataRow("**/*.rs", ".rs", "default")]
+    [DataRow("**/*.rs.bak", null, "default")]
+    [DataRow("*.rs", ".rs", "default")]
+    [DataRow("a*.rs", null, "default")]
+    [DataRow("/*.c", null, "default")]
+    [DataRow("*.c", null, "literal-separator")]
+    [DataRow("*.c", ".c", "default")]
     public void ExtensionOnlyStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
@@ -384,15 +385,15 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expected">The expected extracted extension, or <see langword="null" />.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("*.rs", ".rs", "default")]
-    [InlineData("/foo/bar/*.rs", ".rs", "default")]
-    [InlineData("/foo/bar/.rs", ".rs", "default")]
-    [InlineData(".rs", ".rs", "default")]
-    [InlineData("./rs", null, "default")]
-    [InlineData("foo", null, "default")]
-    [InlineData(".foo/", null, "default")]
-    [InlineData("foo/", null, "default")]
+    [TestMethod]
+    [DataRow("*.rs", ".rs", "default")]
+    [DataRow("/foo/bar/*.rs", ".rs", "default")]
+    [DataRow("/foo/bar/.rs", ".rs", "default")]
+    [DataRow(".rs", ".rs", "default")]
+    [DataRow("./rs", null, "default")]
+    [DataRow("foo", null, "default")]
+    [DataRow(".foo/", null, "default")]
+    [DataRow("foo/", null, "default")]
     public void RequiredExtensionStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
@@ -406,13 +407,13 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expected">The expected extracted prefix, or <see langword="null" />.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("/foo", "/foo", "default")]
-    [InlineData("/foo/*", "/foo/", "default")]
-    [InlineData("**/foo", null, "default")]
-    [InlineData("foo/**", "foo/", "default")]
-    [InlineData("foo/*", "foo/", "literal-separator")]
-    [InlineData("a*.rs", "a", "default")]
+    [TestMethod]
+    [DataRow("/foo", "/foo", "default")]
+    [DataRow("/foo/*", "/foo/", "default")]
+    [DataRow("**/foo", null, "default")]
+    [DataRow("foo/**", "foo/", "default")]
+    [DataRow("foo/*", "foo/", "literal-separator")]
+    [DataRow("a*.rs", "a", "default")]
     public void FixedPrefixStrategyExtractsNecessaryCandidatePrefix(string pattern, string? expected, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
@@ -426,15 +427,15 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expected">The expected extracted suffix, or <see langword="null" />.</param>
     /// <param name="option">The upstream builder option set.</param>
-    [Theory]
-    [InlineData("**/foo/bar", "/foo/bar", "default")]
-    [InlineData("*/foo/bar", "/foo/bar", "default")]
-    [InlineData("*/foo/bar", "/foo/bar", "literal-separator")]
-    [InlineData("foo/bar", null, "default")]
-    [InlineData("*.foo", ".foo", "default")]
-    [InlineData("*.foo", ".foo", "literal-separator")]
-    [InlineData("**/*_test", "_test", "default")]
-    [InlineData("a*.rs", ".rs", "default")]
+    [TestMethod]
+    [DataRow("**/foo/bar", "/foo/bar", "default")]
+    [DataRow("*/foo/bar", "/foo/bar", "default")]
+    [DataRow("*/foo/bar", "/foo/bar", "literal-separator")]
+    [DataRow("foo/bar", null, "default")]
+    [DataRow("*.foo", ".foo", "default")]
+    [DataRow("*.foo", ".foo", "literal-separator")]
+    [DataRow("**/*_test", "_test", "default")]
+    [DataRow("a*.rs", ".rs", "default")]
     public void FixedSuffixStrategyExtractsNecessaryCandidateSuffix(string pattern, string? expected, string option)
     {
         var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
@@ -448,18 +449,18 @@ public sealed class GlobTests
     /// <param name="pattern">The upstream glob pattern.</param>
     /// <param name="expectedSuffix">The expected path-suffix candidate, or <see langword="null" />.</param>
     /// <param name="expectedExactLiteral">The expected exact whole-path candidate, or <see langword="null" />.</param>
-    [Theory]
-    [InlineData("**/foo/bar", "/foo/bar", "foo/bar")]
-    [InlineData("**/foo", "/foo", "foo")]
-    [InlineData("foo", null, null)]
-    [InlineData("*/foo", null, null)]
+    [TestMethod]
+    [DataRow("**/foo/bar", "/foo/bar", "foo/bar")]
+    [DataRow("**/foo", "/foo", "foo")]
+    [DataRow("foo", null, null)]
+    [DataRow("*/foo", null, null)]
     public void ComponentSuffixStrategyMatchesRecursiveExtraction(string pattern, string? expectedSuffix, string? expectedExactLiteral)
     {
         var glob = Glob.Parse(Bytes(pattern));
         bool actualResult = glob.TryGetComponentSuffix(out byte[] actualSuffix, out byte[] actualExactLiteral);
         bool expectedResult = expectedSuffix is not null;
 
-        Assert.Equal(expectedResult, actualResult);
+        Assert.AreEqual(expectedResult, actualResult);
         AssertStrategyResult(actualResult, actualSuffix, expectedSuffix);
         AssertStrategyResult(actualResult, actualExactLiteral, expectedExactLiteral);
     }
@@ -470,24 +471,24 @@ public sealed class GlobTests
         byte? expectedRangeStart = null,
         byte? expectedRangeEnd = null)
     {
-        GlobParseException exception = Assert.Throws<GlobParseException>(() => Glob.Parse(pattern));
+        GlobParseException exception = Assert.ThrowsExactly<GlobParseException>(() => Glob.Parse(pattern));
 
-        Assert.Equal(expectedKind, exception.ErrorKind);
-        Assert.Equal(pattern, exception.GlobPattern.ToArray());
-        Assert.Equal(expectedRangeStart, exception.RangeStart);
-        Assert.Equal(expectedRangeEnd, exception.RangeEnd);
+        Assert.AreEqual(expectedKind, exception.ErrorKind);
+        Assert.AreSequenceEqual(pattern, exception.GlobPattern.ToArray());
+        Assert.AreEqual(expectedRangeStart, exception.RangeStart);
+        Assert.AreEqual(expectedRangeEnd, exception.RangeEnd);
     }
 
     private static void AssertStrategyResult(bool actualResult, byte[] actual, string? expected)
     {
-        Assert.Equal(expected is not null, actualResult);
+        Assert.AreEqual(expected is not null, actualResult);
         if (expected is null)
         {
-            Assert.Empty(actual);
+            Assert.IsEmpty(actual);
             return;
         }
 
-        Assert.Equal(Bytes(expected), actual);
+        Assert.AreSequenceEqual(Bytes(expected), actual);
     }
 
     private static GlobOptions GetOptions(string option)

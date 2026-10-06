@@ -12,6 +12,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the repository-level pins required by the Scout design.
 /// </summary>
+[TestClass]
 public sealed partial class PinnedConfigurationTests
 {
     private const string PinnedRipgrepCommit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f";
@@ -20,7 +21,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies SDK feature updates are allowed and validation records the minimum SDK.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GlobalJsonAllowsSdkFeatureUpdates()
     {
         string root = FindRepositoryRoot();
@@ -29,16 +30,16 @@ public sealed partial class PinnedConfigurationTests
 
         JsonElement sdk = document.RootElement.GetProperty("sdk");
         string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
-        Assert.Equal(ReadTopLevelTomlValue(prerequisiteLock, "dotnet_sdk"), sdk.GetProperty("version").GetString());
-        Assert.Equal("latestFeature", sdk.GetProperty("rollForward").GetString());
+        Assert.AreEqual(ReadTopLevelTomlValue(prerequisiteLock, "dotnet_sdk"), sdk.GetProperty("version").GetString());
+        Assert.AreEqual("latestFeature", sdk.GetProperty("rollForward").GetString());
     }
 
     /// <summary>
     /// Verifies each supported RID has archives and checksums for the recorded toolchain.
     /// </summary>
-    [Theory]
-    [InlineData("dotnet_sdk_archive", "dotnet_sdk", "Sdk", "sdk")]
-    [InlineData("dotnet_runtime_archive", "dotnet_host_runtime", "Runtime", "runtime")]
+    [TestMethod]
+    [DataRow("dotnet_sdk_archive", "dotnet_sdk", "Sdk", "sdk")]
+    [DataRow("dotnet_runtime_archive", "dotnet_host_runtime", "Runtime", "runtime")]
     public void DotnetArchivesMatchDeclaredVersion(string table, string versionKey, string downloadFolder, string archiveName)
     {
         string root = FindRepositoryRoot();
@@ -58,21 +59,21 @@ public sealed partial class PinnedConfigurationTests
 
             string values = section[(section.IndexOf('\n') + 1)..];
             string rid = ReadTopLevelTomlValue(values, "rid");
-            Assert.True(remainingRids.Remove(rid), "Unexpected or duplicate archive RID: " + rid);
+            Assert.IsTrue(remainingRids.Remove(rid), "Unexpected or duplicate archive RID: " + rid);
             string extension = rid.StartsWith("win-", StringComparison.Ordinal) ? "zip" : "tar.gz";
-            Assert.Equal($"https://builds.dotnet.microsoft.com/dotnet/{downloadFolder}/{version}/dotnet-{archiveName}-{version}-{rid}.{extension}", ReadTopLevelTomlValue(values, "url"));
+            Assert.AreEqual($"https://builds.dotnet.microsoft.com/dotnet/{downloadFolder}/{version}/dotnet-{archiveName}-{version}-{rid}.{extension}", ReadTopLevelTomlValue(values, "url"));
             string checksum = ReadTopLevelTomlValue(values, "sha512");
-            Assert.Equal(128, checksum.Length);
-            Assert.True(checksum.All(char.IsAsciiHexDigit));
+            Assert.AreEqual(128, checksum.Length);
+            Assert.IsTrue(checksum.All(char.IsAsciiHexDigit));
         }
 
-        Assert.Empty(remainingRids);
+        Assert.IsEmpty(remainingRids);
     }
 
     /// <summary>
     /// Verifies the macOS performance gate provisions its SDK from the exact pinned archive.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PerformanceGateProvisionsIsolatedPinnedSdk()
     {
         string root = FindRepositoryRoot();
@@ -82,9 +83,9 @@ public sealed partial class PinnedConfigurationTests
         string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
         string releaseGateWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
         int performanceJobStart = releaseGateWorkflow.IndexOf("  performance-gate:\n", StringComparison.Ordinal);
-        Assert.True(performanceJobStart >= 0);
+        Assert.IsGreaterThanOrEqualTo(0, performanceJobStart);
         int performanceJobEnd = releaseGateWorkflow.IndexOf("\n  native-linux-x64:", performanceJobStart, StringComparison.Ordinal);
-        Assert.True(performanceJobEnd > performanceJobStart);
+        Assert.IsGreaterThan(performanceJobStart, performanceJobEnd);
         string performanceJob = releaseGateWorkflow[performanceJobStart..performanceJobEnd];
 
         Assert.Contains("[[dotnet_sdk_archive]]", prerequisiteLock, StringComparison.Ordinal);
@@ -117,27 +118,27 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the solution uses the SDK's XML solution format.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepositoryUsesSlnxSolution()
     {
         string root = FindRepositoryRoot();
 
-        Assert.True(File.Exists(Path.Join(root, "Scout.slnx")));
-        Assert.False(File.Exists(Path.Join(root, "Scout.sln")));
+        Assert.IsTrue(File.Exists(Path.Join(root, "Scout.slnx")));
+        Assert.IsFalse(File.Exists(Path.Join(root, "Scout.sln")));
     }
 
     /// <summary>
     /// Verifies CI encodes the cross-platform RID and release-gate commands required by the design.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CiWorkflowPinsCrossPlatformGates()
     {
         string root = FindRepositoryRoot();
         string workflowPath = Path.Join(root, ".github", "workflows", "ci.yml");
         string releaseGateWorkflowPath = Path.Join(root, ".github", "workflows", "release-gates.yml");
 
-        Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
-        Assert.True(File.Exists(releaseGateWorkflowPath), "Missing release gate workflow: " + releaseGateWorkflowPath);
+        Assert.IsTrue(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
+        Assert.IsTrue(File.Exists(releaseGateWorkflowPath), "Missing release gate workflow: " + releaseGateWorkflowPath);
         string ciWorkflow = File.ReadAllText(workflowPath);
         string releaseGateWorkflow = File.ReadAllText(releaseGateWorkflowPath);
         string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
@@ -179,13 +180,13 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("dotnet-version: |\n            9.0.x\n            10.0.x", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("Portable tests", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter \"FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter \"FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test --project tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test --project tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter \"FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter \"FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests\"", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet test Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test --solution Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
         Assert.Contains("MSBuild warning gates", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/check-msbuild-warning-gates.sh", workflow, StringComparison.Ordinal);
@@ -253,18 +254,17 @@ public sealed partial class PinnedConfigurationTests
                 line.Trim(),
                 "- name: Run performance gate",
                 StringComparison.Ordinal));
-        Assert.True(
+        Assert.IsTrue(
             performanceStepIndex >= 0 && performanceStepIndex + 1 < releaseGateWorkflowLines.Length,
             "The release workflow must contain the performance gate step.");
-        Assert.Equal(
+        Assert.AreEqual(
             "run: bench/run-hyperfine.sh --gate",
             releaseGateWorkflowLines[performanceStepIndex + 1].Trim());
-        Assert.Single(
-            releaseGateWorkflowLines,
+        Assert.ContainsSingle(
             line => string.Equals(
                 line.Trim(),
                 "run: bench/run-hyperfine.sh --gate",
-                StringComparison.Ordinal));
+                StringComparison.Ordinal), releaseGateWorkflowLines);
         Assert.Contains("id: performance-checkout", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("steps.performance-checkout.outputs.sha", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-hyperfine.sh\"", performanceGate, StringComparison.Ordinal);
@@ -296,7 +296,7 @@ public sealed partial class PinnedConfigurationTests
 
         foreach (string runnerLabel in EnumerateWorkflowRunnerLabels(workflow))
         {
-            Assert.True(
+            Assert.IsTrue(
                 Array.Exists(githubHostedRunnerLabels, label => string.Equals(label, runnerLabel, StringComparison.Ordinal)),
                 "Workflow runner label must be GitHub-hosted and pinned by CiWorkflowPinsCrossPlatformGates: " + runnerLabel);
         }
@@ -319,7 +319,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies Git checkout preserves LF source files for cross-platform format gates.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepositoryPinsCrossPlatformLineEndings()
     {
         string root = FindRepositoryRoot();
@@ -331,7 +331,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the host ripgrep oracle represents the pinned ripgrep revision.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostRipgrepOracleMatchesPinnedCommit()
     {
         if (PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out string archivePath))
@@ -341,26 +341,26 @@ public sealed partial class PinnedConfigurationTests
             string expectedArchiveSha256 = PinnedRipgrepOracle.ReadHostOracleValue("archive_sha256", "ripgrep_oracle_archive_sha256");
 
             Assert.StartsWith(root, archiveFullPath, StringComparison.OrdinalIgnoreCase);
-            Assert.True(File.Exists(archiveFullPath), "Missing pinned ripgrep oracle archive: " + archiveFullPath);
+            Assert.IsTrue(File.Exists(archiveFullPath), "Missing pinned ripgrep oracle archive: " + archiveFullPath);
             string actualArchiveSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archiveFullPath))).ToLowerInvariant();
-            Assert.Equal(expectedArchiveSha256, actualArchiveSha256);
+            Assert.AreEqual(expectedArchiveSha256, actualArchiveSha256);
             return;
         }
 
         string referenceRipgrepRoot = PinnedRipgrepOracle.ReferenceRoot;
 
-        Assert.True(Directory.Exists(referenceRipgrepRoot), "Missing reference checkout: " + referenceRipgrepRoot);
+        Assert.IsTrue(Directory.Exists(referenceRipgrepRoot), "Missing reference checkout: " + referenceRipgrepRoot);
 
         (int exitCode, string output, string error) = RunProcess("git", ["-C", referenceRipgrepRoot, "rev-parse", PinnedRipgrepCommit + "^{commit}"]);
 
-        Assert.True(exitCode == 0, error);
-        Assert.Equal(PinnedRipgrepCommit, output.Trim());
+        Assert.AreEqual(0, exitCode, error);
+        Assert.AreEqual(PinnedRipgrepCommit, output.Trim());
     }
 
     /// <summary>
     /// Verifies hosted release gates provision the pinned ripgrep oracle before any parity checks run.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostedReleaseGatesProvisionPinnedRipgrepOracle()
     {
         string root = FindRepositoryRoot();
@@ -438,7 +438,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies every hosted release-test RID has a frozen ripgrep oracle row.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostedRipgrepOracleRowsCoverReleaseTestRids()
     {
         string root = FindRepositoryRoot();
@@ -515,16 +515,16 @@ public sealed partial class PinnedConfigurationTests
             Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
 
             string archiveFullPath = Path.Join(root, archivePath.Replace('/', Path.DirectorySeparatorChar));
-            Assert.True(File.Exists(archiveFullPath), "Missing hosted ripgrep oracle archive: " + archiveFullPath);
+            Assert.IsTrue(File.Exists(archiveFullPath), "Missing hosted ripgrep oracle archive: " + archiveFullPath);
             string actualArchiveSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archiveFullPath))).ToLowerInvariant();
-            Assert.Equal(archiveSha256, actualArchiveSha256);
+            Assert.AreEqual(archiveSha256, actualArchiveSha256);
         }
     }
 
     /// <summary>
     /// Verifies hosted oracle capture can produce frozen lockfile rows without relying on private runners.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostedOracleCaptureUsesGitHubHostedUnixRunners()
     {
         string root = FindRepositoryRoot();
@@ -607,26 +607,26 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the pinned ripgrep binary exists and reports the pinned revision.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PinnedRipgrepBinaryMatchesPinnedRevision()
     {
         string pinnedRipgrepBinaryPath = PinnedRipgrepOracle.ExecutablePath;
-        Assert.True(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
+        Assert.IsTrue(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
 
         (int exitCode, string output, string error) = RunProcess(pinnedRipgrepBinaryPath, ["--version"]);
 
-        Assert.True(exitCode == 0, error);
+        Assert.AreEqual(0, exitCode, error);
         Assert.StartsWith("ripgrep 15.2.0 (rev e89fff89ac)", output, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Verifies the pinned ripgrep binary hash matches the recorded differential oracle.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PinnedRipgrepBinaryMatchesPrerequisiteHash()
     {
         string pinnedRipgrepBinaryPath = PinnedRipgrepOracle.ExecutablePath;
-        Assert.True(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
+        Assert.IsTrue(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
         PinnedRipgrepOracle.VerifyHash();
 
         string root = FindRepositoryRoot();
@@ -664,23 +664,23 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies solution dependencies use central package versions without duplicating them.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SolutionDependenciesUseCentralPackageVersions()
     {
         string root = FindRepositoryRoot();
         var document = XDocument.Load(Path.Join(root, "Directory.Packages.props"));
 
-        Assert.Equal("true", document.Descendants("ManagePackageVersionsCentrally").Single().Value);
+        Assert.AreEqual("true", document.Descendants("ManagePackageVersionsCentrally").Single().Value);
         var packageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (XElement package in document.Descendants("PackageVersion"))
         {
             string? packageId = package.Attribute("Include")?.Value;
-            Assert.False(string.IsNullOrWhiteSpace(packageId));
-            Assert.False(string.IsNullOrWhiteSpace(package.Attribute("Version")?.Value));
-            Assert.True(packageIds.Add(packageId), "Duplicate central package version: " + packageId);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(packageId));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(package.Attribute("Version")?.Value));
+            Assert.IsTrue(packageIds.Add(packageId), "Duplicate central package version: " + packageId);
         }
 
-        Assert.NotEmpty(packageIds);
+        Assert.IsNotEmpty(packageIds);
         var solution = XDocument.Load(Path.Join(root, "Scout.slnx"));
         IEnumerable<XDocument> projects = solution.Descendants("Project")
             .Select(project => XDocument.Load(Path.Join(root, project.Attribute("Path")!.Value)))
@@ -689,23 +689,23 @@ public sealed partial class PinnedConfigurationTests
         foreach (XElement reference in projects.SelectMany(static project => project.Descendants("PackageReference")))
         {
             string? packageId = reference.Attribute("Include")?.Value;
-            Assert.False(string.IsNullOrWhiteSpace(packageId));
+            Assert.IsFalse(string.IsNullOrWhiteSpace(packageId));
             Assert.Contains(packageId, packageIds);
-            Assert.Null(reference.Attribute("Version"));
-            Assert.Null(reference.Element("Version"));
+            Assert.IsNull(reference.Attribute("Version"));
+            Assert.IsNull(reference.Element("Version"));
         }
     }
 
     /// <summary>
     /// Verifies framework-specific restores cannot overwrite shared project intermediates.
     /// </summary>
-    [Theory]
-    [InlineData("", "", "true")]
-    [InlineData("Build", "Build", "true")]
-    [InlineData("RestorePackages", "Build", "true")]
-    [InlineData("Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "Build", "false")]
-    [InlineData("Build", "Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "false")]
-    [InlineData("restore", "", "false")]
+    [TestMethod]
+    [DataRow("", "", "true")]
+    [DataRow("Build", "Build", "true")]
+    [DataRow("RestorePackages", "Build", "true")]
+    [DataRow("Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "Build", "false")]
+    [DataRow("Build", "Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "false")]
+    [DataRow("restore", "", "false")]
     public void SharedProjectRestoresRunSequentially(string innerTargets, string referenceTargets, string expected)
     {
         string root = FindRepositoryRoot();
@@ -719,14 +719,14 @@ public sealed partial class PinnedConfigurationTests
             "-property:ProjectReferenceBuildTargets=\"" + referenceTargets + "\"",
         ]);
 
-        Assert.True(exitCode == 0, output + error);
-        Assert.Equal(expected, output.Trim());
+        Assert.AreEqual(0, exitCode, output + error);
+        Assert.AreEqual(expected, output.Trim());
     }
 
     /// <summary>
     /// Verifies the build scans repository sources without applying source policy to build outputs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MsBuildSuppressionScanExcludesBuildOutputs()
     {
         string root = FindRepositoryRoot();
@@ -737,20 +737,20 @@ public sealed partial class PinnedConfigurationTests
             "-getItem:ScoutSuppressionScanFile",
         ]);
 
-        Assert.True(exitCode == 0, output + error);
+        Assert.AreEqual(0, exitCode, output + error);
         using var document = JsonDocument.Parse(output);
         string[] paths = document.RootElement.GetProperty("Items").GetProperty("ScoutSuppressionScanFile")
             .EnumerateArray().Select(item => Path.GetRelativePath(root, item.GetProperty("FullPath").GetString()!)).ToArray();
 
         Assert.Contains(Path.Join("src", "Scout.Regex", "RegexMatcher.cs"), paths);
         Assert.Contains("Directory.Build.props", paths);
-        Assert.DoesNotContain(paths, static path => ContainsPathSegment(path, "bin") || ContainsPathSegment(path, "obj"));
+        Assert.DoesNotContain(static path => ContainsPathSegment(path, "bin") || ContainsPathSegment(path, "obj"), paths);
     }
 
     /// <summary>
     /// Verifies Native AOT and trimming policy is explicit instead of SDK-defaulted.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeAotAndTrimPolicyIsPinned()
     {
         string root = FindRepositoryRoot();
@@ -766,55 +766,52 @@ public sealed partial class PinnedConfigurationTests
             "$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))",
             StringComparison.Ordinal));
 
-        Assert.Equal("net10.0", defaults.Element("TargetFramework")?.Value);
-        Assert.Equal("14.0", defaults.Element("LangVersion")?.Value);
-        Assert.Equal("true", defaults.Element("IsAotCompatible")?.Value);
-        Assert.Equal("full", defaults.Element("TrimMode")?.Value);
-        Assert.Equal("true", defaults.Element("ILLinkTreatWarningsAsErrors")?.Value);
-        Assert.Equal("false", defaults.Element("TrimmerSingleWarn")?.Value);
-        Assert.Equal("false", defaults.Element("SuppressTrimAnalysisWarnings")?.Value);
-        Assert.Equal("true", defaults.Element("_TrimmerShowRedundantSuppressions")?.Value);
-        Assert.Null(defaults.Element("RuntimeFrameworkVersion"));
+        Assert.AreEqual("net10.0", GetRequiredElementValue(defaults, "TargetFramework"));
+        Assert.AreEqual("14.0", GetRequiredElementValue(defaults, "LangVersion"));
+        Assert.AreEqual("true", GetRequiredElementValue(defaults, "IsAotCompatible"));
+        Assert.AreEqual("full", GetRequiredElementValue(defaults, "TrimMode"));
+        Assert.AreEqual("true", GetRequiredElementValue(defaults, "ILLinkTreatWarningsAsErrors"));
+        Assert.AreEqual("false", GetRequiredElementValue(defaults, "TrimmerSingleWarn"));
+        Assert.AreEqual("false", GetRequiredElementValue(defaults, "SuppressTrimAnalysisWarnings"));
+        Assert.AreEqual("true", GetRequiredElementValue(defaults, "_TrimmerShowRedundantSuppressions"));
+        Assert.IsNull(defaults.Element("RuntimeFrameworkVersion"));
         Assert.Contains(
-            targets.Root!.Elements("PropertyGroup"),
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(TargetFramework)' == 'net10.0'", StringComparison.Ordinal) &&
-                string.Equals(group.Element("RuntimeFrameworkVersion")?.Value, "10.0.2", StringComparison.Ordinal));
+                string.Equals(group.Element("RuntimeFrameworkVersion")?.Value, "10.0.2", StringComparison.Ordinal), targets.Root!.Elements("PropertyGroup"));
         Assert.Contains(
-            targets.Root.Elements("PropertyGroup"),
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(IsAotCompatible)' == 'true'", StringComparison.Ordinal) &&
                 string.Equals(group.Element("EnableTrimAnalyzer")?.Value, "true", StringComparison.Ordinal) &&
-                string.Equals(group.Element("EnableAotAnalyzer")?.Value, "true", StringComparison.Ordinal));
+                string.Equals(group.Element("EnableAotAnalyzer")?.Value, "true", StringComparison.Ordinal), targets.Root.Elements("PropertyGroup"));
         Assert.Contains(
-            document.Root.Elements("ItemGroup").Elements("PackageReference"),
             static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.CodeAnalysis.NetAnalyzers", StringComparison.Ordinal) &&
-                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal), document.Root.Elements("ItemGroup").Elements("PackageReference"));
         Assert.Contains(
-            document.Root.Elements("ItemGroup").Elements("PackageReference"),
             static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.SourceLink.GitHub", StringComparison.Ordinal) &&
-                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal), document.Root.Elements("ItemGroup").Elements("PackageReference"));
         Assert.Contains(
-            document.Root.Elements("ItemGroup").Elements("PackageReference"),
             static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.VisualStudio.Threading.Analyzers", StringComparison.Ordinal) &&
-                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal), document.Root.Elements("ItemGroup").Elements("PackageReference"));
 
-        Assert.Equal("netstandard2.0", sourceGenerator.Element("TargetFramework")?.Value);
-        Assert.Equal("false", sourceGenerator.Element("IsAotCompatible")?.Value);
-        Assert.Equal("true", sourceGenerator.Element("EnforceExtendedAnalyzerRules")?.Value);
+        Assert.AreEqual("netstandard2.0", GetRequiredElementValue(sourceGenerator, "TargetFramework"));
+        Assert.AreEqual("false", GetRequiredElementValue(sourceGenerator, "IsAotCompatible"));
+        Assert.AreEqual("true", GetRequiredElementValue(sourceGenerator, "EnforceExtendedAnalyzerRules"));
 
-        Assert.Equal("scout", app.Element("AssemblyName")?.Value);
-        Assert.Equal("Library", app.Element("OutputType")?.Value);
-        Assert.Equal("Static", app.Element("NativeLib")?.Value);
-        Assert.Equal("true", app.Element("PublishAot")?.Value);
+        Assert.AreEqual("scout", GetRequiredElementValue(app, "AssemblyName"));
+        Assert.AreEqual("Library", GetRequiredElementValue(app, "OutputType"));
+        Assert.AreEqual("Static", GetRequiredElementValue(app, "NativeLib"));
+        Assert.AreEqual("true", GetRequiredElementValue(app, "PublishAot"));
 
         XElement testAppHost = tests.Element("DefaultAppHostRuntimeIdentifier")!;
-        Assert.Contains("NETCoreSdkPortableRuntimeIdentifier", testAppHost.Attribute("Condition")?.Value, StringComparison.Ordinal);
-        Assert.Equal("$(NETCoreSdkPortableRuntimeIdentifier)", testAppHost.Value);
+        XAttribute? appHostCondition = testAppHost.Attribute("Condition");
+        Assert.IsNotNull(appHostCondition);
+        Assert.Contains("NETCoreSdkPortableRuntimeIdentifier", appHostCondition.Value, StringComparison.Ordinal);
+        Assert.AreEqual("$(NETCoreSdkPortableRuntimeIdentifier)", testAppHost.Value);
     }
 
     /// <summary>
     /// Verifies Scout's supported library package surface is explicit.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LibraryPackageSurfaceIsPinned()
     {
         string root = FindRepositoryRoot();
@@ -831,11 +828,11 @@ public sealed partial class PinnedConfigurationTests
         AssertPackage(regex, "Scout.Text.Regex", "net9.0;net10.0");
         AssertPackage(globbing, "Scout.IO.Globbing", "net9.0;net10.0");
         AssertPackage(ignore, "Scout.IO.Ignore", "net9.0;net10.0");
-        Assert.Equal("willibrandon", defaults.Element("Authors")?.Value);
-        Assert.Equal("https://github.com/willibrandon/scout", defaults.Element("RepositoryUrl")?.Value);
-        Assert.Equal("git", defaults.Element("RepositoryType")?.Value);
-        Assert.Equal("true", defaults.Element("PublishRepositoryUrl")?.Value);
-        Assert.Equal("true", defaults.Element("EmbedUntrackedSources")?.Value);
+        Assert.AreEqual("willibrandon", GetRequiredElementValue(defaults, "Authors"));
+        Assert.AreEqual("https://github.com/willibrandon/scout", GetRequiredElementValue(defaults, "RepositoryUrl"));
+        Assert.AreEqual("git", GetRequiredElementValue(defaults, "RepositoryType"));
+        Assert.AreEqual("true", GetRequiredElementValue(defaults, "PublishRepositoryUrl"));
+        Assert.AreEqual("true", GetRequiredElementValue(defaults, "EmbedUntrackedSources"));
         Assert.Contains("Byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT.", readme, StringComparison.Ordinal);
         Assert.Contains("Scout.Text.Regex", libraries, StringComparison.Ordinal);
         Assert.Contains("Scout.IO.Globbing", libraries, StringComparison.Ordinal);
@@ -850,7 +847,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the design-required fuzzing layer is wired into the solution.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FuzzHarnessPinsDesignTargets()
     {
         string root = FindRepositoryRoot();
@@ -868,7 +865,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the repository contains no warning or nullable suppression escape hatches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepositoryContainsNoWarningSuppressionEscapeHatches()
     {
         string root = FindRepositoryRoot();
@@ -892,13 +889,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies checked-in implementation and build files do not carry implementation deferral markers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ImplementationFilesContainNoImplementationDeferralMarkers()
     {
         string root = FindRepositoryRoot();
@@ -916,13 +913,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies CI evaluates warning gates after MSBuild imports are applied.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MsBuildWarningGateEvaluatesImportedProperties()
     {
         string root = FindRepositoryRoot();
@@ -1019,7 +1016,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the repository contains no skipped, ignored, explicit, or quarantined tests.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepositoryContainsNoSkippedIgnoredOrQuarantinedTests()
     {
         string root = FindRepositoryRoot();
@@ -1040,14 +1037,14 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies the build fails on every test waiver form forbidden by the design.
     /// </summary>
-    [Fact]
-    public void SourceAnalyzerRejectsSkippedIgnoredExplicitAndQuarantinedTests()
+    [TestMethod]
+    public void SourceAnalyzerRejectsIgnoredInconclusiveAndQuarantinedTests()
     {
         string root = FindRepositoryRoot();
         string analyzer = File.ReadAllText(Path.Join(root, "src", "Scout.SourceGen", "NoSkippedTestsAnalyzer.cs"));
@@ -1060,9 +1057,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("TestWaiverIsForbidden", descriptors, StringComparison.Ordinal);
         Assert.Contains("SCOUT0004", descriptors, StringComparison.Ordinal);
         Assert.Contains("dotnet_diagnostic." + "SCOUT0004.severity = " + "error", editorConfig, StringComparison.Ordinal);
-        Assert.Contains("Fact", analyzer, StringComparison.Ordinal);
-        Assert.Contains("Theory", analyzer, StringComparison.Ordinal);
-        Assert.Contains("Trait", analyzer, StringComparison.Ordinal);
+        Assert.Contains("DataRow", analyzer, StringComparison.Ordinal);
+        Assert.Contains("Inconclusive", analyzer, StringComparison.Ordinal);
+        Assert.Contains("TestCategory", analyzer, StringComparison.Ordinal);
         Assert.Contains("TryCreateDirectorySymlink", analyzer, StringComparison.Ordinal);
         Assert.Contains("TryCreateFileSymlink", analyzer, StringComparison.Ordinal);
         Assert.Contains("OperatingSystem.", analyzer, StringComparison.Ordinal);
@@ -1071,18 +1068,31 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies Scout's analyzer diagnostics are tracked as shipped rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SourceGeneratorTracksAnalyzerReleases()
     {
         string root = FindRepositoryRoot();
         string sourceGeneratorDirectory = Path.Join(root, "src", "Scout.SourceGen");
-        string project = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "Scout.SourceGen.csproj"));
         string shipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md"));
         string unshipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md"));
         string editorConfig = File.ReadAllText(Path.Join(root, ".editorconfig"));
 
-        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Shipped.md\" />", project, StringComparison.Ordinal);
-        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Unshipped.md\" />", project, StringComparison.Ordinal);
+        (int exitCode, string output, string error) = RunProcess("dotnet", [
+            "msbuild",
+            Path.Join(sourceGeneratorDirectory, "Scout.SourceGen.csproj"),
+            "-nologo",
+            "-getItem:AdditionalFiles",
+        ]);
+        Assert.AreEqual(0, exitCode, error);
+        using var document = JsonDocument.Parse(output);
+        string[] releaseFiles = document.RootElement.GetProperty("Items").GetProperty("AdditionalFiles")
+            .EnumerateArray()
+            .Select(static item => item.GetProperty("Identity").GetString())
+            .Where(static identity => identity is "AnalyzerReleases.Shipped.md" or "AnalyzerReleases.Unshipped.md")
+            .Select(static identity => identity!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.AreSequenceEqual<string>(["AnalyzerReleases.Shipped.md", "AnalyzerReleases.Unshipped.md"], releaseFiles);
         Assert.Contains("## Release 0.1.0", shipped, StringComparison.Ordinal);
         Assert.Contains("SCOUT0001 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
         Assert.Contains("SCOUT0002 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
@@ -1098,7 +1108,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies Scout config identity is wired as primary with ripgrep compatibility fallback.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeSurfacesReadScoutConfigPathWithRipgrepFallback()
     {
         string root = FindRepositoryRoot();
@@ -1119,7 +1129,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the parity ledger carries no release waivers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParityLedgerContainsNoTrackedGaps()
     {
         string root = FindRepositoryRoot();
@@ -1127,13 +1137,13 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("Scout has no accepted behavioral deviations from the pinned ripgrep behavior.", parity, StringComparison.Ordinal);
         Assert.Contains("Identity surfaces are intentionally Scout-specific", parity, StringComparison.Ordinal);
-        Assert.Equal("None.", ReadMarkdownSection(parity, "Tracked Gaps").Trim());
+        Assert.AreEqual("None.", ReadMarkdownSection(parity, "Tracked Gaps").Trim());
     }
 
     /// <summary>
     /// Verifies project provenance files do not carry deferred-scope language.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ProjectProvenanceFilesContainNoDeferralLanguage()
     {
         string root = FindRepositoryRoot();
@@ -1151,13 +1161,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies generated flag definitions live in a dedicated definitions folder.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GeneratedFlagDefinitionsUseDedicatedFolder()
     {
         string root = FindRepositoryRoot();
@@ -1172,8 +1182,8 @@ public sealed partial class PinnedConfigurationTests
         }
 
         string[] definitionFiles = Directory.GetFiles(definitionsRoot, "*Flag.cs", SearchOption.TopDirectoryOnly);
-        Assert.Equal(GeneratedFlagCatalog.Descriptors.Length, definitionFiles.Length);
-        Assert.Equal(104, definitionFiles.Length);
+        Assert.HasCount(GeneratedFlagCatalog.Descriptors.Length, definitionFiles);
+        Assert.HasCount(104, definitionFiles);
 
         var orders = new HashSet<int>();
         foreach (string path in definitionFiles)
@@ -1207,13 +1217,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.Empty(violations);
+        Assert.IsEmpty(violations);
     }
 
     /// <summary>
     /// Verifies the flag catalog generator reads ordering from flag definitions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FlagCatalogGeneratorReadsOrderFromDefinitions()
     {
         string root = FindRepositoryRoot();
@@ -1248,7 +1258,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies native interop uses source-generated marshalling.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeInteropUsesLibraryImport()
     {
         string root = FindRepositoryRoot();
@@ -1272,13 +1282,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies implicit stdin detection honors Darwin stat layout differences across native RIDs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StandardInputProbeHandlesMacosX64StatLayout()
     {
         string root = FindRepositoryRoot();
@@ -1293,7 +1303,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the Unix OS layer exposes byte-preserving link target reads.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnixOsLayerReadsLinkTargetsAsBytes()
     {
         string root = FindRepositoryRoot();
@@ -1308,14 +1318,14 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies CLI utilities own external decompression and preprocessor process spawning.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CliUtilitiesOwnExternalSearchCommandSpawning()
     {
         string root = FindRepositoryRoot();
         string appReaderPath = Path.Join(root, "src", "Scout.App", "SearchFileContentReader.cs");
         string cliRunnerPath = Path.Join(root, "src", "Scout.Cli", "CliSearchCommandRunner.cs");
 
-        Assert.True(File.Exists(cliRunnerPath), "Missing CLI command runner: " + cliRunnerPath);
+        Assert.IsTrue(File.Exists(cliRunnerPath), "Missing CLI command runner: " + cliRunnerPath);
 
         string appReader = File.ReadAllText(appReaderPath);
         string cliRunner = File.ReadAllText(cliRunnerPath);
@@ -1335,7 +1345,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies runtime regex behavior does not fall back to the UTF-16 BCL regex engine.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeRegexBehaviorDoesNotUseBclRegex()
     {
         string root = FindRepositoryRoot();
@@ -1357,13 +1367,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies <c>-E</c> decoding stays on Scout's <c>encoding_rs</c> port instead of BCL code pages.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchEncodingDoesNotUseSystemTextEncoding()
     {
         string root = FindRepositoryRoot();
@@ -1395,13 +1405,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies runtime JSON output remains a hand-written byte writer.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeJsonOutputDoesNotUseBclJson()
     {
         string root = FindRepositoryRoot();
@@ -1429,13 +1439,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies runtime code avoids reflection, <c>dynamic</c>, and runtime code generation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeCodeDoesNotUseReflectionDynamicOrRuntimeCodegen()
     {
         string root = FindRepositoryRoot();
@@ -1471,19 +1481,19 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies runtime behavior is pinned to invariant globalization and avoids culture-sensitive APIs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeGlobalizationIsInvariantAndCultureInsensitive()
     {
         string root = FindRepositoryRoot();
         var buildProperties = XDocument.Load(Path.Join(root, "Directory.Build.props"));
-        Assert.Equal("true", buildProperties.Descendants("InvariantGlobalization").Single().Value);
-        Assert.Equal("true", buildProperties.Descendants("InvariantTimezone").Single().Value);
+        Assert.AreEqual("true", buildProperties.Descendants("InvariantGlobalization").Single().Value);
+        Assert.AreEqual("true", buildProperties.Descendants("InvariantTimezone").Single().Value);
 
         var violations = new List<string>();
         (string Label, Regex Pattern)[] forbiddenPatterns =
@@ -1508,13 +1518,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies the synchronous search hot path does not use async machinery.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchHotPathDoesNotUseAsyncMachinery()
     {
         string root = FindRepositoryRoot();
@@ -1536,13 +1546,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies the synchronous search hot path does not use LINQ.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchHotPathDoesNotUseLinq()
     {
         string root = FindRepositoryRoot();
@@ -1568,13 +1578,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies runtime stdout/stderr paths do not use text-based <see cref="Console" /> writers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeOutputDoesNotUseConsoleTextWriters()
     {
         string root = FindRepositoryRoot();
@@ -1602,13 +1612,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies runtime code routes environment variable reads through the byte-preserving OS layer.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RuntimeEnvironmentReadsUseProcessEnvironment()
     {
         string root = FindRepositoryRoot();
@@ -1627,13 +1637,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies native entry captures raw Unix bytes and Windows UTF-16 arguments at the OS boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeEntryCapturesPlatformArgumentsAtBoundary()
     {
         string root = FindRepositoryRoot();
@@ -1742,13 +1752,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(fallbackViolations.Count == 0, string.Join(Environment.NewLine, fallbackViolations));
+        Assert.IsEmpty(fallbackViolations, string.Join(Environment.NewLine, fallbackViolations));
     }
 
     /// <summary>
     /// Verifies native binary differentials cover generated help, man, and completion artifacts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeGeneratedArtifactDifferentialsAreWired()
     {
         string root = FindRepositoryRoot();
@@ -1778,7 +1788,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies native release packaging is wired for every shipped RID.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeReleasePackagingIsWiredForEveryRid()
     {
         string root = FindRepositoryRoot();
@@ -1824,7 +1834,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies Windows release packaging passes concrete paths to WiX and PowerShell.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WindowsReleaseWorkflowUsesResolvedPackagePaths()
     {
         string root = FindRepositoryRoot();
@@ -1843,7 +1853,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies tagged releases publish the supported library packages as well as the CLI tool packages.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReleaseWorkflowPacksAndPublishesLibraryPackages()
     {
         string root = FindRepositoryRoot();
@@ -1876,7 +1886,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the generated Scoop manifest extracts Windows zips from their top-level archive directories.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoopManifestUpdateUsesWindowsArchiveExtractDirs()
     {
         string root = FindRepositoryRoot();
@@ -1890,7 +1900,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies NuGet tool packages can resolve repository metadata in GitHub-hosted release containers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DotnetToolPackagingUsesActionsShaWhenAvailable()
     {
         string root = FindRepositoryRoot();
@@ -1907,7 +1917,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the release trademark/search gate records known name collisions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TrademarkCheckRecordsKnownCollisions()
     {
         string root = FindRepositoryRoot();
@@ -1938,7 +1948,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies generated help, man, and completion payloads are build-time source generator inputs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GeneratedArtifactsAreSourceGenerated()
     {
         string root = FindRepositoryRoot();
@@ -1966,10 +1976,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
         Assert.Contains("$text =~ s/\\r\\n/\\n/g;", transform, StringComparison.Ordinal);
         Assert.Contains(
-            project.Descendants("CompilerVisibleItemMetadata"),
             element =>
                 string.Equals((string?)element.Attribute("Include"), "AdditionalFiles", StringComparison.Ordinal) &&
-                string.Equals((string?)element.Attribute("MetadataName"), "ScoutGeneratedArtifactClass", StringComparison.Ordinal));
+                string.Equals((string?)element.Attribute("MetadataName"), "ScoutGeneratedArtifactClass", StringComparison.Ordinal), project.Descendants("CompilerVisibleItemMetadata"));
 
         var expectedArtifacts = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -1991,7 +2000,7 @@ public sealed partial class PinnedConfigurationTests
             .Where(entry => entry.Include.StartsWith("GeneratedArtifacts/", StringComparison.Ordinal))
             .ToDictionary(entry => entry.Include, entry => entry.ClassName, StringComparer.Ordinal);
 
-        Assert.Equal(expectedArtifacts, actualArtifacts);
+        Assert.AreSequenceEqual(expectedArtifacts, actualArtifacts);
 
         Assert.Contains("compare_artifact help_short help-short.base64 -h", verifier, StringComparison.Ordinal);
         Assert.Contains("compare_artifact help_long help-long.base64 --help", verifier, StringComparison.Ordinal);
@@ -2005,7 +2014,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the upstream lockfile has been vendored into Scout.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UpstreamCargoLockIsVendored()
     {
         string root = FindRepositoryRoot();
@@ -2029,7 +2038,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies vendored regex-syntax Unicode tables match the pinned Unicode version.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VendoredUnicodeTablesMatchPinnedRegexSyntaxVersion()
     {
         string root = FindRepositoryRoot();
@@ -2062,8 +2071,8 @@ public sealed partial class PinnedConfigurationTests
             "word_break.rs",
         ];
 
-        Assert.Equal("16.0.0", unicodeVersion);
-        Assert.True(File.Exists(ucdArchive), "Missing vendored UCD archive.");
+        Assert.AreEqual("16.0.0", unicodeVersion);
+        Assert.IsTrue(File.Exists(ucdArchive), "Missing vendored UCD archive.");
         Assert.Contains("\"$ROOT/eng/verify-unicode-data.sh\"", preflight, StringComparison.Ordinal);
         Assert.Contains("source_url = \"https://www.unicode.org/Public/16.0.0/ucd/UCD.zip\"", ucdReadme, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", ucdReadme, StringComparison.Ordinal);
@@ -2090,8 +2099,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("require_archive_entry \"PropertyValueAliases.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"Scripts.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"ScriptExtensions.txt\"", verifier, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Join(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
-        Assert.True(File.Exists(Path.Join(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
+        Assert.IsTrue(File.Exists(Path.Join(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
+        Assert.IsTrue(File.Exists(Path.Join(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
         Assert.Contains("Unicode version: " + unicodeVersion + ".", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsGeneralCategory(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsBooleanProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
@@ -2149,7 +2158,7 @@ public sealed partial class PinnedConfigurationTests
             .Where(name => !string.Equals(name, "mod.rs", StringComparison.Ordinal))
             .Order(StringComparer.Ordinal)
             .ToArray()!;
-        Assert.Equal(expectedTables, actualTables);
+        Assert.AreSequenceEqual(expectedTables, actualTables);
 
         for (int index = 0; index < expectedTables.Length; index++)
         {
@@ -2164,7 +2173,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies every ported or behavior-replaced upstream project records its pinned provenance.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PortedProjectsRecordUpstreamProvenance()
     {
         string root = FindRepositoryRoot();
@@ -2351,7 +2360,7 @@ public sealed partial class PinnedConfigurationTests
             (string relativePath, string[] fragments) = upstreamFiles[fileIndex];
             string path = Path.Join(root, relativePath);
 
-            Assert.True(File.Exists(path), "Missing upstream provenance file: " + relativePath);
+            Assert.IsTrue(File.Exists(path), "Missing upstream provenance file: " + relativePath);
             string text = File.ReadAllText(path);
             for (int fragmentIndex = 0; fragmentIndex < fragments.Length; fragmentIndex++)
             {
@@ -2363,7 +2372,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies every source project carries a sibling upstream provenance file.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SourceProjectsHaveUpstreamProvenanceFiles()
     {
         string root = FindRepositoryRoot();
@@ -2386,13 +2395,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.Empty(missing);
+        Assert.IsEmpty(missing);
     }
 
     /// <summary>
     /// Verifies every Cargo.lock package has an explicit Scout disposition.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CargoLockPackagesHaveExplicitDisposition()
     {
         string root = FindRepositoryRoot();
@@ -2421,13 +2430,13 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.Empty(missing);
+        Assert.IsEmpty(missing);
     }
 
     /// <summary>
     /// Verifies lockfile entries without shipped Scout behavior are explicitly dispositioned.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UpstreamSyncDocumentsNoSurfaceLockfileEntries()
     {
         string root = FindRepositoryRoot();
@@ -2456,7 +2465,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies third-party notices include the license texts required by the design.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ThirdPartyNoticesReproduceRequiredLicenses()
     {
         string root = FindRepositoryRoot();
@@ -2501,7 +2510,7 @@ public sealed partial class PinnedConfigurationTests
         for (int index = 0; index < requiredInventoryRows.Length; index++)
         {
             string row = requiredInventoryRows[index];
-            Assert.True(notices.Contains(row, StringComparison.Ordinal), "Missing third-party notice inventory row: " + row);
+            Assert.IsTrue(notices.Contains(row, StringComparison.Ordinal), "Missing third-party notice inventory row: " + row);
         }
 
         Assert.Contains("Apache License\n                        Version 2.0, January 2004", notices, StringComparison.Ordinal);
@@ -2515,7 +2524,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies PCRE2 invalid-UTF support uses the vendored header constant.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void Pcre2InvalidUtfOptionMatchesVendoredHeader()
     {
         string root = FindRepositoryRoot();
@@ -2531,7 +2540,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies PCRE2 provenance is recorded and matches the vendored <c>pcre2-sys</c> header.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void Pcre2UpstreamPinMatchesVendoredHeader()
     {
         string root = FindRepositoryRoot();
@@ -2557,12 +2566,12 @@ public sealed partial class PinnedConfigurationTests
         string expectedPcre2ReportedVersion = PinnedPcre2RipgrepOracle.ReportedVersion;
         bool hasHostArchive = PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out _);
 
-        Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
-        Assert.True(File.Exists(pinnedPcre2RipgrepBinaryPath), "Missing pinned PCRE2 ripgrep binary: " + pinnedPcre2RipgrepBinaryPath);
+        Assert.IsTrue(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
+        Assert.IsTrue(File.Exists(pinnedPcre2RipgrepBinaryPath), "Missing pinned PCRE2 ripgrep binary: " + pinnedPcre2RipgrepBinaryPath);
         PinnedPcre2RipgrepOracle.VerifyHash();
-        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_compile.c")));
-        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_match.c")));
-        Assert.True(File.Exists(Path.Join(sourceRoot, "src", "pcre2_jit_compile.c")));
+        Assert.IsTrue(File.Exists(Path.Join(sourceRoot, "src", "pcre2_compile.c")));
+        Assert.IsTrue(File.Exists(Path.Join(sourceRoot, "src", "pcre2_match.c")));
+        Assert.IsTrue(File.Exists(Path.Join(sourceRoot, "src", "pcre2_jit_compile.c")));
         string header = File.ReadAllText(headerPath);
 
         Assert.Contains("binding = \"pcre2\"", upstream, StringComparison.Ordinal);
@@ -2839,7 +2848,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the macOS decompression tools in the prerequisite lock match the host binaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MacosDecompressionToolsMatchPinnedHashes()
     {
         (string Name, string Version, string Path, string LocalSha256)[] tools =
@@ -2869,7 +2878,7 @@ public sealed partial class PinnedConfigurationTests
                 string[] hostSha256Values = ReadMacosToolSha256Values(prerequisiteLock, name)
                     .Select(value => value.ToUpperInvariant())
                     .ToArray();
-                Assert.True(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
+                Assert.IsTrue(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
                 byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
                 Assert.Contains(Convert.ToHexString(hash), hostSha256Values);
             }
@@ -2879,7 +2888,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies hosted macOS release gates use GitHub-hosted tool hashes instead of local machine hashes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostedMacosDecompressionToolHashesArePinned()
     {
         (string Rid, string Name, string Version, string Path, string[] Sha256Values)[] tools =
@@ -2908,24 +2917,24 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("sha256_set_contains \"$sha256_set\" \"$actual_sha256\"", preflight, StringComparison.Ordinal);
         Assert.Contains("expected sha256 (one of):", preflight, StringComparison.Ordinal);
         Assert.DoesNotContain("replacement block", preflight, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
-        Assert.Equal("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
-        Assert.Equal("/opt/homebrew/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "path"));
-        Assert.Equal("/usr/local/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "path"));
+        Assert.AreEqual("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
+        Assert.AreEqual("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
+        Assert.AreEqual("/opt/homebrew/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "path"));
+        Assert.AreEqual("/usr/local/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "path"));
 
         for (int index = 0; index < tools.Length; index++)
         {
             (string rid, string name, string version, string path, string[] sha256Values) = tools[index];
-            Assert.Equal(version, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "version"));
-            Assert.Equal(path, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "path"));
-            Assert.Equal(sha256Values, ReadMacosToolSha256Values(prerequisiteLock, name, rid, "github-actions"));
+            Assert.AreEqual(version, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "version"));
+            Assert.AreEqual(path, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "path"));
+            Assert.AreSequenceEqual(sha256Values, ReadMacosToolSha256Values(prerequisiteLock, name, rid, "github-actions"));
         }
     }
 
     /// <summary>
     /// Verifies multi-hash macOS tool pins are literal and limited to the exact rolling hosted image rows that require them.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MacosToolHashSetsAreNarrowlyScopedAndLiteral()
     {
         string root = FindRepositoryRoot();
@@ -2945,41 +2954,41 @@ public sealed partial class PinnedConfigurationTests
 
         foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(prerequisiteLock, "tool.macos"))
         {
-            Assert.True(table.TryGetValue("sha256", out string? rawSha256));
+            Assert.IsTrue(table.TryGetValue("sha256", out string? rawSha256));
             string[] sha256Values = ParseTomlStringValues(rawSha256!);
-            Assert.NotEmpty(sha256Values);
-            Assert.Equal(sha256Values.Length, sha256Values.Distinct(StringComparer.Ordinal).Count());
-            Assert.All(sha256Values, value => Assert.Matches(Sha256HexPattern(), value));
+            Assert.IsNotEmpty(sha256Values);
+            Assert.HasCount(sha256Values.Length, sha256Values.Distinct(StringComparer.Ordinal));
+            TestAssert.All(sha256Values, value => Assert.MatchesRegex(Sha256HexPattern(), value));
 
             if (sha256Values.Length == 1)
             {
                 continue;
             }
 
-            Assert.True(table.TryGetValue("rid", out string? rid));
-            Assert.True(table.TryGetValue("environment", out string? environment));
-            Assert.True(table.TryGetValue("name", out string? name));
+            Assert.IsTrue(table.TryGetValue("rid", out string? rid));
+            Assert.IsTrue(table.TryGetValue("environment", out string? environment));
+            Assert.IsTrue(table.TryGetValue("name", out string? name));
             (string Rid, string Environment, string Name) key =
                 (Rid: rid!, Environment: environment!, Name: name!);
-            Assert.True(
+            Assert.IsTrue(
                 expectedMultipleHashTables.TryGetValue(key, out int expectedCardinality),
                 $"Unexpected multi-hash macOS tool row: {key}.");
-            Assert.Equal(expectedCardinality, sha256Values.Length);
-            Assert.True(
+            Assert.HasCount(expectedCardinality, sha256Values);
+            Assert.IsTrue(
                 observedMultipleHashTables.Add(key),
                 $"Duplicate multi-hash macOS tool row: {key}.");
         }
 
-        Assert.Equal(expectedMultipleHashTables.Count, observedMultipleHashTables.Count);
-        Assert.All(
-            expectedMultipleHashTables.Keys,
-            key => Assert.Contains(key, observedMultipleHashTables));
+        Assert.HasCount(expectedMultipleHashTables.Count, observedMultipleHashTables);
+        TestAssert.All(
+                    expectedMultipleHashTables.Keys,
+                    key => Assert.Contains(key, observedMultipleHashTables));
     }
 
     /// <summary>
     /// Verifies a macOS tool hash set is selected from one specificity row without mixing fallback values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MacosToolHashSetSelectionDoesNotMixFallbackRows()
     {
         const string DefaultSha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c";
@@ -2995,13 +3004,13 @@ public sealed partial class PinnedConfigurationTests
             "environment = \"github-actions\"",
             "version = \"5.8.3\"");
 
-        Assert.Throws<InvalidOperationException>(() => ReadMacosToolSha256Values(toml, "xz", "osx-arm64", "github-actions"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => ReadMacosToolSha256Values(toml, "xz", "osx-arm64", "github-actions"));
     }
 
     /// <summary>
     /// Verifies every pinned Linux command-line prerequisite is represented in the prerequisite lock.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LinuxPrerequisiteToolsCoverPinnedCommandRequirements()
     {
         (string Rid, string Name, string Package, string Binary, string Path, string Version, string Sha256)[] tools =
@@ -3036,7 +3045,7 @@ public sealed partial class PinnedConfigurationTests
         string snapshotDate = ReadTopLevelTomlValue(prerequisiteLock, "linux_snapshot");
         string snapshotUrl = "http://snapshot.debian.org/archive/debian/" + snapshotDate.Replace("-", string.Empty, StringComparison.Ordinal) + "T000000Z";
 
-        Assert.Equal("2026-05-31", snapshotDate);
+        Assert.AreEqual("2026-05-31", snapshotDate);
         Assert.Contains("base_image = \"debian:bookworm-slim\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("index_digest = \"sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("amd64_digest = \"sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a\"", prerequisiteLock, StringComparison.Ordinal);
@@ -3077,7 +3086,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies hosted Linux CI checks installed prerequisite tools against the lockfile.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LinuxPrerequisiteVerificationChecksInstalledToolHashes()
     {
         string root = FindRepositoryRoot();
@@ -3100,7 +3109,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the macOS benchmark tool is fully pinned in the prerequisite lock.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MacosHyperfineToolIsPinned()
     {
         const string name = "hyperfine";
@@ -3138,7 +3147,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the performance gate restores Hyperfine from its checksum-pinned bottle.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HostedReleaseGatesProvisionPinnedHyperfine()
     {
         string root = FindRepositoryRoot();
@@ -3155,18 +3164,17 @@ public sealed partial class PinnedConfigurationTests
                 line.Trim(),
                 "- name: Run performance gate",
                 StringComparison.Ordinal));
-        Assert.True(
+        Assert.IsTrue(
             performanceStepIndex >= 0 && performanceStepIndex + 1 < workflowLines.Length,
             "The release workflow must contain the performance gate step.");
-        Assert.Equal(
+        Assert.AreEqual(
             "run: bench/run-hyperfine.sh --gate",
             workflowLines[performanceStepIndex + 1].Trim());
-        Assert.Single(
-            workflowLines,
+        Assert.ContainsSingle(
             line => string.Equals(
                 line.Trim(),
                 "run: bench/run-hyperfine.sh --gate",
-                StringComparison.Ordinal));
+                StringComparison.Ordinal), workflowLines);
         Assert.DoesNotContain("eng/setup-hyperfine.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-hyperfine.sh\" \"$PERFORMANCE_STATE_PARENT/hyperfine\"", performanceGate, StringComparison.Ordinal);
         Assert.Contains("export SCOUT_HYPERFINE_BIN", performanceGate, StringComparison.Ordinal);
@@ -3188,7 +3196,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the external benchmark corpora have pinned fetch inputs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExternalBenchmarkCorporaHavePinnedInputs()
     {
         string root = FindRepositoryRoot();
@@ -3247,7 +3255,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies every hash-like prerequisite lock value is a literal SHA-256 digest.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PrerequisiteLockHashesAreLiteralSha256Values()
     {
         string root = FindRepositoryRoot();
@@ -3310,15 +3318,15 @@ public sealed partial class PinnedConfigurationTests
             }
         }
 
-        Assert.True(assignmentCount > 0);
-        Assert.Equal(7, arrayAssignmentCount);
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.IsGreaterThan(0, assignmentCount);
+        Assert.AreEqual(7, arrayAssignmentCount);
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
     /// Verifies the hyperfine benchsuite covers every release-gate workload class.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HyperfineBenchSuiteCoversReleaseGateWorkloads()
     {
         string root = FindRepositoryRoot();
@@ -3430,7 +3438,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("verify_performance_inputs.py", script, StringComparison.Ordinal);
         Assert.Contains("generated-performance-inputs.json", script, StringComparison.Ordinal);
         Assert.Contains("[[performance_input]]", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Equal(7, prerequisiteLock.Split("[[performance_input]]", StringSplitOptions.None).Length - 1);
+        Assert.AreEqual(7, prerequisiteLock.Split("[[performance_input]]", StringSplitOptions.None).Length - 1);
         Assert.Contains("Verify a complete generated input set and atomically record its identity", performanceInputVerifier, StringComparison.Ordinal);
         Assert.Contains("test_input_names_must_exactly_match_the_lock", performanceInputVerifierTests, StringComparison.Ordinal);
         Assert.Contains("test_manifest_is_deterministic_for_reordered_arguments", performanceInputVerifierTests, StringComparison.Ordinal);
@@ -3539,7 +3547,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("analyze_large_file_segments", script, StringComparison.Ordinal);
         Assert.Contains("segment balance", script, StringComparison.Ordinal);
         Assert.Contains("--threads $GATE_LARGE_FILE_THREADS", script, StringComparison.Ordinal);
-        Assert.Equal(8, script.Split("--threads $GATE_TREE_THREADS", StringSplitOptions.None).Length - 1);
+        Assert.AreEqual(8, script.Split("--threads $GATE_TREE_THREADS", StringSplitOptions.None).Length - 1);
         Assert.Contains("--threads $GATE_GENERATED_THREADS", script, StringComparison.Ordinal);
         Assert.DoesNotContain("cd $Q_LINUX &&", script, StringComparison.Ordinal);
         Assert.DoesNotContain("cd $Q_OPEN_DIRECTORY &&", script, StringComparison.Ordinal);
@@ -3735,7 +3743,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the memchr port has explicit SIMD-gated search paths required by the design.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MemchrSearchIncludesRequiredSimdGates()
     {
         string root = FindRepositoryRoot();
@@ -3759,7 +3767,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the design-required bytecount port has SIMD gates and is used by multiline accounting.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteCounterIncludesRequiredSimdGates()
     {
         string root = FindRepositoryRoot();
@@ -3769,9 +3777,9 @@ public sealed partial class PinnedConfigurationTests
         string json = File.ReadAllText(Path.Join(root, "src", "Scout.App", "JsonSearchOperations.cs"));
         string upstream = File.ReadAllText(Path.Join(root, "src", "Scout.Automata", "UPSTREAM.md"));
         int advSimdCombinedStart = byteCounter.IndexOf("private static long CountAndFindFirstAdvSimd", StringComparison.Ordinal);
-        Assert.True(advSimdCombinedStart >= 0);
+        Assert.IsGreaterThanOrEqualTo(0, advSimdCombinedStart);
         int advSimdCombinedEnd = byteCounter.IndexOf("private static Vector128<uint> WidenAdvSimdLaneCounts", advSimdCombinedStart, StringComparison.Ordinal);
-        Assert.True(advSimdCombinedEnd > advSimdCombinedStart);
+        Assert.IsGreaterThan(advSimdCombinedStart, advSimdCombinedEnd);
         string advSimdCombined = byteCounter[advSimdCombinedStart..advSimdCombinedEnd];
 
         Assert.Contains("Avx512BW.IsSupported", byteCounter, StringComparison.Ordinal);
@@ -3793,7 +3801,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexCorpusFilesMatchPinnedHashes()
     {
         (string Name, string RelativePath, string Sha256)[] corpora =
@@ -3903,14 +3911,14 @@ public sealed partial class PinnedConfigurationTests
 
             string path = Path.Join(root, relativePath);
             byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
-            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            Assert.AreEqual(expectedSha256, Convert.ToHexString(hash));
         }
     }
 
     /// <summary>
     /// Verifies vendored conformance corpus pins do not depend on developer-local Cargo cache paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PrerequisiteLockUsesRepoRelativeConformanceCorpusPaths()
     {
         string root = FindRepositoryRoot();
@@ -3926,7 +3934,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies every vendored upstream conformance corpus file is pinned in the prerequisite lock.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VendoredConformanceCorpusFilesMatchPrerequisiteLock()
     {
         string root = FindRepositoryRoot();
@@ -3954,7 +3962,7 @@ public sealed partial class PinnedConfigurationTests
     /// <summary>
     /// Verifies the ported ripgrep integration tests use vendored upstream fixtures.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PortedRipgrepTestCorpusIsVendored()
     {
         string root = FindRepositoryRoot();
@@ -3966,19 +3974,26 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", coverageTest, StringComparison.Ordinal);
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", portedTests, StringComparison.Ordinal);
-        Assert.True(File.Exists(Path.Join(testsRoot, "regression.rs")));
-        Assert.True(File.Exists(Path.Join(testsRoot, "data", "sherlock-nul.txt")));
+        Assert.IsTrue(File.Exists(Path.Join(testsRoot, "regression.rs")));
+        Assert.IsTrue(File.Exists(Path.Join(testsRoot, "data", "sherlock-nul.txt")));
         Assert.Contains("upstream/ripgrep-e89fff89/tests/** -whitespace", attributes, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
     }
 
+    private static string GetRequiredElementValue(XElement parent, string name)
+    {
+        XElement? element = parent.Element(name);
+        Assert.IsNotNull(element, $"Required element '{name}' is missing from '{parent.Name}'.");
+        return element.Value;
+    }
+
     private static void AssertPackage(XDocument document, string packageId, string targetFrameworks)
     {
         XElement propertyGroup = document.Root!.Elements("PropertyGroup").Single(static group => group.Element("PackageId") is not null);
-        Assert.Equal(packageId, propertyGroup.Element("PackageId")?.Value);
-        Assert.Equal(targetFrameworks, propertyGroup.Element("TargetFrameworks")?.Value);
-        Assert.Equal("PACKAGE.md", propertyGroup.Element("PackageReadmeFile")?.Value);
+        Assert.AreEqual(packageId, GetRequiredElementValue(propertyGroup, "PackageId"));
+        Assert.AreEqual(targetFrameworks, GetRequiredElementValue(propertyGroup, "TargetFrameworks"));
+        Assert.AreEqual("PACKAGE.md", GetRequiredElementValue(propertyGroup, "PackageReadmeFile"));
     }
 
     private static (int ExitCode, string Output, string Error) RunProcess(string fileName, IReadOnlyList<string> arguments)
@@ -4077,34 +4092,34 @@ public sealed partial class PinnedConfigurationTests
     {
         return
         [
-            ("xUnit skip attribute", XUnitSkipAttributePattern()),
-            ("xUnit explicit attribute", XUnitExplicitAttributePattern()),
-            ("ignore or explicit attribute", IgnoreOrExplicitAttributePattern()),
-            ("quarantine or skip trait", QuarantineOrSkipTraitPattern()),
-            ("runtime test skip", RuntimeTestSkipPattern()),
-            ("skip exception", SkipExceptionPattern()),
+            ("ignored data row", IgnoredDataRowPattern()),
+            ("ignored dynamic data", IgnoredDynamicDataPattern()),
+            ("ignore attribute", IgnoreAttributePattern()),
+            ("quarantine or skip category", QuarantineOrSkipCategoryPattern()),
+            ("runtime inconclusive test", RuntimeInconclusiveTestPattern()),
+            ("inconclusive exception", InconclusiveExceptionPattern()),
             ("fixture capability return", FixtureCapabilityReturnPattern()),
             ("platform guard return", PlatformGuardReturnPattern()),
         ];
     }
 
-    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bSkip\s*=", RegexOptions.CultureInvariant)]
-    private static partial Regex XUnitSkipAttributePattern();
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?DataRow\s*\([^)\r\n]*\bIgnoreMessage\s*=", RegexOptions.CultureInvariant)]
+    private static partial Regex IgnoredDataRowPattern();
 
-    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bExplicit\s*=", RegexOptions.CultureInvariant)]
-    private static partial Regex XUnitExplicitAttributePattern();
+    [GeneratedRegex(@"\bIgnoreMessage\s*=", RegexOptions.CultureInvariant)]
+    private static partial Regex IgnoredDynamicDataPattern();
 
-    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Ignore|Explicit)\b", RegexOptions.CultureInvariant)]
-    private static partial Regex IgnoreOrExplicitAttributePattern();
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?Ignore(?:Attribute)?\b", RegexOptions.CultureInvariant)]
+    private static partial Regex IgnoreAttributePattern();
 
-    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?Trait\s*\([^)\r\n]*(?:Quarantine|Skipped|Ignored)[^)\r\n]*\)", RegexOptions.CultureInvariant)]
-    private static partial Regex QuarantineOrSkipTraitPattern();
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?TestCategory\s*\([^)\r\n]*(?:Quarantine|Skipped|Ignored)[^)\r\n]*\)", RegexOptions.CultureInvariant)]
+    private static partial Regex QuarantineOrSkipCategoryPattern();
 
-    [GeneratedRegex(@"\bAssert\s*\.\s*Skip\s*\(", RegexOptions.CultureInvariant)]
-    private static partial Regex RuntimeTestSkipPattern();
+    [GeneratedRegex(@"\bAssert\s*\.\s*Inconclusive\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeInconclusiveTestPattern();
 
-    [GeneratedRegex(@"\bthrow\s+new\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?SkipException\s*\(", RegexOptions.CultureInvariant)]
-    private static partial Regex SkipExceptionPattern();
+    [GeneratedRegex(@"\bthrow\s+new\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?AssertInconclusiveException\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex InconclusiveExceptionPattern();
 
     [GeneratedRegex(@"\[\[package\]\]\s+name = ""(?<name>[^""]+)""\s+version = ""(?<version>[^""]+)""", RegexOptions.CultureInvariant)]
     private static partial Regex CargoLockPackagePattern();

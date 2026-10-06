@@ -5,40 +5,41 @@ namespace Scout;
 /// <summary>
 /// Verifies operation-scoped adaptive regex prefilter effectiveness and authoritative fallback.
 /// </summary>
+[TestClass]
 public sealed class RegexPrefilterStateTests
 {
     /// <summary>
     /// Verifies the first forty scans run before a low cumulative average permanently disables the prefilter.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BecomesInertAfterFortyIneffectiveSkips()
     {
         var state = new RegexPrefilterState();
 
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.True(state.IsEffective);
+            Assert.IsTrue(state.IsEffective);
             state.RecordSkip(RegexPrefilterState.MinimumAverageSkippedBytes - 1);
         }
 
-        Assert.False(state.IsEffective);
-        Assert.True(state.IsInert);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
-        Assert.Equal(
+        Assert.IsFalse(state.IsEffective);
+        Assert.IsTrue(state.IsInert);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
+        Assert.AreEqual(
             RegexPrefilterState.MinimumSkipCount *
                 (RegexPrefilterState.MinimumAverageSkippedBytes - 1),
             state.SkippedByteCount);
 
         state.RecordSkip(1_000_000);
 
-        Assert.False(state.IsEffective);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
+        Assert.IsFalse(state.IsEffective);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
     }
 
     /// <summary>
     /// Verifies a cumulative average of sixteen skipped bytes keeps the prefilter active.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RemainsEffectiveAtMinimumAverageSkip()
     {
         var state = new RegexPrefilterState();
@@ -48,14 +49,14 @@ public sealed class RegexPrefilterStateTests
             state.RecordSkip(RegexPrefilterState.MinimumAverageSkippedBytes);
         }
 
-        Assert.True(state.IsEffective);
-        Assert.False(state.IsInert);
+        Assert.IsTrue(state.IsEffective);
+        Assert.IsFalse(state.IsInert);
     }
 
     /// <summary>
     /// Verifies dense exact-prefix candidates switch to monotonically ordered unfiltered starts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExactPrefixEnumeratorFallsBackToEveryRemainingStart()
     {
         const string pattern = "abcdefgh(?:foo|bar)";
@@ -74,22 +75,22 @@ public sealed class RegexPrefilterStateTests
         int previous = -1;
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.True(candidates.MoveNext(out int candidate));
-            Assert.True(candidate > previous);
-            Assert.Equal(index * "abcdefghx".Length, candidate);
+            Assert.IsTrue(candidates.MoveNext(out int candidate));
+            Assert.IsGreaterThan(previous, candidate);
+            Assert.AreEqual(index * "abcdefghx".Length, candidate);
             previous = candidate;
         }
 
-        Assert.True(candidates.MoveNext(out int unfilteredStart));
-        Assert.Equal(previous + 1, unfilteredStart);
-        Assert.True(state[0].IsInert);
-        Assert.NotEqual((byte)'a', haystack[unfilteredStart]);
+        Assert.IsTrue(candidates.MoveNext(out int unfilteredStart));
+        Assert.AreEqual(previous + 1, unfilteredStart);
+        Assert.IsTrue(state[0].IsInert);
+        Assert.AreNotEqual((byte)'a', haystack[unfilteredStart]);
     }
 
     /// <summary>
     /// Verifies an ineffective prefilter falls back to the authoritative Pike VM without losing a later match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IneffectivePrefilterPreservesAuthoritativeMatch()
     {
         const string pattern = "abcdefgh(?:foo|bar)";
@@ -108,14 +109,14 @@ public sealed class RegexPrefilterStateTests
 
         RegexMatch? match = new PikeVm(nfa).Find(haystack, ref candidates);
 
-        Assert.Equal(new RegexMatch(falseCandidates.Length, "abcdefghfoo".Length), match);
-        Assert.True(state[0].IsInert);
+        Assert.AreEqual(new RegexMatch(falseCandidates.Length, "abcdefghfoo".Length), match);
+        Assert.IsTrue(state[0].IsInert);
     }
 
     /// <summary>
     /// Verifies a record runner retains adaptive state across dense false candidates and still finds a real match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RecordRunnerDisablesDensePrefilterAndPreservesLaterMatch()
     {
         RegexSearchPlan plan = CreateExactPrefixPlan();
@@ -123,22 +124,22 @@ public sealed class RegexPrefilterStateTests
 
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.Null(runner.Find("abcdefghfooX"u8, startAt: 0));
+            Assert.IsNull(runner.Find("abcdefghfooX"u8, startAt: 0));
         }
 
         RegexMatch? match = runner.Find("abcdefghfoo1"u8, startAt: 0);
 
-        Assert.True(
+        Assert.IsTrue(
             runner.IsPrefilterInert,
             $"Observed {runner.PrefilterSkipCount} prefilter scans without becoming inert.");
-        Assert.NotNull(match);
-        Assert.Equal(new RegexMatch(0, "abcdefghfoo1"u8.Length), match);
+        Assert.IsNotNull(match);
+        Assert.AreEqual(new RegexMatch(0, "abcdefghfoo1"u8.Length), match);
     }
 
     /// <summary>
     /// Verifies sparse candidates retain the prefilter when the cumulative skip average remains selective.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RecordRunnerKeepsSparsePrefilterEffective()
     {
         RegexSearchPlan plan = CreateExactPrefixPlan();
@@ -148,40 +149,40 @@ public sealed class RegexPrefilterStateTests
 
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.Null(runner.Find(sparseFalseCandidate, startAt: 0));
+            Assert.IsNull(runner.Find(sparseFalseCandidate, startAt: 0));
         }
 
-        Assert.False(runner.IsPrefilterInert);
-        Assert.True(runner.PrefilterSkipCount >= RegexPrefilterState.MinimumSkipCount);
+        Assert.IsFalse(runner.IsPrefilterInert);
+        Assert.IsGreaterThanOrEqualTo(RegexPrefilterState.MinimumSkipCount, runner.PrefilterSkipCount);
     }
 
     /// <summary>
     /// Verifies a fresh runner starts with independent prefilter-effectiveness state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FreshRunnerDoesNotShareInertPrefilterState()
     {
         RegexSearchPlan plan = CreateExactPrefixPlan();
         using RegexFindRunner first = plan.Matcher.RentRecordFindRunner();
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.Null(first.Find("abcdefghfooX"u8, startAt: 0));
+            Assert.IsNull(first.Find("abcdefghfooX"u8, startAt: 0));
         }
 
         using RegexFindRunner second = plan.Matcher.RentRecordFindRunner();
 
-        Assert.True(
+        Assert.IsTrue(
             first.IsPrefilterInert,
             $"Observed {first.PrefilterSkipCount} prefilter scans without becoming inert.");
-        Assert.False(second.IsPrefilterInert);
-        Assert.Equal(0, second.PrefilterSkipCount);
-        Assert.False(first.SharesPooledStateWith(second));
+        Assert.IsFalse(second.IsPrefilterInert);
+        Assert.AreEqual(0, second.PrefilterSkipCount);
+        Assert.IsFalse(first.SharesPooledStateWith(second));
     }
 
     /// <summary>
     /// Verifies dense required-literal scans disable their prefilter and continue with every start.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralEnumeratorFallsBackForDenseHits()
     {
         RegexPrefilter prefilter = CompileRequiredLiteralPrefilter();
@@ -202,24 +203,24 @@ public sealed class RegexPrefilterStateTests
         int previous = -1;
         while (!state[0].IsInert && candidates.MoveNext(out int candidate))
         {
-            Assert.True(candidate > previous);
+            Assert.IsGreaterThan(previous, candidate);
             previous = candidate;
         }
 
         if (!state[0].IsInert)
         {
-            Assert.False(state[0].IsEffective);
+            Assert.IsFalse(state[0].IsEffective);
         }
 
-        Assert.True(state[0].IsInert);
-        Assert.True(candidates.MoveNext(out int unfilteredStart));
-        Assert.Equal(previous + 1, unfilteredStart);
+        Assert.IsTrue(state[0].IsInert);
+        Assert.IsTrue(candidates.MoveNext(out int unfilteredStart));
+        Assert.AreEqual(previous + 1, unfilteredStart);
     }
 
     /// <summary>
     /// Verifies sparse required-literal scans retain their prefilter at the minimum sample count.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralEnumeratorRemainsEffectiveForSparseHits()
     {
         RegexPrefilter prefilter = CompileRequiredLiteralPrefilter();
@@ -240,19 +241,19 @@ public sealed class RegexPrefilterStateTests
 
         while (candidates.MoveNext(out int candidate))
         {
-            Assert.InRange(candidate, 0, haystack.Length);
+            Assert.IsInRange(0, haystack.Length, candidate);
         }
 
-        Assert.True(state[0].IsEffective);
-        Assert.False(state[0].IsInert);
-        Assert.True(state[0].SkipCount >= RegexPrefilterState.MinimumSkipCount);
+        Assert.IsTrue(state[0].IsEffective);
+        Assert.IsFalse(state[0].IsInert);
+        Assert.IsGreaterThanOrEqualTo(RegexPrefilterState.MinimumSkipCount, state[0].SkipCount);
     }
 
     /// <summary>
     /// Verifies required-literal fallback preserves NUL detection when the unseen NUL follows the
     /// scan that renders the prefilter inert.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralFallbackPreservesNulDetection()
     {
         RegexPrefilter prefilter = CompileRequiredLiteralPrefilter();
@@ -275,17 +276,17 @@ public sealed class RegexPrefilterStateTests
 
         while (candidates.MoveNext(out int candidate))
         {
-            Assert.InRange(candidate, 0, haystack.Length);
+            Assert.IsInRange(0, haystack.Length, candidate);
         }
 
-        Assert.True(state[0].IsInert);
-        Assert.True(nulDetection[0]);
+        Assert.IsTrue(state[0].IsInert);
+        Assert.IsTrue(nulDetection[0]);
     }
 
     /// <summary>
     /// Verifies concurrently executed operations retain independent effectiveness state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ConcurrentOperationsRetainIndependentState()
     {
         RegexPrefilterState[] states = Enumerable.Range(0, Environment.ProcessorCount + 1)
@@ -301,14 +302,13 @@ public sealed class RegexPrefilterStateTests
                 states[stateIndex].RecordSkip(0);
             }
 
-            Assert.False(states[stateIndex].IsEffective);
+            Assert.IsFalse(states[stateIndex].IsEffective);
         });
-
-        Assert.All(states, static state =>
-        {
-            Assert.True(state.IsInert);
-            Assert.Equal(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
-        });
+        TestAssert.All(states, static state =>
+                {
+                    Assert.IsTrue(state.IsInert);
+                    Assert.AreEqual(RegexPrefilterState.MinimumSkipCount, state.SkipCount);
+                });
     }
 
     private static RegexPrefilter CompilePrefilter(string pattern, out RegexNfa nfa)
@@ -320,8 +320,8 @@ public sealed class RegexPrefilterStateTests
             multiLine: false,
             dotMatchesNewline: false);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        Assert.NotNull(prefilter);
-        Assert.False(prefilter.UsesRequiredLiteralWindow);
+        Assert.IsNotNull(prefilter);
+        Assert.IsFalse(prefilter.UsesRequiredLiteralWindow);
         nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
             tree.Root,
             options,
@@ -345,8 +345,8 @@ public sealed class RegexPrefilterStateTests
             multiLine: false,
             dotMatchesNewline: false);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        Assert.NotNull(prefilter);
-        Assert.True(prefilter.UsesRequiredLiteralWindow);
+        Assert.IsNotNull(prefilter);
+        Assert.IsTrue(prefilter.UsesRequiredLiteralWindow);
         return prefilter;
     }
 }

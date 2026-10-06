@@ -221,13 +221,13 @@ jobs:
           SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
-        run: dotnet test Scout.slnx --no-restore
+        run: dotnet test --solution Scout.slnx --no-restore
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
       - name: Run complete native CLI differential suite
         env:
           SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout
-        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+        run: dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
       - name: Verify Unix shell completions
         shell: bash
         run: |
@@ -275,13 +275,13 @@ jobs:
           SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
-        run: dotnet test Scout.slnx --no-restore
+        run: dotnet test --solution Scout.slnx --no-restore
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
       - name: Run complete native CLI differential suite
         env:
           SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout
-        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+        run: dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
       - name: Verify Unix shell completions
         shell: bash
         run: |
@@ -339,7 +339,7 @@ jobs:
           SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
-        run: dotnet test Scout.slnx --no-restore
+        run: dotnet test --solution Scout.slnx --no-restore
 
   performance-gate:
     name: hyperfine performance gate
@@ -542,4 +542,4 @@ jobs:
       - name: Run complete Windows native CLI differential suite
         env:
           SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout.exe
-        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj
+        run: dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj

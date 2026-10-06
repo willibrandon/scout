@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies recursive standard-search target planning.
 /// </summary>
+[TestClass]
 public sealed class StandardSearchTargetOperationsTests
 {
     /// <summary>
     /// Verifies pooled raw reads discover an unknown file length only after the file is opened.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PooledRawFileReadDiscoversUnknownLength()
     {
         byte[] expected = "unknown file length"u8.ToArray();
@@ -21,17 +22,17 @@ public sealed class StandardSearchTargetOperationsTests
             File.WriteAllBytes(path, expected);
             var lowArgs = new CliLowArgs();
 
-            Assert.True(StandardSearchTargetOperations.CanUsePooledRawFileRead(
+            Assert.IsTrue(StandardSearchTargetOperations.CanUsePooledRawFileRead(
                 knownLength: null,
                 lowArgs,
                 autoMmapEligible: false));
-            Assert.True(StandardSearchTargetOperations.TryReadPooledRawFile(
+            Assert.IsTrue(StandardSearchTargetOperations.TryReadPooledRawFile(
                 path,
                 knownLength: null,
                 CliEncodingMode.None,
                 out rented,
                 out int byteLength));
-            Assert.Equal(expected, rented.AsSpan(0, byteLength));
+            Assert.AreSequenceEqual(expected.AsSpan(), rented.AsSpan(0, byteLength));
         }
         finally
         {

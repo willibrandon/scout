@@ -193,10 +193,17 @@ jobs:
         run: dotnet build Scout.slnx --no-restore
       - name: Portable tests
         run: |
-          dotnet test tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore
-          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
-          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
-          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+          dotnet test --project tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore --report-trx --results-directory artifacts/test-results/library --coverage --coverage-output-format cobertura
+          dotnet test --project tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test --project tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+      - name: Upload test results and coverage
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: portable-test-results-linux-x64
+          path: artifacts/test-results/library/
+          if-no-files-found: error
       - name: Fuzz smoke
         shell: bash
         run: |
@@ -240,10 +247,10 @@ jobs:
         run: dotnet build Scout.slnx --no-restore
       - name: Portable tests
         run: |
-          dotnet test tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore
-          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
-          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
-          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+          dotnet test --project tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore
+          dotnet test --project tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test --project tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Fuzz smoke
         shell: bash
         run: |
@@ -314,10 +321,10 @@ jobs:
         run: dotnet build Scout.slnx --no-restore
       - name: Portable tests
         run: |
-          dotnet test tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore
-          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
-          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
-          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+          dotnet test --project tests/Scout.Library.Tests/Scout.Library.Tests.csproj --no-restore
+          dotnet test --project tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test --project tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Fuzz smoke
         shell: pwsh
         run: |
@@ -493,7 +500,7 @@ jobs:
           if errorlevel 1 exit /b 1
           python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
       - name: Build and run the Windows differential test host
-        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+        run: dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Check Native AOT size
         uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
         with:

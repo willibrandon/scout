@@ -485,6 +485,7 @@ expect_equal ".NET host runtime" "$EXPECTED_DOTNET_HOST_RUNTIME" "$ACTUAL_DOTNET
 
 mark_root_safe_for_git
 "$ROOT/eng/check-msbuild-warning-gates.sh" "$ROOT/artifacts/preflight/msbuild-warning-gates"
+dotnet build "$ROOT/Scout.slnx" --no-restore
 dotnet format "$ROOT/Scout.slnx" --no-restore --verify-no-changes
 if command -v python3 >/dev/null 2>&1; then
     BENCH_PYTHON="python3"

@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies normalization used by differential comparisons against pinned ripgrep.
 /// </summary>
+[TestClass]
 public sealed class DifferentialOutputNormalizerTests
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -12,7 +13,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies nondeterministic multi-file text output is sorted by file while preserving per-file order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsByFileAndPreservesPerFileOrder()
     {
         string input =
@@ -22,7 +23,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "a.txt:1:first\n" +
             "b.txt:2:second\n" +
             "b.txt:1:first\n",
@@ -32,7 +33,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies normalized stdout preserves arbitrary non-UTF-8 bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesPreservesNonUtf8Bytes()
     {
         byte[] input =
@@ -48,13 +49,13 @@ public sealed class DifferentialOutputNormalizerTests
             (byte)'b', (byte)'.', (byte)'t', (byte)'x', (byte)'t', (byte)':', 0xFF, (byte)'\n',
         ];
 
-        Assert.Equal(expected, normalized);
+        Assert.AreSequenceEqual(expected, normalized);
     }
 
     /// <summary>
     /// Verifies heading output is sorted by file block instead of individual payload lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsHeadingBlocks()
     {
         string input =
@@ -67,7 +68,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "a.txt\n" +
             "1:first\n" +
             "\n" +
@@ -80,7 +81,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies context groups keep separator placement after path-order normalization.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsContextSeparatedChunks()
     {
         string input =
@@ -94,7 +95,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "/tmp/scout-diff-fixture/a.txt-before\n" +
             "/tmp/scout-diff-fixture/a.txt:needle\n" +
             "/tmp/scout-diff-fixture/a.txt-after\n" +
@@ -108,7 +109,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stats footers stay after the sorted path output and keep non-timing line order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesAndMaskElapsedKeepsStatsFooterAfterSortedContextChunks()
     {
         string input =
@@ -132,7 +133,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "/tmp/scout-diff-fixture/a.txt-before\n" +
             "/tmp/scout-diff-fixture/a.txt:needle\n" +
             "/tmp/scout-diff-fixture/a.txt-after\n" +
@@ -156,7 +157,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stats-only output is not alphabetically sorted when path-order normalization is enabled.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesAndMaskElapsedKeepsStatsOnlyOutputOrder()
     {
         string input =
@@ -171,7 +172,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "0 matches\n" +
             "0 matched lines\n" +
             "0 files contained matches\n" +
@@ -186,7 +187,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies JSON output is sorted by path while preserving each file's begin/match/end order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesAndMaskElapsedSortsJsonByPathAndPreservesPerFileOrder()
     {
         string input =
@@ -200,7 +201,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "{\"type\":\"begin\",\"data\":{\"path\":{\"text\":\"a.txt\"}}}\n" +
             "{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"a.txt\"},\"lines\":{\"text\":\"needle\\n\"}}}\n" +
             "{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"a.txt\"},\"stats\":{\"elapsed\":{\"human\":\"0.000000s\",\"nanos\":0,\"secs\":0}}}}\n" +
@@ -214,7 +215,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies heading output is sorted while stats remain a footer.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesAndMaskElapsedSortsHeadingBlocksBeforeStatsFooter()
     {
         string input =
@@ -235,7 +236,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "a.txt\n" +
             "needle\n" +
             "\n" +
@@ -256,7 +257,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies JSON bytes paths are also used as sort keys.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsJsonBytesPaths()
     {
         string input =
@@ -265,7 +266,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "{\"type\":\"begin\",\"data\":{\"path\":{\"bytes\":\"YQ==\"}}}\n" +
             "{\"type\":\"begin\",\"data\":{\"path\":{\"bytes\":\"Yg==\"}}}\n",
             Utf8.GetString(normalized));
@@ -274,20 +275,20 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies NUL-terminated file lists are sorted as records instead of newline-delimited text.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsNullTerminatedFileLists()
     {
         string input = "b.txt\0a.txt\0";
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal("a.txt\0b.txt\0", Utf8.GetString(normalized));
+        Assert.AreEqual("a.txt\0b.txt\0", Utf8.GetString(normalized));
     }
 
     /// <summary>
     /// Verifies NUL path terminators still sort payload lines by file path.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsNullTerminatedPathPayloadLines()
     {
         string input =
@@ -296,7 +297,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "a.txt\0" + "1\n" +
             "b.txt\0" + "2\n",
             Utf8.GetString(normalized));
@@ -305,7 +306,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stats timing lines are masked.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaskElapsedMasksStatsWallClockLines()
     {
         string input =
@@ -315,7 +316,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.MaskElapsed);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "2 matches\n" +
             "0.000000 seconds spent searching\n" +
             "0.000000 seconds total\n",
@@ -325,7 +326,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies path-order-insensitive modes sort stderr diagnostics too.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesSortsStderrDiagnostics()
     {
         string input =
@@ -334,7 +335,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         string normalized = DifferentialOutputNormalizer.NormalizeStderr(input, DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "a.txt: Permission denied\n" +
             "b.txt: Permission denied\n",
             normalized);
@@ -343,7 +344,7 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stderr identity normalization is line-shaped and leaves ordinary text intact.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NormalizeStderrMapsProgramPrefixAndConfigIdentity()
     {
         string input =
@@ -352,7 +353,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         string normalized = DifferentialOutputNormalizer.NormalizeStderr(input, DifferentialComparisonMode.Exact);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "scout: failed to read the file specified in SCOUT_CONFIG_PATH: missing\n" +
             "a file containing rg should not be rewritten\n",
             normalized);
@@ -361,13 +362,13 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies debug structural fields are normalized without changing the debug message.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NormalizeStderrMapsDebugStructure()
     {
         string pinned = "rg: DEBUG|rg::flags::parse|crates/core/flags/parse.rs:97: state message\n";
         string scout = "scout: DEBUG|Scout.App.Flags|ConfigArgumentExpander.cs:43: state message\n";
 
-        Assert.Equal(
+        Assert.AreEqual(
             DifferentialOutputNormalizer.NormalizeStderr(pinned, DifferentialComparisonMode.Exact),
             DifferentialOutputNormalizer.NormalizeStderr(scout, DifferentialComparisonMode.Exact));
     }
@@ -375,13 +376,13 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies debug config identity normalization maps ripgrep's single env var to Scout's primary/fallback pair.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NormalizeStderrMapsDebugConfigEnvironmentIdentity()
     {
         string pinned = "rg: DEBUG|rg::flags::config|crates/core/flags/config.rs:19: RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file\n";
         string scout = "scout: DEBUG|Scout.App.Flags|src/Scout.App/ConfigArgumentExpander.cs:43: SCOUT_CONFIG_PATH and RIPGREP_CONFIG_PATH environment variables are not set, therefore not reading any config file\n";
 
-        Assert.Equal(
+        Assert.AreEqual(
             DifferentialOutputNormalizer.NormalizeStderr(pinned, DifferentialComparisonMode.Exact),
             DifferentialOutputNormalizer.NormalizeStderr(scout, DifferentialComparisonMode.Exact));
     }
@@ -389,20 +390,20 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stdout normalization never rewrites identity-looking search bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NormalizeStdoutDoesNotMapIdentityText()
     {
         byte[] input = Utf8.GetBytes("text mentioning rg and RIPGREP_CONFIG_PATH\n");
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(input, DifferentialComparisonMode.Exact);
 
-        Assert.Equal(input, normalized);
+        Assert.AreSequenceEqual(input, normalized);
     }
 
     /// <summary>
     /// Verifies Windows drive-letter colons are not mistaken for match separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SortLinesGroupsWindowsDrivePathOutputByFullPath()
     {
         string input =
@@ -413,7 +414,7 @@ public sealed class DifferentialOutputNormalizerTests
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "C:\\root\\a.txt:1:needle\n" +
             "C:\\root\\a.txt:2:needle\n" +
             "C:\\root\\b.txt:1:needle\n" +
@@ -424,20 +425,20 @@ public sealed class DifferentialOutputNormalizerTests
     /// <summary>
     /// Verifies stdout-only upstream assertions can require non-empty stdout without pinning terminal-specific bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonEmptyStdoutMasksNonEmptyOutput()
     {
-        Assert.Equal(Utf8.GetBytes("<non-empty stdout>"), DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes("colored"), DifferentialComparisonMode.NonEmptyStdout));
-        Assert.Equal([], DifferentialOutputNormalizer.NormalizeStdout([], DifferentialComparisonMode.NonEmptyStdout));
+        Assert.AreSequenceEqual(Utf8.GetBytes("<non-empty stdout>"), DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes("colored"), DifferentialComparisonMode.NonEmptyStdout));
+        Assert.AreSequenceEqual<byte>([], DifferentialOutputNormalizer.NormalizeStdout([], DifferentialComparisonMode.NonEmptyStdout));
     }
 
     /// <summary>
     /// Verifies stderr-only upstream assertions can require non-empty stderr without pinning tool-specific text.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonEmptyStderrMasksNonEmptyErrorText()
     {
-        Assert.Equal("<non-empty stderr>", DifferentialOutputNormalizer.NormalizeStderr("gzip failed", DifferentialComparisonMode.NonEmptyStderr));
-        Assert.Equal(string.Empty, DifferentialOutputNormalizer.NormalizeStderr(string.Empty, DifferentialComparisonMode.NonEmptyStderr));
+        Assert.AreEqual("<non-empty stderr>", DifferentialOutputNormalizer.NormalizeStderr("gzip failed", DifferentialComparisonMode.NonEmptyStderr));
+        Assert.AreEqual(string.Empty, DifferentialOutputNormalizer.NormalizeStderr(string.Empty, DifferentialComparisonMode.NonEmptyStderr));
     }
 }

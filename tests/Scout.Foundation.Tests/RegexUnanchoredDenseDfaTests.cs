@@ -3,6 +3,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the shared table-driven unanchored DFA.
 /// </summary>
+[TestClass]
 public sealed class RegexUnanchoredDenseDfaTests
 {
     private const ulong GenerousDfaSizeLimit = 16UL * 1024UL * 1024UL;
@@ -13,24 +14,24 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// </summary>
     /// <param name="pattern">The pattern to compile.</param>
     /// <param name="haystackText">The bytes to search.</param>
-    [Theory]
-    [InlineData("ab|a", "zzab ax")]
-    [InlineData("a|ab", "zzab ax")]
-    [InlineData("a+", "zz aaab a")]
-    [InlineData("a+?", "zz aaab a")]
-    [InlineData("(?:ab|a)+", "zzaba!a")]
-    [InlineData("(?:ab|a)+?", "zzaba!a")]
-    [InlineData("[A-Za-z_][A-Za-z_0-9]{1,3}", "!!alpha id_ x9")]
-    [InlineData("[^,\\r\\n]+(?:,[^,\\r\\n]+){2}", "!aa,bb,cc!dd")]
-    [InlineData("(?:cat|dog){2,3}", "--catdogdog--")]
-    [InlineData(".*suffix", "xxprefix suffix yy")]
-    [InlineData("(?s:.+)", "all bytes stay live\nthrough the end")]
-    [InlineData(@"\b\w{5}\s+\w{5}\s+\w{5}\b", "!!alpha bravo charl!! delta echoo foxtt")]
-    [InlineData(@"\Babc\B", "xabcx abc abc!")]
-    [InlineData(@"\<alpha\>", "xalpha alpha alpha!")]
-    [InlineData(@"(?m:^alpha$)", "no\nalpha\r\nalpha\nend")]
-    [InlineData(@"\Aalpha", "alpha alpha")]
-    [InlineData(@"alpha\z", "alpha alpha")]
+    [TestMethod]
+    [DataRow("ab|a", "zzab ax")]
+    [DataRow("a|ab", "zzab ax")]
+    [DataRow("a+", "zz aaab a")]
+    [DataRow("a+?", "zz aaab a")]
+    [DataRow("(?:ab|a)+", "zzaba!a")]
+    [DataRow("(?:ab|a)+?", "zzaba!a")]
+    [DataRow("[A-Za-z_][A-Za-z_0-9]{1,3}", "!!alpha id_ x9")]
+    [DataRow("[^,\\r\\n]+(?:,[^,\\r\\n]+){2}", "!aa,bb,cc!dd")]
+    [DataRow("(?:cat|dog){2,3}", "--catdogdog--")]
+    [DataRow(".*suffix", "xxprefix suffix yy")]
+    [DataRow("(?s:.+)", "all bytes stay live\nthrough the end")]
+    [DataRow(@"\b\w{5}\s+\w{5}\s+\w{5}\b", "!!alpha bravo charl!! delta echoo foxtt")]
+    [DataRow(@"\Babc\B", "xabcx abc abc!")]
+    [DataRow(@"\<alpha\>", "xalpha alpha alpha!")]
+    [DataRow(@"(?m:^alpha$)", "no\nalpha\r\nalpha\nend")]
+    [DataRow(@"\Aalpha", "alpha alpha")]
+    [DataRow(@"alpha\z", "alpha alpha")]
     public void TryFindEndMatchesPikeVmForSupportedPatterns(
         string pattern,
         string haystackText)
@@ -44,8 +45,8 @@ public sealed class RegexUnanchoredDenseDfaTests
             RegexMatch? expected = fallback.Find(haystack, startAt);
             bool found = dfa.TryFindEnd(haystack, startAt, out int end);
 
-            Assert.Equal(expected.HasValue, found);
-            Assert.Equal(expected?.End ?? -1, end);
+            Assert.AreEqual(expected.HasValue, found);
+            Assert.AreEqual(expected?.End ?? -1, end);
         }
     }
 
@@ -54,9 +55,9 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// CRLF, ordinary bytes, and end of input.
     /// </summary>
     /// <param name="crlf">Whether CR and LF use CRLF-aware anchor semantics.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public void EndAnchorMatchesPikeVmAcrossLineContexts(bool crlf)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse("foo$"u8);
@@ -71,7 +72,7 @@ public sealed class RegexUnanchoredDenseDfaTests
             unicodeClasses: false,
             specializationMode: RegexSpecializationMode.General);
         RegexNfa unanchored = RegexNfaCompiler.CompileUnanchored(tree.Root, options);
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             unanchored,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
@@ -88,11 +89,11 @@ public sealed class RegexUnanchoredDenseDfaTests
             RegexMatch? expected = fallback.Find(haystack, startAt);
             bool found = dfa!.TryFindEnd(haystack, startAt, out int end);
 
-            Assert.Equal(expected.HasValue, found);
-            Assert.Equal(expected?.End ?? -1, end);
+            Assert.AreEqual(expected.HasValue, found);
+            Assert.AreEqual(expected?.End ?? -1, end);
         }
 
-        Assert.Equal(
+        Assert.AreEqual(
             fallback.CountMatches(haystack, startAt: 0),
             dfa!.CountMatches(haystack, startAt: 0));
     }
@@ -101,21 +102,21 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// Verifies match-end search reports a definitive no-match result and clamps offsets to the
     /// available haystack bounds.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryFindEndHandlesNoMatchAndOutOfRangeOffsets()
     {
         RegexUnanchoredDenseDfa dfa = CompileDense("(?:cat|dog){2}");
         byte[] haystack = "one bird and one fish"u8.ToArray();
         byte[] matchingHaystack = "catdog then dogcat"u8.ToArray();
 
-        Assert.False(dfa.TryFindEnd(haystack, startAt: 0, out int noMatchEnd));
-        Assert.Equal(-1, noMatchEnd);
-        Assert.False(dfa.TryFindEnd(haystack, startAt: haystack.Length + 100, out int afterEnd));
-        Assert.Equal(-1, afterEnd);
-        Assert.Equal(
+        Assert.IsFalse(dfa.TryFindEnd(haystack, startAt: 0, out int noMatchEnd));
+        Assert.AreEqual(-1, noMatchEnd);
+        Assert.IsFalse(dfa.TryFindEnd(haystack, startAt: haystack.Length + 100, out int afterEnd));
+        Assert.AreEqual(-1, afterEnd);
+        Assert.AreEqual(
             dfa.TryFindEnd(matchingHaystack, startAt: 0, out int zeroEnd),
             dfa.TryFindEnd(matchingHaystack, startAt: -100, out int negativeEnd));
-        Assert.Equal(zeroEnd, negativeEnd);
+        Assert.AreEqual(zeroEnd, negativeEnd);
     }
 
     /// <summary>
@@ -124,14 +125,14 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// </summary>
     /// <param name="pattern">The pattern to compile.</param>
     /// <param name="haystackText">The bytes to search.</param>
-    [Theory]
-    [InlineData("a+", "aaaa aa aaaa")]
-    [InlineData("a+?", "aaaa aa aaaa")]
-    [InlineData("ab|a", "aba ab aa")]
-    [InlineData("a|ab", "aba ab aa")]
-    [InlineData("[0-9]{2,3}", "1 22 333 4444")]
-    [InlineData("(?:cat|dog){2}", "catdog dogcat bird catcat")]
-    [InlineData("needle", "a haystack without the token")]
+    [TestMethod]
+    [DataRow("a+", "aaaa aa aaaa")]
+    [DataRow("a+?", "aaaa aa aaaa")]
+    [DataRow("ab|a", "aba ab aa")]
+    [DataRow("a|ab", "aba ab aa")]
+    [DataRow("[0-9]{2,3}", "1 22 333 4444")]
+    [DataRow("(?:cat|dog){2}", "catdog dogcat bird catcat")]
+    [DataRow("needle", "a haystack without the token")]
     public void CountMatchesMatchesPikeVm(string pattern, string haystackText)
     {
         RegexUnanchoredDenseDfa dfa = CompileDense(pattern);
@@ -140,7 +141,7 @@ public sealed class RegexUnanchoredDenseDfaTests
 
         for (int startAt = 0; startAt <= haystack.Length; startAt++)
         {
-            Assert.Equal(
+            Assert.AreEqual(
                 fallback.CountMatches(haystack, startAt),
                 dfa.CountMatches(haystack, startAt));
         }
@@ -150,57 +151,57 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// Verifies bounded determinization declines invalid limits, an insufficient state bound,
     /// insufficient storage, and empty matches without publishing a partial DFA.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryCompileDeclinesUnsupportedOrOverBudgetAutomata()
     {
         RegexNfa nfa = CompileUnanchored("(?:ab|ac|ba|bc){2,4}");
 
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             nfa,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? compiled));
-        Assert.NotNull(compiled);
-        Assert.False(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsNotNull(compiled);
+        Assert.IsFalse(RegexUnanchoredDenseDfa.TryCompile(
             nfa,
             stateLimit: 0,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? invalidStateLimit));
-        Assert.Null(invalidStateLimit);
-        Assert.False(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsNull(invalidStateLimit);
+        Assert.IsFalse(RegexUnanchoredDenseDfa.TryCompile(
             nfa,
             stateLimit: 1,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? stateLimited));
-        Assert.Null(stateLimited);
-        Assert.False(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsNull(stateLimited);
+        Assert.IsFalse(RegexUnanchoredDenseDfa.TryCompile(
             nfa,
             stateLimit: 1_024,
             dfaSizeLimit: 1,
             out RegexUnanchoredDenseDfa? storageLimited));
-        Assert.Null(storageLimited);
+        Assert.IsNull(storageLimited);
 
         RegexNfa emptyMatchNfa = CompileUnanchored("a*");
-        Assert.False(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsFalse(RegexUnanchoredDenseDfa.TryCompile(
             emptyMatchNfa,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? emptyMatchDfa));
-        Assert.Null(emptyMatchDfa);
+        Assert.IsNull(emptyMatchDfa);
 
         RegexNfa predicateNfa = CompileUnanchored(@"\bGeneratedRecord\b");
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             predicateNfa,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? predicateDfa));
-        Assert.NotNull(predicateDfa);
+        Assert.IsNotNull(predicateDfa);
     }
 
     /// <summary>
     /// Verifies one immutable dense DFA can service concurrent find and count operations.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedDfaSupportsConcurrentSearches()
     {
         RegexUnanchoredDenseDfa dfa = CompileDense("(?:ab|a)+?z");
@@ -222,16 +223,16 @@ public sealed class RegexUnanchoredDenseDfaTests
         {
             int startAt = index % 12;
             RegexMatch? expected = fallback.Find(haystack, startAt);
-            Assert.Equal(expected.HasValue, found[index]);
-            Assert.Equal(expected?.End ?? -1, ends[index]);
-            Assert.Equal(fallback.CountMatches(haystack, startAt), counts[index]);
+            Assert.AreEqual(expected.HasValue, found[index]);
+            Assert.AreEqual(expected?.End ?? -1, ends[index]);
+            Assert.AreEqual(fallback.CountMatches(haystack, startAt), counts[index]);
         }
     }
 
     /// <summary>
     /// Verifies byte equivalence keeps sparse transitions with distinct targets in separate classes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteClassesDistinguishSparseTransitionTargets()
     {
         RegexNfa unanchored = new(
@@ -297,7 +298,7 @@ public sealed class RegexUnanchoredDenseDfaTests
             ],
             startState: 0,
             utf8: false);
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             unanchored,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
@@ -317,8 +318,8 @@ public sealed class RegexUnanchoredDenseDfaTests
             bool expected = fallback.TryMatchAt(haystack, start: 0, out int expectedLength);
             bool found = dfa!.TryFindEnd(haystack, startAt: 0, out int end);
 
-            Assert.Equal(expected, found);
-            Assert.Equal(expected ? expectedLength : -1, end);
+            Assert.AreEqual(expected, found);
+            Assert.AreEqual(expected ? expectedLength : -1, end);
         }
     }
 
@@ -326,79 +327,79 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// Verifies a general Unicode plan uses one shared dense ASCII projection without renting a
     /// mutable lazy-DFA runner.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MetaEngineSelectsSharedDenseAsciiProjectionGenerically()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMetaEngine engine = GetMetaEngine(plan.Matcher);
-        Assert.NotNull(GetDenseProjection(engine));
-        Assert.Equal(0, GetAsciiProjectionActivation(engine));
-        Assert.False(HasCachedAsciiProjectionRunner(engine));
+        Assert.IsNotNull(GetDenseProjection(engine));
+        Assert.AreEqual(0, GetAsciiProjectionActivation(engine));
+        Assert.IsFalse(HasCachedAsciiProjectionRunner(engine));
 
         RegexMatchEndRunner runner = plan.Matcher.RentAsciiProjectedMatchEndRunner(
             activationLength: 8_192);
         try
         {
-            Assert.True(runner.IsAvailable);
-            Assert.True(runner.UsesAsciiProjection);
-            Assert.True(runner.TryFindEnd(
+            Assert.IsTrue(runner.IsAvailable);
+            Assert.IsTrue(runner.UsesAsciiProjection);
+            Assert.IsTrue(runner.TryFindEnd(
                 "!!alpha bravo charl!!"u8,
                 startAt: 0,
                 out int end,
                 out bool completed));
-            Assert.True(completed);
-            Assert.Equal(19, end);
-            Assert.True(runner.TryCountMatches(
+            Assert.IsTrue(completed);
+            Assert.AreEqual(19, end);
+            Assert.IsTrue(runner.TryCountMatches(
                 "alpha bravo charl--delta echoo foxtt"u8,
                 startAt: 0,
                 out long count));
-            Assert.Equal(2, count);
+            Assert.AreEqual(2, count);
         }
         finally
         {
             runner.Dispose();
         }
 
-        Assert.Equal(1, GetAsciiProjectionActivation(engine));
-        Assert.False(HasCachedAsciiProjectionRunner(engine));
+        Assert.AreEqual(1, GetAsciiProjectionActivation(engine));
+        Assert.IsFalse(HasCachedAsciiProjectionRunner(engine));
     }
 
     /// <summary>
     /// Verifies ASCII word look-around uses the shared delayed-match projection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MetaEngineSelectsSharedDenseAsciiProjectionForWordLookaround()
     {
         byte[][] patterns = [@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMetaEngine engine = GetMetaEngine(plan.Matcher);
-        Assert.NotNull(GetDenseProjection(engine));
+        Assert.IsNotNull(GetDenseProjection(engine));
 
         RegexMatchEndRunner runner = plan.Matcher.RentAsciiProjectedMatchEndRunner(
             activationLength: 8_192);
         try
         {
-            Assert.True(runner.IsAvailable);
-            Assert.True(runner.UsesAsciiProjection);
-            Assert.True(runner.TryFindEnd(
+            Assert.IsTrue(runner.IsAvailable);
+            Assert.IsTrue(runner.UsesAsciiProjection);
+            Assert.IsTrue(runner.TryFindEnd(
                 "!!alpha bravo charl!!"u8,
                 startAt: 0,
                 out int end,
                 out bool completed));
-            Assert.True(completed);
-            Assert.Equal(19, end);
-            Assert.True(runner.TryCountMatches(
+            Assert.IsTrue(completed);
+            Assert.AreEqual(19, end);
+            Assert.IsTrue(runner.TryCountMatches(
                 "alpha bravo charl--delta echoo foxtt"u8,
                 startAt: 0,
                 out long count));
-            Assert.Equal(2, count);
+            Assert.AreEqual(2, count);
         }
         finally
         {
@@ -410,7 +411,7 @@ public sealed class RegexUnanchoredDenseDfaTests
     /// Verifies large projected NFAs skip eager dense determinization while retaining the
     /// authoritative fallback.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MetaEngineSkipsEagerDenseProjectionForLargeNfa()
     {
         byte[] pattern = "[A-Za-z0-9_-]{50,3000}"u8.ToArray();
@@ -424,12 +425,12 @@ public sealed class RegexUnanchoredDenseDfaTests
             unicodeClasses: true,
             specializationMode: RegexSpecializationMode.General,
             excludeLineTerminators: true);
-        Assert.True(RegexAsciiFastPath.TryCompileNfa(
+        Assert.IsTrue(RegexAsciiFastPath.TryCompileNfa(
             pattern,
             tree.Root,
             options,
             out RegexNfa? projectedNfa));
-        Assert.True(projectedNfa!.States.Count > 64);
+        Assert.IsGreaterThan(64, projectedNfa!.States.Count);
 
         var automaton = RegexAutomaton.CompileParsed(
             tree,
@@ -437,15 +438,15 @@ public sealed class RegexUnanchoredDenseDfaTests
             dfaSizeLimit: 16 * 1024 * 1024,
             compilePrefilter: false);
 
-        Assert.Null(GetDenseProjection(GetMetaEngine(automaton)));
-        Assert.Null(automaton.Find("short"u8, startAt: 0));
+        Assert.IsNull(GetDenseProjection(GetMetaEngine(automaton)));
+        Assert.IsNull(automaton.Find("short"u8, startAt: 0));
     }
 
     /// <summary>
     /// Verifies a projected runner factory that permanently fails is neither advertised nor
     /// retried for later search segments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FailedAsciiProjectionFactoryIsNotAdvertisedOrRetried()
     {
         byte[] pattern = "[A-Za-z0-9_-]{50,3000}"u8.ToArray();
@@ -465,7 +466,7 @@ public sealed class RegexUnanchoredDenseDfaTests
             dfaSizeLimit: GenerousDfaSizeLimit,
             compilePrefilter: false);
         RegexMetaEngine engine = GetMetaEngine(automaton);
-        Assert.Null(GetDenseProjection(engine));
+        Assert.IsNull(GetDenseProjection(engine));
 
         int attempts = 0;
         Func<RegexUnanchoredLazyDfa?> failingFactory = () =>
@@ -480,29 +481,29 @@ public sealed class RegexUnanchoredDenseDfaTests
                     System.Reflection.BindingFlags.Instance)!
             .SetValue(engine, failingFactory);
 
-        Assert.True(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.IsTrue(automaton.HasAsciiProjectedMatchEndRunner);
         using (RegexMatchEndRunner first = automaton.RentAsciiProjectedMatchEndRunner(
                    activationLength: 8_192))
         {
-            Assert.False(first.IsAvailable);
+            Assert.IsFalse(first.IsAvailable);
         }
 
-        Assert.Equal(1, attempts);
-        Assert.False(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.AreEqual(1, attempts);
+        Assert.IsFalse(automaton.HasAsciiProjectedMatchEndRunner);
         using (RegexMatchEndRunner second = automaton.RentAsciiProjectedMatchEndRunner(
                    activationLength: 8_192))
         {
-            Assert.False(second.IsAvailable);
+            Assert.IsFalse(second.IsAvailable);
         }
 
-        Assert.Equal(1, attempts);
+        Assert.AreEqual(1, attempts);
     }
 
     /// <summary>
     /// Verifies a word-assertion NFA that exceeds eager dense limits retains the authoritative
     /// fallback instead of publishing a slower projected lazy runner.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordAssertionDenseStateExplosionRetainsAuthoritativeFallback()
     {
         byte[] pattern = @"\b\w*a[ab]{6}\b"u8.ToArray();
@@ -516,20 +517,20 @@ public sealed class RegexUnanchoredDenseDfaTests
             unicodeClasses: true,
             specializationMode: RegexSpecializationMode.General,
             excludeLineTerminators: true);
-        Assert.True(RegexAsciiFastPath.TryCompileNfa(
+        Assert.IsTrue(RegexAsciiFastPath.TryCompileNfa(
             pattern,
             tree.Root,
             options,
             out RegexNfa? projectedNfa));
-        Assert.True(projectedNfa!.States.Count <= 64);
+        Assert.IsLessThanOrEqualTo(64, projectedNfa!.States.Count);
         RegexNfa unanchored = RegexUnanchoredLazyDfa.CreateUnanchoredForwardNfa(projectedNfa);
-        Assert.False(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsFalse(RegexUnanchoredDenseDfa.TryCompile(
             unanchored,
             stateLimit: 64,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? rejectedDfa));
-        Assert.Null(rejectedDfa);
-        Assert.Equal(
+        Assert.IsNull(rejectedDfa);
+        Assert.AreEqual(
             RegexAutomaton.ShouldCompileCompactScalarNfa(
                 tree.Root,
                 options,
@@ -544,19 +545,19 @@ public sealed class RegexUnanchoredDenseDfaTests
             options,
             dfaSizeLimit: GenerousDfaSizeLimit,
             compilePrefilter: false);
-        Assert.Null(GetDenseProjection(GetMetaEngine(automaton)));
-        Assert.False(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.IsNull(GetDenseProjection(GetMetaEngine(automaton)));
+        Assert.IsFalse(automaton.HasAsciiProjectedMatchEndRunner);
         using RegexMatchEndRunner runner = automaton.RentAsciiProjectedMatchEndRunner(
             activationLength: 8_192);
-        Assert.False(runner.IsAvailable);
-        Assert.Equal(1, automaton.CountMatches("ébaaaaaaaé baaaaaaa"u8));
+        Assert.IsFalse(runner.IsAvailable);
+        Assert.AreEqual(1, automaton.CountMatches("ébaaaaaaaé baaaaaaa"u8));
     }
 
     /// <summary>
     /// Verifies the capture workload that exposed the regression retains its eager projected
     /// match-end DFA without publishing a projected lazy full-match runner.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordBoundaryCaptureKeepsDenseMatchEndsWithoutLazyFullMatchProjection()
     {
         byte[] pattern = @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray();
@@ -570,18 +571,18 @@ public sealed class RegexUnanchoredDenseDfaTests
             unicodeClasses: true,
             specializationMode: RegexSpecializationMode.General,
             excludeLineTerminators: true);
-        Assert.True(RegexAsciiFastPath.TryCompileNfa(
+        Assert.IsTrue(RegexAsciiFastPath.TryCompileNfa(
             pattern,
             tree.Root,
             options,
             out RegexNfa? projectedNfa));
         RegexNfa unanchored = RegexUnanchoredLazyDfa.CreateUnanchoredForwardNfa(projectedNfa!);
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             unanchored,
             stateLimit: 64,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? projectedDfa));
-        Assert.NotNull(projectedDfa);
+        Assert.IsNotNull(projectedDfa);
 
         var automaton = RegexAutomaton.CompileParsed(
             tree,
@@ -590,21 +591,21 @@ public sealed class RegexUnanchoredDenseDfaTests
             compilePrefilter: true);
 
         RegexMetaEngine engine = GetMetaEngine(automaton);
-        Assert.NotNull(GetDenseProjection(engine));
-        Assert.Null(GetLazyProjectionFactory(engine));
-        Assert.True(automaton.HasAsciiProjectedMatchEndRunner);
-        Assert.Equal(new RegexMatch(1, 13), automaton.Find("!struct Widget!"u8, startAt: 0));
+        Assert.IsNotNull(GetDenseProjection(engine));
+        Assert.IsNull(GetLazyProjectionFactory(engine));
+        Assert.IsTrue(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.AreEqual(new RegexMatch(1, 13), automaton.Find("!struct Widget!"u8, startAt: 0));
     }
 
     private static RegexUnanchoredDenseDfa CompileDense(string pattern)
     {
         RegexNfa nfa = CompileUnanchored(pattern);
-        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+        Assert.IsTrue(RegexUnanchoredDenseDfa.TryCompile(
             nfa,
             stateLimit: 1_024,
             GenerousDfaSizeLimit,
             out RegexUnanchoredDenseDfa? dfa));
-        return Assert.IsType<RegexUnanchoredDenseDfa>(dfa);
+        return Assert.IsExactInstanceOfType<RegexUnanchoredDenseDfa>(dfa);
     }
 
     private static RegexNfa CompileUnanchored(string pattern)

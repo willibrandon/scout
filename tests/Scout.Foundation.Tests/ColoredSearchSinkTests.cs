@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies colored search output behavior.
 /// </summary>
+[TestClass]
 public sealed class ColoredSearchSinkTests
 {
     /// <summary>
     /// Verifies an empty match after line content preserves that content exactly once.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyMatchPreservesLineContentOnce()
     {
         using MemoryStream output = new();
@@ -32,7 +33,7 @@ public sealed class ColoredSearchSinkTests
         sink.MatchedLine(1, 0, 1, 2, line, []);
         sink.Flush();
 
-        Assert.Equal(
+        Assert.AreEqual(
             "\u001b[0m\u001b[32m1\u001b[0m:a\n",
             System.Text.Encoding.UTF8.GetString(output.ToArray()));
     }
@@ -40,7 +41,7 @@ public sealed class ColoredSearchSinkTests
     /// <summary>
     /// Verifies match byte offsets are interpreted relative to their containing lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HighlightsMatchByteOffsetsAcrossLines()
     {
         using MemoryStream output = new();
@@ -66,7 +67,7 @@ public sealed class ColoredSearchSinkTests
         sink.MatchedLine(2, first.Length, first.Length + 68, 69, second, "class"u8);
         sink.Flush();
 
-        Assert.Equal(
+        Assert.AreEqual(
             "\u001b[0m\u001b[32m1\u001b[0m:public sealed \u001b[0m\u001b[1m\u001b[31mclass\u001b[0m Pcre2Regex\n" +
             "\u001b[0m\u001b[32m2\u001b[0m:    /// Initializes a new instance of the <see cref=\"Pcre2Regex\" /> \u001b[0m\u001b[1m\u001b[31mclass\u001b[0m.\n",
             System.Text.Encoding.UTF8.GetString(output.ToArray()));

@@ -6,12 +6,13 @@ namespace Scout;
 /// <summary>
 /// Verifies raw Unix directory enumeration.
 /// </summary>
+[TestClass]
 public sealed unsafe partial class RawUnixDirectoryTests
 {
     /// <summary>
     /// Verifies a terminal native read error retains entries read before the failure.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedEnumerationRetainsEntriesBeforeReadFailure()
     {
         byte[] record = new byte[64];
@@ -40,24 +41,24 @@ public sealed unsafe partial class RawUnixDirectoryTests
                     Marshal.SetLastPInvokeError(reads++ == 0 ? 0 : 5);
                     return reads == 1 ? address : 0;
                 });
-            RawUnixDirectoryEntry entry = Assert.Single(entries);
-            Assert.Equal("entry"u8.ToArray(), entry.Name.ToArray());
-            Assert.Equal("/root/entry"u8.ToArray(), entry.FullPath.ToArray());
-            Assert.NotNull(error);
-            System.ComponentModel.Win32Exception cause = Assert.IsType<System.ComponentModel.Win32Exception>(error.InnerException);
-            Assert.Equal(5, cause.NativeErrorCode);
+            RawUnixDirectoryEntry entry = Assert.ContainsSingle(entries);
+            Assert.AreSequenceEqual("entry"u8.ToArray(), entry.Name.ToArray());
+            Assert.AreSequenceEqual("/root/entry"u8.ToArray(), entry.FullPath.ToArray());
+            Assert.IsNotNull(error);
+            System.ComponentModel.Win32Exception cause = Assert.IsExactInstanceOfType<System.ComponentModel.Win32Exception>(error.InnerException);
+            Assert.AreEqual(5, cause.NativeErrorCode);
         }
     }
 
     /// <summary>
     /// Verifies directory entries preserve raw name and full path bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EnumeratePreservesNameAndFullPathBytes()
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
         }
         else
         {
@@ -81,7 +82,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
                     }
                 }
 
-                Assert.True(found);
+                Assert.IsTrue(found);
             }
             finally
             {
@@ -93,12 +94,12 @@ public sealed unsafe partial class RawUnixDirectoryTests
     /// <summary>
     /// Verifies adjacent short directory-entry records preserve complete names.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EnumeratePreservesAdjacentShortEntryNames()
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
         }
         else
         {
@@ -125,7 +126,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
                 }
 
                 RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
-                Assert.Equal(names.Length, entries.Length);
+                Assert.HasCount(names.Length, entries);
                 for (int index = 0; index < entries.Length; index++)
                 {
                     Assert.DoesNotContain((byte)0, entries[index].Name.ToArray());
@@ -135,9 +136,9 @@ public sealed unsafe partial class RawUnixDirectoryTests
                 {
                     byte[] expectedName = Encoding.UTF8.GetBytes(names[index]);
                     RawUnixDirectoryEntry entry = Find(entries, expectedName);
-                    Assert.Equal(expectedName, entry.Name.ToArray());
-                    Assert.Equal(Encoding.UTF8.GetBytes(Path.Join(root, names[index])), entry.FullPath.ToArray());
-                    Assert.Equal(RawUnixDirectoryEntryType.RegularFile, entry.FileType);
+                    Assert.AreSequenceEqual(expectedName, entry.Name.ToArray());
+                    Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(Path.Join(root, names[index])), entry.FullPath.ToArray());
+                    Assert.AreEqual(RawUnixDirectoryEntryType.RegularFile, entry.FileType);
                 }
             }
             finally
@@ -150,12 +151,12 @@ public sealed unsafe partial class RawUnixDirectoryTests
     /// <summary>
     /// Verifies enumeration retains native regular-file, directory, and symbolic-link types.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EnumeratePreservesNativeFileTypes()
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
         }
         else
         {
@@ -170,9 +171,9 @@ public sealed unsafe partial class RawUnixDirectoryTests
                 File.CreateSymbolicLink(link, file);
 
                 RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
-                Assert.Equal(RawUnixDirectoryEntryType.RegularFile, Find(entries, "file"u8).FileType);
-                Assert.Equal(RawUnixDirectoryEntryType.Directory, Find(entries, "directory"u8).FileType);
-                Assert.Equal(RawUnixDirectoryEntryType.SymbolicLink, Find(entries, "link"u8).FileType);
+                Assert.AreEqual(RawUnixDirectoryEntryType.RegularFile, Find(entries, "file"u8).FileType);
+                Assert.AreEqual(RawUnixDirectoryEntryType.Directory, Find(entries, "directory"u8).FileType);
+                Assert.AreEqual(RawUnixDirectoryEntryType.SymbolicLink, Find(entries, "link"u8).FileType);
             }
             finally
             {
@@ -184,24 +185,24 @@ public sealed unsafe partial class RawUnixDirectoryTests
     /// <summary>
     /// Verifies native directory read errors are not mistaken for end-of-directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadDirectoryFailureIsNotTreatedAsEndOfDirectory()
     {
         RawUnixDirectory.ThrowIfReadDirectoryFailed(error: 0);
 
-        Assert.Throws<IOException>(() => RawUnixDirectory.ThrowIfReadDirectoryFailed(error: 5));
+        Assert.ThrowsExactly<IOException>(() => RawUnixDirectory.ThrowIfReadDirectoryFailed(error: 5));
     }
 
     /// <summary>
     /// Verifies raw Unix symlink target reads preserve invalid UTF-8 bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadLinkTargetPreservesRawUnixBytes()
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            Assert.False(NativeFileSystemMetadata.TryReadRawUnixLinkTarget("unused"u8, out byte[] unsupportedTarget));
-            Assert.Empty(unsupportedTarget);
+            Assert.IsFalse(NativeFileSystemMetadata.TryReadRawUnixLinkTarget("unused"u8, out byte[] unsupportedTarget));
+            Assert.IsEmpty(unsupportedTarget);
         }
         else
         {
@@ -211,9 +212,9 @@ public sealed unsafe partial class RawUnixDirectoryTests
                 byte[] linkPath = JoinRawUnixPath(Encoding.UTF8.GetBytes(root), "link"u8);
                 byte[] target = [(byte)'t', (byte)'a', 0xff, (byte)'g', (byte)'e', (byte)'t'];
 
-                Assert.True(TryCreateRawUnixSymlink(target, linkPath));
-                Assert.True(NativeFileSystemMetadata.TryReadRawUnixLinkTarget(linkPath, out byte[] actual));
-                Assert.Equal(target, actual);
+                Assert.IsTrue(TryCreateRawUnixSymlink(target, linkPath));
+                Assert.IsTrue(NativeFileSystemMetadata.TryReadRawUnixLinkTarget(linkPath, out byte[] actual));
+                Assert.AreSequenceEqual(target, actual);
             }
             finally
             {
@@ -250,7 +251,7 @@ public sealed unsafe partial class RawUnixDirectoryTests
             }
         }
 
-        throw new Xunit.Sdk.XunitException($"Raw directory entry '{Encoding.UTF8.GetString(name)}' was not found.");
+        throw new AssertFailedException($"Raw directory entry '{Encoding.UTF8.GetString(name)}' was not found.");
     }
 
     private static bool TryCreateRawUnixSymlink(ReadOnlySpan<byte> target, ReadOnlySpan<byte> linkPath)

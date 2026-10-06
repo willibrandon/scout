@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the multi-regex pattern set surface.
 /// </summary>
+[TestClass]
 public sealed class PatternSetTests
 {
     /// <summary>
     /// Verifies literal-only patterns use one multi-regex Aho-Corasick accelerator.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesLiteralMultiRegexAccelerator()
     {
         var set = PatternSet.Compile(
@@ -20,16 +21,16 @@ public sealed class PatternSetTests
             @"[[:alpha:]]+\d+"u8.ToArray(),
         ]);
 
-        Assert.True(set.UsesLiteralAccelerator);
-        Assert.True(set.IsMatch("zzab"u8));
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 4)), set.Find("zzabcd abc123"u8));
-        Assert.Equal([0, 1, 2], set.MatchingPatternIds("zzabcd abc123"u8));
+        Assert.IsTrue(set.UsesLiteralAccelerator);
+        Assert.IsTrue(set.IsMatch("zzab"u8));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(2, 4)), set.Find("zzabcd abc123"u8));
+        Assert.AreSequenceEqual<int>([0, 1, 2], set.MatchingPatternIds("zzabcd abc123"u8));
     }
 
     /// <summary>
     /// Verifies plain ASCII literal patterns can skip syntax-tree planning.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesRawLiteralPlanForPlainAsciiPatterns()
     {
         var literalSet = PatternSet.Compile(
@@ -39,16 +40,16 @@ public sealed class PatternSetTests
         ]);
         var regexSet = PatternSet.Compile(["a.c"u8.ToArray()]);
 
-        Assert.True(literalSet.UsesLiteralAccelerator);
-        Assert.True(literalSet.CanAccelerateEveryPattern);
-        Assert.Equal(2, literalSet.CountMatches("absentmindedness Zubeneschamali's"u8));
-        Assert.True(regexSet.IsMatch("abc"u8));
+        Assert.IsTrue(literalSet.UsesLiteralAccelerator);
+        Assert.IsTrue(literalSet.CanAccelerateEveryPattern);
+        Assert.AreEqual(2, literalSet.CountMatches("absentmindedness Zubeneschamali's"u8));
+        Assert.IsTrue(regexSet.IsMatch("abc"u8));
     }
 
     /// <summary>
     /// Verifies large literal-only sets preserve ordered pattern-set matching semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeLiteralSetCountsNonOverlappingMatches()
     {
         byte[][] patterns = new byte[130][];
@@ -61,16 +62,16 @@ public sealed class PatternSetTests
         byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
             "xx dictionary005literal yy dictionary129literal dictionary010literal");
 
-        Assert.True(set.UsesLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(5, new RegexMatch(3, patterns[5].Length)), set.Find(haystack));
-        Assert.Equal(3, set.CountMatches(haystack));
-        Assert.Equal(patterns[5].Length + patterns[129].Length + patterns[10].Length, set.SumMatchSpans(haystack));
+        Assert.IsTrue(set.UsesLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(5, new RegexMatch(3, patterns[5].Length)), set.Find(haystack));
+        Assert.AreEqual(3, set.CountMatches(haystack));
+        Assert.AreEqual(patterns[5].Length + patterns[129].Length + patterns[10].Length, set.SumMatchSpans(haystack));
     }
 
     /// <summary>
     /// Verifies ASCII word-boundary literals use exact boundary-aware acceleration.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesBoundaryLiteralAcceleratorForAsciiKeywordPatterns()
     {
         var set = PatternSet.Compile(
@@ -85,10 +86,10 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesBoundaryLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("if"u8));
-        Assert.Equal(new PatternSetMatch(1, new RegexMatch(0, 8)), set.Find("if_reset"u8));
-        Assert.Equal(11, set.SumMatchSpans("if if_reset"u8));
+        Assert.IsTrue(set.UsesBoundaryLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("if"u8));
+        Assert.AreEqual(new PatternSetMatch(1, new RegexMatch(0, 8)), set.Find("if_reset"u8));
+        Assert.AreEqual(11, set.SumMatchSpans("if if_reset"u8));
 
         var mixedLiteralSet = PatternSet.Compile(
         [
@@ -101,13 +102,13 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.Equal(2, mixedLiteralSet.CountMatches("if else"u8));
+        Assert.AreEqual(2, mixedLiteralSet.CountMatches("if else"u8));
     }
 
     /// <summary>
     /// Verifies Unicode word-boundary literals keep Unicode boundary semantics while using acceleration.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesBoundaryLiteralAcceleratorForUnicodeKeywordPatterns()
     {
         var set = PatternSet.Compile(
@@ -122,14 +123,14 @@ public sealed class PatternSetTests
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("αif if");
         int expectedStart = System.Text.Encoding.UTF8.GetByteCount("αif ");
 
-        Assert.True(set.UsesBoundaryLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(expectedStart, 2)), set.Find(haystack));
+        Assert.IsTrue(set.UsesBoundaryLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(expectedStart, 2)), set.Find(haystack));
     }
 
     /// <summary>
     /// Verifies multi-regex required-literal acceleration supports Unicode case folding.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesRequiredLiteralAcceleratorForUnicodeCaseInsensitivePatterns()
     {
         var set = PatternSet.Compile(
@@ -143,14 +144,14 @@ public sealed class PatternSetTests
             unicodeClasses: true);
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxджон уотсон yy");
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(1, new RegexMatch(2, System.Text.Encoding.UTF8.GetByteCount("джон уотсон"))), set.Find(haystack));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(1, new RegexMatch(2, System.Text.Encoding.UTF8.GetByteCount("джон уотсон"))), set.Find(haystack));
     }
 
     /// <summary>
     /// Verifies literal-only patterns use the multi-regex accelerator in case-insensitive mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesLiteralAcceleratorForCaseInsensitivePatterns()
     {
         var set = PatternSet.Compile(
@@ -165,16 +166,16 @@ public sealed class PatternSetTests
             unicodeClasses: true);
         byte[] kelvin = System.Text.Encoding.UTF8.GetBytes("xx\u212A yy");
 
-        Assert.True(set.UsesLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 8)), set.Find("xxsherlock yy"u8));
-        Assert.Equal(new PatternSetMatch(1, new RegexMatch(2, 6)), set.Find("xxWATSON yy"u8));
-        Assert.Equal(new PatternSetMatch(2, new RegexMatch(2, 3)), set.Find(kelvin));
+        Assert.IsTrue(set.UsesLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(2, 8)), set.Find("xxsherlock yy"u8));
+        Assert.AreEqual(new PatternSetMatch(1, new RegexMatch(2, 6)), set.Find("xxWATSON yy"u8));
+        Assert.AreEqual(new PatternSetMatch(2, new RegexMatch(2, 3)), set.Find(kelvin));
     }
 
     /// <summary>
     /// Verifies matching pattern identifiers are returned in insertion order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReturnsMatchingPatternIdsInInsertionOrder()
     {
         var set = PatternSet.Compile(
@@ -186,15 +187,15 @@ public sealed class PatternSetTests
 
         IReadOnlyList<int> matches = set.MatchingPatternIds("xxfoo bar abc123"u8);
 
-        Assert.Equal([0, 1, 2], matches);
-        Assert.True(set.IsMatch("abc123"u8));
-        Assert.False(set.IsMatch("123"u8));
+        Assert.AreSequenceEqual<int>([0, 1, 2], matches);
+        Assert.IsTrue(set.IsMatch("abc123"u8));
+        Assert.IsFalse(set.IsMatch("123"u8));
     }
 
     /// <summary>
     /// Verifies mixed pattern-set membership agrees with independently compiled regexes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchingPatternIdsAgreeWithIndependentRegexesForMixedPatternSet()
     {
         string[] patternTexts =
@@ -217,17 +218,17 @@ public sealed class PatternSetTests
 
         IReadOnlyList<int> actualPatternIds = set.MatchingPatternIds(haystack);
 
-        Assert.True(set.UsesLiteralAccelerator);
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal([0, 1, 2, 4, 5], expectedPatternIds);
-        Assert.Equal([0, 1, 2, 4, 5], actualPatternIds);
-        Assert.Equal(expectedPatternIds, actualPatternIds);
+        Assert.IsTrue(set.UsesLiteralAccelerator);
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreSequenceEqual<int>([0, 1, 2, 4, 5], expectedPatternIds);
+        Assert.AreSequenceEqual<int>([0, 1, 2, 4, 5], actualPatternIds);
+        Assert.AreSequenceEqual(expectedPatternIds, actualPatternIds);
     }
 
     /// <summary>
     /// Verifies the selected match is the leftmost match across all patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsLeftmostPatternMatch()
     {
         var set = PatternSet.Compile(
@@ -238,14 +239,14 @@ public sealed class PatternSetTests
 
         PatternSetMatch? match = set.Find("xxfoo bar"u8);
 
-        Assert.True(match.HasValue);
-        Assert.Equal(new PatternSetMatch(1, new RegexMatch(2, 3)), match.Value);
+        Assert.IsTrue(match.HasValue);
+        Assert.AreEqual(new PatternSetMatch(1, new RegexMatch(2, 3)), match.Value);
     }
 
     /// <summary>
     /// Verifies pattern order breaks ties at the same match offset.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesPatternOrderToBreakTies()
     {
         var first = PatternSet.Compile(
@@ -259,14 +260,14 @@ public sealed class PatternSetTests
             "ab"u8.ToArray(),
         ]);
 
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 2)), first.Find("zab"u8));
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 1)), second.Find("zab"u8));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(1, 2)), first.Find("zab"u8));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(1, 1)), second.Find("zab"u8));
     }
 
     /// <summary>
     /// Verifies exact-start matches use pattern order before scanning later offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesPatternOrderForExactStartMatches()
     {
         var set = PatternSet.Compile(
@@ -275,28 +276,28 @@ public sealed class PatternSetTests
             "."u8.ToArray(),
         ]);
 
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 3)), set.Find("zabc"u8, startAt: 1));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(1, 3)), set.Find("zabc"u8, startAt: 1));
     }
 
     /// <summary>
     /// Verifies a failed exact-start candidate does not discard later accelerated matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsLaterLiteralAndBoundaryCandidatesAfterExactStartMiss()
     {
         var literals = PatternSet.Compile(["needle"u8.ToArray(), "other"u8.ToArray()]);
-        Assert.True(literals.UsesLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 6)), literals.Find("xxneedle"u8, startAt: 1));
+        Assert.IsTrue(literals.UsesLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(2, 6)), literals.Find("xxneedle"u8, startAt: 1));
 
         var boundaries = PatternSet.Compile(["\\bif\\b"u8.ToArray(), "\\belse\\b"u8.ToArray()]);
-        Assert.True(boundaries.UsesBoundaryLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(3, 2)), boundaries.Find("xx if"u8, startAt: 1));
+        Assert.IsTrue(boundaries.UsesBoundaryLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(3, 2)), boundaries.Find("xx if"u8, startAt: 1));
     }
 
     /// <summary>
     /// Verifies count helpers use the same non-overlapping iteration semantics as repeated find.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountsNonOverlappingMatchesAndSpans()
     {
         var set = PatternSet.Compile(
@@ -305,16 +306,16 @@ public sealed class PatternSetTests
             "cd"u8.ToArray(),
         ]);
 
-        Assert.Equal(3, set.CountMatches("zabcd ab"u8));
-        Assert.Equal(6, set.SumMatchSpans("zabcd ab"u8));
-        Assert.Equal(2, set.CountMatches("zabcd ab"u8, startAt: 3));
-        Assert.Equal(4, set.SumMatchSpans("zabcd ab"u8, startAt: 3));
+        Assert.AreEqual(3, set.CountMatches("zabcd ab"u8));
+        Assert.AreEqual(6, set.SumMatchSpans("zabcd ab"u8));
+        Assert.AreEqual(2, set.CountMatches("zabcd ab"u8, startAt: 3));
+        Assert.AreEqual(4, set.SumMatchSpans("zabcd ab"u8, startAt: 3));
     }
 
     /// <summary>
     /// Verifies byte-covering positive-width lexer sets can sum spans without resolving each token.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SumsRemainingBytesForPositiveWidthCoveringSets()
     {
         var set = PatternSet.Compile(
@@ -331,17 +332,17 @@ public sealed class PatternSetTests
             unicodeClasses: false);
         ReadOnlySpan<byte> haystack = "abc \n+\r\nzz"u8;
 
-        Assert.True(set.CoversEveryByteWithPositiveWidth);
-        Assert.True(set.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
-        Assert.Equal(haystack.Length - 4, set.SumMatchSpans(haystack, startAt: 4));
-        Assert.NotEqual(haystack.Length, set.CountMatches(haystack));
+        Assert.IsTrue(set.CoversEveryByteWithPositiveWidth);
+        Assert.IsTrue(set.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(haystack.Length, set.SumMatchSpans(haystack));
+        Assert.AreEqual(haystack.Length - 4, set.SumMatchSpans(haystack, startAt: 4));
+        Assert.AreNotEqual(haystack.Length, set.CountMatches(haystack));
     }
 
     /// <summary>
     /// Verifies the byte-covering anchored matcher preserves lexer pattern ordering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AnchoredMatcherFindsLexerTokensInPatternOrder()
     {
         var set = PatternSet.Compile(
@@ -360,18 +361,18 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
-        Assert.Equal(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
-        Assert.Equal(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
-        Assert.Equal(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
+        Assert.IsTrue(set.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
+        Assert.AreEqual(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
+        Assert.AreEqual(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
+        Assert.AreEqual(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
     }
 
     /// <summary>
     /// Verifies Unicode mode still uses anchored lexer matchers for byte-local token branches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AnchoredMatcherFindsAsciiLexerTokensInUnicodeMode()
     {
         var set = PatternSet.Compile(
@@ -390,18 +391,18 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: true);
 
-        Assert.True(set.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
-        Assert.Equal(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
-        Assert.Equal(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
-        Assert.Equal(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
+        Assert.IsTrue(set.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
+        Assert.AreEqual(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
+        Assert.AreEqual(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
+        Assert.AreEqual(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
     }
 
     /// <summary>
     /// Verifies pattern sets whose patterns are whole-pattern captures can synthesize captures from the selected match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SynthesizesWholePatternCaptures()
     {
         var set = PatternSet.Compile(
@@ -420,23 +421,23 @@ public sealed class PatternSetTests
         RegexCaptures? first = set.FindCaptures(haystack);
         RegexCaptures? second = set.FindCaptures(haystack, first!.Match.End);
 
-        Assert.True(set.CanSynthesizeWholePatternCaptures);
-        Assert.NotNull(first);
-        Assert.Equal(2, first.GroupCount);
-        Assert.Equal(2, first.ParticipatingCount());
-        Assert.Equal(new RegexMatch(0, 2), first.Match);
-        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(0));
-        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(1));
-        Assert.NotNull(second);
-        Assert.Equal(new RegexMatch(3, 6), second.Match);
-        Assert.Equal(8, set.CountCaptures(haystack));
-        Assert.Equal(6, set.CountCaptures(haystack, first.Match.End));
+        Assert.IsTrue(set.CanSynthesizeWholePatternCaptures);
+        Assert.IsNotNull(first);
+        Assert.AreEqual(2, first.GroupCount);
+        Assert.AreEqual(2, first.ParticipatingCount());
+        Assert.AreEqual(new RegexMatch(0, 2), first.Match);
+        Assert.AreEqual(new RegexMatch(0, 2), first.GetGroup(0));
+        Assert.AreEqual(new RegexMatch(0, 2), first.GetGroup(1));
+        Assert.IsNotNull(second);
+        Assert.AreEqual(new RegexMatch(3, 6), second.Match);
+        Assert.AreEqual(8, set.CountCaptures(haystack));
+        Assert.AreEqual(6, set.CountCaptures(haystack, first.Match.End));
     }
 
     /// <summary>
     /// Verifies pattern-set whole-pattern capture synthesis is withheld for nested captures.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SkipsWholePatternCaptureSynthesisForNestedCaptures()
     {
         var set = PatternSet.Compile(
@@ -450,15 +451,15 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.False(set.CanSynthesizeWholePatternCaptures);
-        Assert.Null(set.FindCaptures("abc"u8));
-        Assert.Throws<InvalidOperationException>(() => set.CountCaptures("abc"u8));
+        Assert.IsFalse(set.CanSynthesizeWholePatternCaptures);
+        Assert.IsNull(set.FindCaptures("abc"u8));
+        Assert.ThrowsExactly<InvalidOperationException>(() => set.CountCaptures("abc"u8));
     }
 
     /// <summary>
     /// Verifies the byte-coverage shortcut is withheld for gaps and zero-width patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DoesNotUseByteCoverageShortcutForGapsOrEmptyPatterns()
     {
         var missingNewline = PatternSet.Compile(
@@ -481,18 +482,18 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.False(missingNewline.CoversEveryByteWithPositiveWidth);
-        Assert.False(missingNewline.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(2, missingNewline.SumMatchSpans("a\nb"u8));
-        Assert.False(emptyFirst.CoversEveryByteWithPositiveWidth);
-        Assert.False(emptyFirst.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(0, emptyFirst.SumMatchSpans("abc"u8));
+        Assert.IsFalse(missingNewline.CoversEveryByteWithPositiveWidth);
+        Assert.IsFalse(missingNewline.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(2, missingNewline.SumMatchSpans("a\nb"u8));
+        Assert.IsFalse(emptyFirst.CoversEveryByteWithPositiveWidth);
+        Assert.IsFalse(emptyFirst.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(0, emptyFirst.SumMatchSpans("abc"u8));
     }
 
     /// <summary>
     /// Verifies an explicit dot-all single-byte fallback covers line terminators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DotAllFallbackCoversEveryByte()
     {
         var set = PatternSet.Compile(
@@ -506,15 +507,15 @@ public sealed class PatternSetTests
             unicodeClasses: false);
         ReadOnlySpan<byte> haystack = "a\nb\r\nc"u8;
 
-        Assert.True(set.CoversEveryByteWithPositiveWidth);
-        Assert.True(set.UsesAnchoredMatcherAccelerator);
-        Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
+        Assert.IsTrue(set.CoversEveryByteWithPositiveWidth);
+        Assert.IsTrue(set.UsesAnchoredMatcherAccelerator);
+        Assert.AreEqual(haystack.Length, set.SumMatchSpans(haystack));
     }
 
     /// <summary>
     /// Verifies count helpers can use the required-literal accelerator for fully covered regex sets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountsThroughRequiredLiteralAccelerator()
     {
         var set = PatternSet.Compile(
@@ -523,14 +524,14 @@ public sealed class PatternSetTests
             "bar[0-9]+"u8.ToArray(),
         ]);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(3, set.CountMatches("xxfoo1 bar22 foo333"u8));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(3, set.CountMatches("xxfoo1 bar22 foo333"u8));
     }
 
     /// <summary>
     /// Verifies malformed matching keeps required-literal acceleration for zero-width boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvalidUtf8BoundaryPatternUsesRequiredLiteralAccelerator()
     {
         const string pattern =
@@ -543,7 +544,7 @@ public sealed class PatternSetTests
             dotMatchesNewline: false,
             matchInvalidUtf8: true);
 
-        Assert.True(PatternSet.CanPreflightAccelerateEveryPattern([patternBytes], options));
+        Assert.IsTrue(PatternSet.CanPreflightAccelerateEveryPattern([patternBytes], options));
 
         var set = PatternSet.Compile([patternBytes], options, dfaSizeLimit: null);
         string token = $"ey{new string('A', 17)}.ey{new string('B', 17)}.{new string('C', 10)}";
@@ -552,9 +553,9 @@ public sealed class PatternSetTests
         input[0] = 0xFF;
         tokenBytes.CopyTo(input, 1);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.True(set.RequiredLiteralAcceleratorCoversAll);
-        Assert.Equal(
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.IsTrue(set.RequiredLiteralAcceleratorCoversAll);
+        Assert.AreEqual(
             new PatternSetMatch(0, new RegexMatch(1, tokenBytes.Length)),
             set.Find(input));
     }
@@ -562,7 +563,7 @@ public sealed class PatternSetTests
     /// <summary>
     /// Verifies the alternation preflight accepts only sets that can avoid per-branch fallback search.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PreflightRequiresEveryPatternToHaveAnAccelerator()
     {
         var options = new RegexCompileOptions(
@@ -575,12 +576,12 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(PatternSet.CanPreflightAccelerateEveryPattern(
+        Assert.IsTrue(PatternSet.CanPreflightAccelerateEveryPattern(
         [
             "literal"u8.ToArray(),
             "token[0-9]+"u8.ToArray(),
         ], options));
-        Assert.False(PatternSet.CanPreflightAccelerateEveryPattern(
+        Assert.IsFalse(PatternSet.CanPreflightAccelerateEveryPattern(
         [
             "token[0-9]+"u8.ToArray(),
             @"\d+"u8.ToArray(),
@@ -590,7 +591,7 @@ public sealed class PatternSetTests
     /// <summary>
     /// Verifies bounded required-literal windows still include the furthest valid match start.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsThroughBoundedRequiredLiteralLookBehind()
     {
         var set = PatternSet.Compile(
@@ -603,15 +604,15 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 11)), set.Find("xxabcsecret42"u8));
-        Assert.Equal(2, set.CountMatches("abcsecret1 zztoken22"u8));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(2, 11)), set.Find("xxabcsecret42"u8));
+        Assert.AreEqual(2, set.CountMatches("abcsecret1 zztoken22"u8));
     }
 
     /// <summary>
     /// Verifies Unicode-enabled required-literal windows include case-folded literal byte expansion.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsThroughUnicodeCaseFoldedRequiredLiteralLookBehind()
     {
         var set = PatternSet.Compile(
@@ -626,14 +627,14 @@ public sealed class PatternSetTests
 
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx\u212A\U0001F600\U0001F600secret7 Kxsecret8");
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(2, set.CountMatches(haystack));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(2, set.CountMatches(haystack));
     }
 
     /// <summary>
     /// Verifies required-literal verification preserves Unicode scalar class semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralAcceleratorVerifiesUnicodeScalarAtoms()
     {
         var set = PatternSet.Compile(
@@ -648,15 +649,15 @@ public sealed class PatternSetTests
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxfoo\u2003bar fooXbar");
         int expectedLength = System.Text.Encoding.UTF8.GetByteCount("foo\u2003bar");
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, expectedLength)), set.Find(haystack));
-        Assert.Equal(1, set.CountMatches(haystack));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(2, expectedLength)), set.Find(haystack));
+        Assert.AreEqual(1, set.CountMatches(haystack));
     }
 
     /// <summary>
     /// Verifies large pattern sets still use required-literal verification when bounded look-behind analysis is skipped.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeRequiredLiteralAcceleratorVerifiesUnicodeScalarAtoms()
     {
         byte[][] patterns = Enumerable.Range(0, 32)
@@ -672,15 +673,15 @@ public sealed class PatternSetTests
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxp31foo\u2003bar p31fooXbar");
         int expectedLength = System.Text.Encoding.UTF8.GetByteCount("p31foo\u2003bar");
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(31, new RegexMatch(2, expectedLength)), set.Find(haystack));
-        Assert.Equal(1, set.CountMatches(haystack));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(31, new RegexMatch(2, expectedLength)), set.Find(haystack));
+        Assert.AreEqual(1, set.CountMatches(haystack));
     }
 
     /// <summary>
     /// Verifies required-literal windows can skip starts that violate known first-byte predicates.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralLookBehindHonorsStartBytes()
     {
         var set = PatternSet.Compile(
@@ -693,16 +694,16 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.Equal(new PatternSetMatch(0, new RegexMatch(18, 10)), set.Find("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
-        Assert.Equal(2, set.CountMatches("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
-        Assert.Equal(25, set.SumMatchSpans("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.AreEqual(new PatternSetMatch(0, new RegexMatch(18, 10)), set.Find("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+        Assert.AreEqual(2, set.CountMatches("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+        Assert.AreEqual(25, set.SumMatchSpans("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
     }
 
     /// <summary>
     /// Verifies required-literal candidates can be rejected by anchored byte-pattern guards before automaton validation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralAcceleratorUsesAnchoredGuards()
     {
         var set = PatternSet.Compile(
@@ -717,18 +718,18 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.True(set.UsesRequiredLiteralGuards);
-        Assert.Equal(3, set.CountMatches(
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.IsTrue(set.UsesRequiredLiteralGuards);
+        Assert.AreEqual(3, set.CountMatches(
             "noise cio0123456789abcdefghijklmnopqrstuv CLIENT-secret = abcdefghijklmnopqrstuvwx; default login alice password sesame"u8));
-        Assert.Equal(0, set.CountMatches(
+        Assert.AreEqual(0, set.CountMatches(
             "scio0123456789abcdefghijklmnopqrstuv client nosecret default login alice pass sesame"u8));
     }
 
     /// <summary>
     /// Verifies anchored guards are built for moderately long required literals that are common enough to need cheap rejection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralAcceleratorGuardsModeratelyLongLiterals()
     {
         var set = PatternSet.Compile(
@@ -741,16 +742,16 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.True(set.UsesRequiredLiteralGuards);
-        Assert.Equal(1, set.CountMatches("CLIENT-secret abcdefghijklmnopqrstuvwx;"u8));
-        Assert.Equal(0, set.CountMatches("client profile without a secret token"u8));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.IsTrue(set.UsesRequiredLiteralGuards);
+        Assert.AreEqual(1, set.CountMatches("CLIENT-secret abcdefghijklmnopqrstuvwx;"u8));
+        Assert.AreEqual(0, set.CountMatches("client profile without a secret token"u8));
     }
 
     /// <summary>
     /// Verifies anchored required-literal guards can keep a mandatory prefix when a later optional sequence is too broad to model.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredLiteralGuardKeepsSafePrefixBeforeUnsupportedTail()
     {
         var set = PatternSet.Compile(
@@ -763,23 +764,23 @@ public sealed class PatternSetTests
             utf8: false,
             unicodeClasses: false);
 
-        Assert.True(set.UsesRequiredLiteralAccelerator);
-        Assert.True(set.UsesRequiredLiteralGuards);
-        Assert.Equal(1, set.CountMatches("user = \"alice\" // keep this assignment\npassword = \"sesame\""u8));
-        Assert.Equal(0, set.CountMatches("user profile password hint"u8));
+        Assert.IsTrue(set.UsesRequiredLiteralAccelerator);
+        Assert.IsTrue(set.UsesRequiredLiteralGuards);
+        Assert.AreEqual(1, set.CountMatches("user = \"alice\" // keep this assignment\npassword = \"sesame\""u8));
+        Assert.AreEqual(0, set.CountMatches("user profile password hint"u8));
     }
 
     /// <summary>
     /// Verifies an empty set never matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptySetDoesNotMatch()
     {
         var set = PatternSet.Compile([]);
 
-        Assert.Equal(0, set.Count);
-        Assert.False(set.IsMatch("anything"u8));
-        Assert.Null(set.Find("anything"u8));
-        Assert.Empty(set.MatchingPatternIds("anything"u8));
+        Assert.AreEqual(0, set.Count);
+        Assert.IsFalse(set.IsMatch("anything"u8));
+        Assert.IsNull(set.Find("anything"u8));
+        Assert.IsEmpty(set.MatchingPatternIds("anything"u8));
     }
 }

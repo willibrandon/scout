@@ -8,6 +8,7 @@ namespace Scout;
 /// <summary>
 /// Verifies adaptive prefilter state has operation scope without per-match heap allocation.
 /// </summary>
+[TestClass]
 public sealed class RegexPublicIterationAllocationTests
 {
     private const int BaselineMeasurementIterations = 128;
@@ -18,25 +19,25 @@ public sealed class RegexPublicIterationAllocationTests
     /// <summary>
     /// Verifies repeated public finds retain stack-backed adaptive prefilter state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OneShotFindPrefilterStateAllocationDoesNotGrowWithCallCount()
     {
         RegexMatcher matcher = CreateRegexMatcher(out RegexAutomaton automaton);
         byte[] haystack = Encoding.UTF8.GetBytes(string.Concat(
             Enumerable.Repeat("abcdefghfooX0", RegexPrefilterState.MinimumSkipCount)));
 
-        Assert.NotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.AreNotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
         using (RegexFindRunner runner = automaton.RentRecordFindRunner())
         {
-            Assert.True(
-                runner.PikeVmLeaseVersion > 0,
+            Assert.IsGreaterThan(
+                0, runner.PikeVmLeaseVersion,
                 "The allocation guard must exercise the pooled Pike VM engine.");
-            Assert.Null(runner.Find(haystack, startAt: 0));
-            Assert.True(
+            Assert.IsNull(runner.Find(haystack, startAt: 0));
+            Assert.IsTrue(
                 runner.IsPrefilterInert,
                 $"Expected dense false candidates to exercise adaptive prefilter state, but observed {runner.PrefilterSkipCount} scans without disabling it.");
-            Assert.True(
-                runner.PrefilterSkipCount >= RegexPrefilterState.MinimumSkipCount,
+            Assert.IsGreaterThanOrEqualTo(
+                RegexPrefilterState.MinimumSkipCount, runner.PrefilterSkipCount,
                 $"Expected at least {RegexPrefilterState.MinimumSkipCount} prefilter scans, but observed {runner.PrefilterSkipCount}.");
         }
 
@@ -72,15 +73,15 @@ public sealed class RegexPublicIterationAllocationTests
             scaledAllocation = Math.Min(scaledAllocation, scaledSample);
         }
 
-        Assert.True(
-            scaledAllocation <= baselineAllocation + AllocationNoiseAllowance,
+        Assert.IsLessThanOrEqualTo(
+            baselineAllocation + AllocationNoiseAllowance, scaledAllocation,
             $"Expected stack-backed one-shot state: the minimum of {MeasurementSampleCount} samples was {baselineAllocation} bytes for {BaselineMeasurementIterations} finds and {scaledAllocation} bytes for {ScaledMeasurementIterations} finds.");
     }
 
     /// <summary>
     /// Verifies public match iteration retains one runner and one adaptive state regardless of match count.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteRegexIterationAllocationDoesNotGrowWithMatchCount()
     {
         var regex = ByteRegex.Compile(
@@ -120,21 +121,21 @@ public sealed class RegexPublicIterationAllocationTests
             long oneMatchSample = measureManyFirst ? secondAllocation : firstAllocation;
             long manyMatchSample = measureManyFirst ? firstAllocation : secondAllocation;
 
-            Assert.Equal(1, oneCount);
-            Assert.Equal(expectedManyCount, manyCount);
+            Assert.AreEqual(1, oneCount);
+            Assert.AreEqual(expectedManyCount, manyCount);
             oneMatchAllocation = Math.Min(oneMatchAllocation, oneMatchSample);
             manyMatchAllocation = Math.Min(manyMatchAllocation, manyMatchSample);
         }
 
-        Assert.True(
-            manyMatchAllocation <= oneMatchAllocation + AllocationNoiseAllowance,
+        Assert.IsLessThanOrEqualTo(
+            oneMatchAllocation + AllocationNoiseAllowance, manyMatchAllocation,
             $"Expected operation-scoped iteration state: the minimum of {MeasurementSampleCount} samples was {oneMatchAllocation} bytes for one match and {manyMatchAllocation} bytes for {expectedManyCount} matches.");
     }
 
     /// <summary>
     /// Verifies byte-regex iteration retains its primed runner while callbacks execute.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteRegexIterationRetainsRunnerDuringCallbacks()
     {
         ByteRegex regex = CreateByteRegex();
@@ -153,7 +154,7 @@ public sealed class RegexPublicIterationAllocationTests
     /// <summary>
     /// Verifies struct-sink matcher iteration retains its primed runner while callbacks execute.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexMatcherStructIterationRetainsRunnerDuringCallbacks()
     {
         RegexMatcher matcher = CreateRegexMatcher(out RegexAutomaton automaton);
@@ -171,7 +172,7 @@ public sealed class RegexPublicIterationAllocationTests
     /// <summary>
     /// Verifies function-pointer matcher iteration retains its primed runner while callbacks execute.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public unsafe void RegexMatcherFunctionPointerIterationRetainsRunnerDuringCallbacks()
     {
         RegexMatcher matcher = CreateRegexMatcher(out RegexAutomaton automaton);
@@ -203,7 +204,7 @@ public sealed class RegexPublicIterationAllocationTests
         long before = GC.GetAllocatedBytesForCurrentThread();
         count = regex.ForEachMatch(input, ref callbackCount, CountMatch);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(count, callbackCount);
+        Assert.AreEqual(count, callbackCount);
         return allocated;
     }
 
@@ -220,7 +221,7 @@ public sealed class RegexPublicIterationAllocationTests
         }
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Null(match);
+        Assert.IsNull(match);
         return allocated;
     }
 
@@ -249,8 +250,8 @@ public sealed class RegexPublicIterationAllocationTests
             binder: null,
             [typeof(RegexAutomaton)],
             modifiers: null);
-        Assert.NotNull(constructor);
-        return Assert.IsType<RegexMatcher>(constructor.Invoke([automaton]));
+        Assert.IsNotNull(constructor);
+        return Assert.IsExactInstanceOfType<RegexMatcher>(constructor.Invoke([automaton]));
     }
 
     private static RegexAutomaton GetAutomaton(object facade)
@@ -258,15 +259,15 @@ public sealed class RegexPublicIterationAllocationTests
         FieldInfo? field = facade.GetType().GetField(
             "_automaton",
             BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(field);
-        return Assert.IsType<RegexAutomaton>(field.GetValue(facade));
+        Assert.IsNotNull(field);
+        return Assert.IsExactInstanceOfType<RegexAutomaton>(field.GetValue(facade));
     }
 
     private static void PrimePikeVmPool(RegexAutomaton automaton)
     {
         using RegexFindRunner runner = automaton.RentFindRunner();
-        Assert.True(
-            runner.PikeVmLeaseVersion > 0,
+        Assert.IsGreaterThan(
+            0, runner.PikeVmLeaseVersion,
             "The regression pattern must select the pooled Pike VM engine.");
     }
 
@@ -274,9 +275,9 @@ public sealed class RegexPublicIterationAllocationTests
         RegexRunnerLeaseObserver observer,
         int matchCount)
     {
-        Assert.Equal(2, matchCount);
-        Assert.Equal(matchCount, observer.ObservationCount);
-        Assert.Equal(1, observer.FirstLeaseVersion);
+        Assert.AreEqual(2, matchCount);
+        Assert.AreEqual(matchCount, observer.ObservationCount);
+        Assert.AreEqual(1, observer.FirstLeaseVersion);
     }
 
     private static bool ObserveByteRegexLease(
@@ -297,7 +298,7 @@ public sealed class RegexPublicIterationAllocationTests
     {
         _ = input;
         _ = match;
-        RegexRunnerLeaseObserver observer = Assert.IsType<RegexRunnerLeaseObserver>(
+        RegexRunnerLeaseObserver observer = Assert.IsExactInstanceOfType<RegexRunnerLeaseObserver>(
             GCHandle.FromIntPtr((nint)state).Target);
         observer.Observe();
         return true;

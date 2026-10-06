@@ -110,7 +110,7 @@
 
   <Target Name="ScoutScanForSkippedTests" BeforeTargets="CoreCompile"
           Condition="'@(ScoutSkippedTestScanFile)' != ''">
-    <Error Condition="Exists('%(ScoutSkippedTestScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSkippedTestScanFile.FullPath)')), '\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bSkip\s*='))"
+    <Error Condition="Exists('%(ScoutSkippedTestScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSkippedTestScanFile.FullPath)')), '\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?Ignore(?:Attribute)?\b|\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?DataRow\s*\([^)\r\n]*\bIgnoreMessage\s*='))"
            Text="Scout forbids skipped tests in %(ScoutSkippedTestScanFile.Identity)." />
   </Target>
 </Project>

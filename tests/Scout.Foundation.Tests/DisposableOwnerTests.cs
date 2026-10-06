@@ -3,18 +3,19 @@ namespace Scout;
 /// <summary>
 /// Verifies reference-resource ownership on exceptional construction and successful transfer.
 /// </summary>
+[TestClass]
 public sealed class DisposableOwnerTests
 {
     /// <summary>
     /// Verifies failure after acquiring a resource releases it before leaving the operation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FailureAfterAcquisitionDisposesResource()
     {
         using var stream = new MemoryStream();
-        Assert.Throws<IOException>(AcquireAndFail);
+        Assert.ThrowsExactly<IOException>(AcquireAndFail);
 
-        Assert.False(stream.CanRead);
+        Assert.IsFalse(stream.CanRead);
 
         void AcquireAndFail()
         {
@@ -26,7 +27,7 @@ public sealed class DisposableOwnerTests
     /// <summary>
     /// Verifies releasing ownership prevents cleanup from closing a transferred resource.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReleasedResourceRemainsUsable()
     {
         using var stream = new MemoryStream();
@@ -36,6 +37,6 @@ public sealed class DisposableOwnerTests
         }
 
         stream.WriteByte(42);
-        Assert.Equal([42], stream.ToArray());
+        Assert.AreSequenceEqual<byte>([42], stream.ToArray());
     }
 }

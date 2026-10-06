@@ -6,7 +6,9 @@ namespace Scout;
 /// <summary>
 /// Verifies the public byte regex facade intended for package consumers.
 /// </summary>
-public sealed class ByteRegexApiTests
+/// <param name="testContext">The context for the current test.</param>
+[TestClass]
+public sealed class ByteRegexApiTests(TestContext testContext)
 {
     private const int BoundedAssignmentSearchTimeoutMilliseconds = 5000;
     private const int RepeatedBoundedAssignmentSearchTimeoutMilliseconds = 5000;
@@ -22,43 +24,43 @@ public sealed class ByteRegexApiTests
     /// <summary>
     /// Verifies byte regex matching exposes byte offsets and spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsFirstMatch()
     {
         var regex = ByteRegex.Compile(@"(?i)[[:alpha:]]+\d+");
 
         ByteRegexMatch? match = regex.Find("11ABC123 yy"u8);
 
-        Assert.True(match.HasValue);
-        Assert.Equal(new ByteRegexMatch(2, 6), match.Value);
-        Assert.True(match.Value.Value("11ABC123 yy"u8).SequenceEqual("ABC123"u8));
-        Assert.True(regex.IsMatch("ABC123"u8));
-        Assert.False(regex.IsMatch("ABC"u8));
+        Assert.IsTrue(match.HasValue);
+        Assert.AreEqual(new ByteRegexMatch(2, 6), match.Value);
+        Assert.IsTrue(match.Value.Value("11ABC123 yy"u8).SequenceEqual("ABC123"u8));
+        Assert.IsTrue(regex.IsMatch("ABC123"u8));
+        Assert.IsFalse(regex.IsMatch("ABC"u8));
     }
 
     /// <summary>
     /// Verifies capture groups are exposed without leaking automata types.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsCaptures()
     {
         var regex = ByteRegex.Compile(@"([[:alpha:]]+)(\d+)");
 
         ByteRegexCaptures? captures = regex.FindCaptures("11ABC123 yy"u8);
 
-        Assert.NotNull(captures);
-        Assert.Equal(3, captures.GroupCount);
-        Assert.Equal(new ByteRegexMatch(2, 6), captures.Match);
-        Assert.Equal(new ByteRegexMatch(2, 6), captures.GetGroup(0));
-        Assert.Equal(new ByteRegexMatch(2, 3), captures.GetGroup(1));
-        Assert.Equal(new ByteRegexMatch(5, 3), captures.GetGroup(2));
-        Assert.Equal(3, captures.ParticipatingCount());
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(3, captures.GroupCount);
+        Assert.AreEqual(new ByteRegexMatch(2, 6), captures.Match);
+        Assert.AreEqual(new ByteRegexMatch(2, 6), captures.GetGroup(0));
+        Assert.AreEqual(new ByteRegexMatch(2, 3), captures.GetGroup(1));
+        Assert.AreEqual(new ByteRegexMatch(5, 3), captures.GetGroup(2));
+        Assert.AreEqual(3, captures.ParticipatingCount());
     }
 
     /// <summary>
     /// Verifies a reverse DFA retains the earliest start when a lazy prefix can also accept later.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LazyPrefixDfaMatchesPikeVmWholeSpanAndCaptures()
     {
         byte[] input = Encoding.ASCII.GetBytes(
@@ -83,20 +85,20 @@ public sealed class ByteRegexApiTests
         var expectedMatch = new ByteRegexMatch(4096, 32);
         var expectedCapture = new ByteRegexMatch(4111, 16);
 
-        Assert.Equal(expectedMatch, dfa.Find(input));
-        Assert.Equal(expectedMatch, pikeVm.Find(input));
-        ByteRegexCaptures dfaCaptures = Assert.IsType<ByteRegexCaptures>(dfa.FindCaptures(input));
-        ByteRegexCaptures pikeVmCaptures = Assert.IsType<ByteRegexCaptures>(pikeVm.FindCaptures(input));
-        Assert.Equal(expectedMatch, dfaCaptures.Match);
-        Assert.Equal(expectedCapture, dfaCaptures.GetGroup(1));
-        Assert.Equal(pikeVmCaptures.Match, dfaCaptures.Match);
-        Assert.Equal(pikeVmCaptures.GetGroup(1), dfaCaptures.GetGroup(1));
+        Assert.AreEqual(expectedMatch, dfa.Find(input));
+        Assert.AreEqual(expectedMatch, pikeVm.Find(input));
+        ByteRegexCaptures dfaCaptures = Assert.IsExactInstanceOfType<ByteRegexCaptures>(dfa.FindCaptures(input));
+        ByteRegexCaptures pikeVmCaptures = Assert.IsExactInstanceOfType<ByteRegexCaptures>(pikeVm.FindCaptures(input));
+        Assert.AreEqual(expectedMatch, dfaCaptures.Match);
+        Assert.AreEqual(expectedCapture, dfaCaptures.GetGroup(1));
+        Assert.AreEqual(pikeVmCaptures.Match, dfaCaptures.Match);
+        Assert.AreEqual(pikeVmCaptures.GetGroup(1), dfaCaptures.GetGroup(1));
     }
 
     /// <summary>
     /// Verifies non-overlapping iteration advances from complete leftmost spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LazyPrefixDfaIterationReportsCompleteLeftmostSpans()
     {
         byte[] input = Encoding.ASCII.GetBytes(
@@ -114,8 +116,8 @@ public sealed class ByteRegexApiTests
 
         int count = regex.ForEachMatch(input, ref matches, AddMatch);
 
-        Assert.Equal(2, count);
-        Assert.Equal(
+        Assert.AreEqual(2, count);
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(4096, 32), new ByteRegexMatch(4129, 32)],
             matches);
     }
@@ -123,10 +125,11 @@ public sealed class ByteRegexApiTests
     /// <summary>
     /// Verifies bounded assignment patterns with Unicode classes do not expand into pathological VM searches.
     /// </summary>
-    [Fact(Timeout = BoundedAssignmentSearchTimeoutMilliseconds)]
+    [TestMethod]
+    [Timeout(BoundedAssignmentSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void FindsBoundedAssignmentCapturesWithoutStalling()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(BoundedAssignmentPattern);
         byte[] positive = Encoding.UTF8.GetBytes("adafruit_api_key = abc123def456ghi789jkl012mno345pq\n");
@@ -137,42 +140,44 @@ public sealed class ByteRegexApiTests
         ByteRegexCaptures? captures = regex.FindCaptures(positive);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.True(match.HasValue);
-        Assert.NotNull(captures);
-        Assert.Equal(match.Value, captures.Match);
+        Assert.IsTrue(match.HasValue);
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(match.Value, captures.Match);
         ByteRegexMatch? secret = captures.GetGroup(1);
-        Assert.True(secret.HasValue);
-        Assert.True(secret.Value.Value(positive).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
-        Assert.Null(regex.Find(negative));
-        Assert.False(regex.IsMatch(negative));
-        Assert.Equal(0, regex.Count(negative));
+        Assert.IsTrue(secret.HasValue);
+        Assert.IsTrue(secret.Value.Value(positive).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
+        Assert.IsNull(regex.Find(negative));
+        Assert.IsFalse(regex.IsMatch(negative));
+        Assert.AreEqual(0, regex.Count(negative));
     }
 
     /// <summary>
     /// Verifies a large set of repeated nonmatching bounded-assignment candidates is rejected without stalling.
     /// </summary>
-    [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    [TestMethod]
+    [Timeout(RepeatedBoundedAssignmentSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void RejectsManyRepeatedBoundedAssignmentCandidatesWithoutRescanning()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(RepeatedBoundedAssignmentPattern);
         byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentStressCandidateCount);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Null(regex.Find(input));
+        Assert.IsNull(regex.Find(input));
     }
 
     /// <summary>
     /// Verifies every public engine mode rejects repeated candidates consistently across search operations.
     /// </summary>
-    [Theory(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
+    [Timeout(RepeatedBoundedAssignmentSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void RejectsRepeatedBoundedAssignmentCandidatesAcrossEngineModes(ByteRegexEngineMode engineMode)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
@@ -182,34 +187,35 @@ public sealed class ByteRegexApiTests
 
         cancellationToken.ThrowIfCancellationRequested();
         ByteRegexCaptures? captures = regex.FindCaptures(terminalMatch);
-        Assert.NotNull(captures);
-        Assert.Equal(new ByteRegexMatch(0, terminalMatch.Length), captures.Match);
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(new ByteRegexMatch(0, terminalMatch.Length), captures.Match);
         ByteRegexMatch? secret = captures.GetGroup(1);
-        Assert.Equal(new ByteRegexMatch(12, 32), secret);
-        Assert.True(secret!.Value.Value(terminalMatch).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
-        Assert.Null(regex.Find(input));
-        Assert.False(regex.IsMatch(input));
-        Assert.Equal(0, regex.Count(input));
-        Assert.Null(regex.FindCaptures(input));
+        Assert.AreEqual(new ByteRegexMatch(12, 32), secret);
+        Assert.IsTrue(secret!.Value.Value(terminalMatch).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
+        Assert.IsNull(regex.Find(input));
+        Assert.IsFalse(regex.IsMatch(input));
+        Assert.AreEqual(0, regex.Count(input));
+        Assert.IsNull(regex.FindCaptures(input));
     }
 
     /// <summary>
     /// Verifies warmed repeated-candidate match and capture searches reuse scratch instead of allocating per candidate.
     /// </summary>
-    [Theory(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
+    [Timeout(RepeatedBoundedAssignmentSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void ReusesScratchForRepeatedBoundedAssignmentSearches(ByteRegexEngineMode engineMode)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
             new ByteRegexOptions { EngineMode = engineMode });
         byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentCandidateCount);
-        Assert.Null(regex.Find(input));
-        Assert.Null(regex.FindCaptures(input));
+        Assert.IsNull(regex.Find(input));
+        Assert.IsNull(regex.FindCaptures(input));
 
         cancellationToken.ThrowIfCancellationRequested();
         long findBefore = GC.GetAllocatedBytesForCurrentThread();
@@ -222,16 +228,16 @@ public sealed class ByteRegexApiTests
         long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Null(match);
-        Assert.Null(captures);
-        Assert.InRange(findAllocated, 0, RepeatedBoundedAssignmentAllocationLimit);
-        Assert.InRange(capturesAllocated, 0, RepeatedBoundedAssignmentAllocationLimit);
+        Assert.IsNull(match);
+        Assert.IsNull(captures);
+        Assert.IsInRange(0, RepeatedBoundedAssignmentAllocationLimit, findAllocated);
+        Assert.IsInRange(0, RepeatedBoundedAssignmentAllocationLimit, capturesAllocated);
     }
 
     /// <summary>
     /// Verifies byte mode can search arbitrary non-UTF-8 input.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchesArbitraryBytesWhenUtf8BoundaryChecksAreDisabled()
     {
         byte[] pattern = [0xff, (byte)'.'];
@@ -245,13 +251,13 @@ public sealed class ByteRegexApiTests
             });
         byte[] input = [0x00, 0xff, 0xfe, 0x41];
 
-        Assert.Equal(new ByteRegexMatch(1, 2), regex.Find(input));
+        Assert.AreEqual(new ByteRegexMatch(1, 2), regex.Find(input));
     }
 
     /// <summary>
     /// Verifies match iteration uses caller-owned state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IteratesMatchesWithState()
     {
         var regex = ByteRegex.Compile(@"\w+");
@@ -262,42 +268,42 @@ public sealed class ByteRegexApiTests
             ref matches,
             AddMatch);
 
-        Assert.Equal(3, count);
-        Assert.Equal([new ByteRegexMatch(0, 3), new ByteRegexMatch(4, 3), new ByteRegexMatch(8, 1)], matches);
+        Assert.AreEqual(3, count);
+        Assert.AreSequenceEqual<ByteRegexMatch>([new ByteRegexMatch(0, 3), new ByteRegexMatch(4, 3), new ByteRegexMatch(8, 1)], matches);
     }
 
     /// <summary>
     /// Verifies syntax errors are surfaced as byte regex parse exceptions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ConvertsSyntaxErrorsToParseException()
     {
-        ByteRegexParseException exception = Assert.Throws<ByteRegexParseException>(() => ByteRegex.Compile("["));
+        ByteRegexParseException exception = Assert.ThrowsExactly<ByteRegexParseException>(() => ByteRegex.Compile("["));
 
         Assert.Contains("byte offset", exception.Message, StringComparison.Ordinal);
-        Assert.NotNull(exception.Offset);
+        Assert.IsNotNull(exception.Offset);
     }
 
     /// <summary>
     /// Verifies ordered set matching is available through the public facade.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsSetMatch()
     {
         var set = ByteRegexSet.Compile(["foo[0-9]+", "bar[a-z]+"]);
 
         ByteRegexSetMatch? match = set.Find("xx barzz foo42"u8);
 
-        Assert.True(match.HasValue);
-        Assert.Equal(new ByteRegexSetMatch(1, new ByteRegexMatch(3, 5)), match.Value);
-        Assert.True(set.IsMatch("foo42"u8));
-        Assert.Equal(2, set.CountMatches("foo1 barz"u8));
+        Assert.IsTrue(match.HasValue);
+        Assert.AreEqual(new ByteRegexSetMatch(1, new ByteRegexMatch(3, 5)), match.Value);
+        Assert.IsTrue(set.IsMatch("foo42"u8));
+        Assert.AreEqual(2, set.CountMatches("foo1 barz"u8));
     }
 
     /// <summary>
     /// Verifies a compiled regex can be shared across concurrent lazy-DFA searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedRegexFindsFromMultipleThreads()
     {
         var regex = ByteRegex.Compile(
@@ -316,14 +322,14 @@ public sealed class ByteRegexApiTests
             {
                 ByteRegexMatch? match = regex.Find(haystack);
                 AssertFunctionMatch(match, haystack);
-                Assert.True(regex.IsMatch(haystack));
+                Assert.IsTrue(regex.IsMatch(haystack));
 
                 var matches = new List<ByteRegexMatch>();
                 int count = regex.ForEachMatch(haystack, ref matches, AddMatch);
 
-                Assert.Equal(1, count);
-                Assert.Single(matches);
-                Assert.Equal(match!.Value, matches[0]);
+                Assert.AreEqual(1, count);
+                Assert.ContainsSingle(matches);
+                Assert.AreEqual(match!.Value, matches[0]);
             }
         });
     }
@@ -331,7 +337,7 @@ public sealed class ByteRegexApiTests
     /// <summary>
     /// Verifies a compiled regex can be shared across concurrent PikeVM searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedRegexPikeVmFallbackFindsFromMultipleThreads()
     {
         var regex = ByteRegex.Compile(
@@ -350,8 +356,8 @@ public sealed class ByteRegexApiTests
             foreach (byte[] haystack in haystacks)
             {
                 AssertFunctionMatch(regex.Find(haystack), haystack);
-                Assert.True(regex.IsMatch(haystack));
-                Assert.Equal(1, regex.Count(haystack));
+                Assert.IsTrue(regex.IsMatch(haystack));
+                Assert.AreEqual(1, regex.Count(haystack));
             }
         });
     }
@@ -359,10 +365,11 @@ public sealed class ByteRegexApiTests
     /// <summary>
     /// Verifies the repeated-candidate PikeVM search state can be leased safely by concurrent callers.
     /// </summary>
-    [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    [TestMethod]
+    [Timeout(RepeatedBoundedAssignmentSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void SharedBoundedAssignmentRegexRejectsCandidatesFromMultipleThreads()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
@@ -372,15 +379,15 @@ public sealed class ByteRegexApiTests
         cancellationToken.ThrowIfCancellationRequested();
         Parallel.For(0, ConcurrentSearchIterations, new ParallelOptions { CancellationToken = cancellationToken }, _ =>
         {
-            Assert.Null(regex.Find(input));
-            Assert.False(regex.IsMatch(input));
+            Assert.IsNull(regex.Find(input));
+            Assert.IsFalse(regex.IsMatch(input));
         });
     }
 
     /// <summary>
     /// Verifies generic capture matching can be shared across concurrent searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedRegexCapturesFromMultipleThreads()
     {
         var regex = ByteRegex.Compile(
@@ -399,11 +406,11 @@ public sealed class ByteRegexApiTests
             {
                 ByteRegexCaptures? captures = regex.FindCaptures(haystack);
 
-                Assert.NotNull(captures);
+                Assert.IsNotNull(captures);
                 AssertFunctionMatch(captures.Match, haystack);
                 ByteRegexMatch? group = captures.GetGroup(1);
-                Assert.True(group.HasValue);
-                Assert.True(group.Value.Value(haystack).StartsWith("handler_"u8));
+                Assert.IsTrue(group.HasValue);
+                Assert.IsTrue(group.Value.Value(haystack).StartsWith("handler_"u8));
             }
         });
     }
@@ -411,7 +418,7 @@ public sealed class ByteRegexApiTests
     /// <summary>
     /// Verifies a compiled regex set can be shared across concurrent searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedRegexSetFindsFromMultipleThreads()
     {
         var set = ByteRegexSet.Compile(
@@ -431,8 +438,8 @@ public sealed class ByteRegexApiTests
             {
                 ByteRegexSetMatch? match = set.Find(haystack);
 
-                Assert.True(match.HasValue);
-                Assert.Equal(0, match.Value.PatternId);
+                Assert.IsTrue(match.HasValue);
+                Assert.AreEqual(0, match.Value.PatternId);
                 AssertFunctionMatch(match.Value.Match, haystack);
             }
         });
@@ -459,14 +466,14 @@ public sealed class ByteRegexApiTests
 
     private static void AssertFunctionMatch(ByteRegexMatch? match, ReadOnlySpan<byte> haystack)
     {
-        Assert.True(match.HasValue);
+        Assert.IsTrue(match.HasValue);
         AssertFunctionMatch(match.Value, haystack);
     }
 
     private static void AssertFunctionMatch(ByteRegexMatch match, ReadOnlySpan<byte> haystack)
     {
         ReadOnlySpan<byte> value = match.Value(haystack);
-        Assert.True(value.StartsWith("func handler_"u8));
-        Assert.Equal(haystack.IndexOf("func "u8), match.Start);
+        Assert.IsTrue(value.StartsWith("func handler_"u8));
+        Assert.AreEqual(haystack.IndexOf("func "u8), match.Start);
     }
 }

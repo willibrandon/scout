@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies ripgrep-compatible external command execution for CLI preprocessing.
 /// </summary>
+[TestClass]
 public sealed class CliSearchCommandRunnerTests
 {
     /// <summary>
     /// Verifies decompression startup failures can fall back to raw file reading.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryRunMissingCommandCanFallbackWithoutError()
     {
         string program = Path.Join(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
@@ -23,15 +24,15 @@ public sealed class CliSearchCommandRunnerTests
             out byte[] bytes,
             out ScoutError? error);
 
-        Assert.False(ran);
-        Assert.Empty(bytes);
-        Assert.Null(error);
+        Assert.IsFalse(ran);
+        Assert.IsEmpty(bytes);
+        Assert.IsNull(error);
     }
 
     /// <summary>
     /// Verifies preprocessor startup failures are reported as user-facing errors.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryRunMissingPreprocessorReportsError()
     {
         string program = Path.Join(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
@@ -45,9 +46,9 @@ public sealed class CliSearchCommandRunnerTests
             out byte[] bytes,
             out ScoutError? error);
 
-        Assert.False(ran);
-        Assert.Empty(bytes);
-        Assert.NotNull(error);
+        Assert.IsFalse(ran);
+        Assert.IsEmpty(bytes);
+        Assert.IsNotNull(error);
         string escapedProgram = program.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
         Assert.StartsWith($"preprocessor command could not start: '\"{escapedProgram}\"': ", error!.Message, StringComparison.Ordinal);
     }

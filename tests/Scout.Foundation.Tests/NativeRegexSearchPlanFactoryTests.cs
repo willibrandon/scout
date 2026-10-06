@@ -3,87 +3,88 @@ namespace Scout;
 /// <summary>
 /// Verifies operation-scoped native regex-plan selection and ownership.
 /// </summary>
+[TestClass]
 public sealed class NativeRegexSearchPlanFactoryTests
 {
     /// <summary>
     /// Verifies CRLF multiline searches that remain record-oriented preserve the carriage return.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreatesPreservedCrlfLinePlan()
     {
         CliLowArgs lowArgs = ParseLowArgs("-U", "--crlf", @"\r");
 
-        RegexSearchPlan plan = Assert.IsType<RegexSearchPlan>(
+        RegexSearchPlan plan = Assert.IsExactInstanceOfType<RegexSearchPlan>(
             NativeRegexSearchPlanFactory.Create([@"\r"u8.ToArray()], lowArgs, asciiCaseInsensitive: false));
 
-        Assert.False(plan.Options.Multiline);
-        Assert.True(plan.Options.Crlf);
-        Assert.True(plan.Options.PreserveCrlfCarriageReturn);
+        Assert.IsFalse(plan.Options.Multiline);
+        Assert.IsTrue(plan.Options.Crlf);
+        Assert.IsTrue(plan.Options.PreserveCrlfCarriageReturn);
     }
 
     /// <summary>
     /// Verifies standard multiline syntax that can consume a record terminator selects whole-buffer matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreatesStandardWholeBufferPlanWhenRequired()
     {
         CliLowArgs lowArgs = ParseLowArgs("-U", "pattern");
 
-        RegexSearchPlan plan = Assert.IsType<RegexSearchPlan>(
+        RegexSearchPlan plan = Assert.IsExactInstanceOfType<RegexSearchPlan>(
             NativeRegexSearchPlanFactory.Create(["a\nb"u8.ToArray()], lowArgs, asciiCaseInsensitive: false));
 
-        Assert.True(plan.Options.Multiline);
-        Assert.False(plan.Options.PreserveCrlfCarriageReturn);
+        Assert.IsTrue(plan.Options.Multiline);
+        Assert.IsFalse(plan.Options.PreserveCrlfCarriageReturn);
     }
 
     /// <summary>
     /// Verifies JSON line anchors select whole-buffer matching so their record positions remain authoritative.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreatesJsonWholeBufferPlanForLineAnchors()
     {
         CliLowArgs lowArgs = ParseLowArgs("--json", "-U", "pattern");
 
-        RegexSearchPlan plan = Assert.IsType<RegexSearchPlan>(
+        RegexSearchPlan plan = Assert.IsExactInstanceOfType<RegexSearchPlan>(
             NativeRegexSearchPlanFactory.Create(["^needle$"u8.ToArray()], lowArgs, asciiCaseInsensitive: false));
 
-        Assert.True(plan.Options.Multiline);
+        Assert.IsTrue(plan.Options.Multiline);
     }
 
     /// <summary>
     /// Verifies NUL-delimited JSON context uses the record plan required by its context renderer.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreatesJsonNullDataLinePlanForContext()
     {
         CliLowArgs lowArgs = ParseLowArgs("--json", "-U", "--null-data", "-C1", "pattern");
 
-        RegexSearchPlan plan = Assert.IsType<RegexSearchPlan>(
+        RegexSearchPlan plan = Assert.IsExactInstanceOfType<RegexSearchPlan>(
             NativeRegexSearchPlanFactory.Create(["needle"u8.ToArray()], lowArgs, asciiCaseInsensitive: false));
 
-        Assert.False(plan.Options.Multiline);
-        Assert.True(plan.Options.NullData);
+        Assert.IsFalse(plan.Options.Multiline);
+        Assert.IsTrue(plan.Options.NullData);
     }
 
     /// <summary>
     /// Verifies NUL-delimited JSON without context searches the complete input with one matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreatesJsonNullDataWholeBufferPlanWithoutContext()
     {
         CliLowArgs lowArgs = ParseLowArgs("--json", "-U", "--null-data", "pattern");
 
-        RegexSearchPlan plan = Assert.IsType<RegexSearchPlan>(
+        RegexSearchPlan plan = Assert.IsExactInstanceOfType<RegexSearchPlan>(
             NativeRegexSearchPlanFactory.Create(["needle"u8.ToArray()], lowArgs, asciiCaseInsensitive: false));
 
-        Assert.True(plan.Options.Multiline);
-        Assert.True(plan.Options.NullData);
+        Assert.IsTrue(plan.Options.Multiline);
+        Assert.IsTrue(plan.Options.NullData);
     }
 
     /// <summary>
     /// Verifies the operation-scoped plan applies the CLI DFA cache budget to native compilation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AppliesDfaSizeLimitToAuthoritativeCompilation()
     {
         CliLowArgs defaultArgs = ParseLowArgs("pattern");
@@ -99,9 +100,9 @@ public sealed class NativeRegexSearchPlanFactoryTests
             constrainedArgs,
             asciiCaseInsensitive: false);
 
-        Assert.Equal(RegexEngineKind.SparseDfa, defaultPlan.Matcher.EngineKind);
-        Assert.Equal(RegexEngineKind.PikeVm, constrainedPlan.Matcher.EngineKind);
-        Assert.Equal(
+        Assert.AreEqual(RegexEngineKind.SparseDfa, defaultPlan.Matcher.EngineKind);
+        Assert.AreEqual(RegexEngineKind.PikeVm, constrainedPlan.Matcher.EngineKind);
+        Assert.AreEqual(
             defaultPlan.Matcher.Find("prefix alpha bravo charl suffix"u8),
             constrainedPlan.Matcher.Find("prefix alpha bravo charl suffix"u8));
     }
@@ -112,18 +113,18 @@ public sealed class NativeRegexSearchPlanFactoryTests
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="arguments">The command-line options that establish the root regex flags.</param>
     /// <param name="expectedWholeBuffer">Whether the parsed expression requires whole-buffer execution.</param>
-    [Theory]
-    [InlineData("literal", "-U", false)]
-    [InlineData(@"\S", "-U", false)]
-    [InlineData(".", "-U", false)]
-    [InlineData(".", "-U --multiline-dotall", true)]
-    [InlineData("(?s:.)", "-U", true)]
-    [InlineData("(?s)(?-s:.)", "-U", false)]
-    [InlineData(@"\n", "-U", true)]
-    [InlineData(@"[^a]", "-U", true)]
-    [InlineData(@"\p{Control}", "-U", true)]
-    [InlineData(@"\Aabsolute", "-U", true)]
-    [InlineData("(?-m:^absolute)", "-U", true)]
+    [TestMethod]
+    [DataRow("literal", "-U", false)]
+    [DataRow(@"\S", "-U", false)]
+    [DataRow(".", "-U", false)]
+    [DataRow(".", "-U --multiline-dotall", true)]
+    [DataRow("(?s:.)", "-U", true)]
+    [DataRow("(?s)(?-s:.)", "-U", false)]
+    [DataRow(@"\n", "-U", true)]
+    [DataRow(@"[^a]", "-U", true)]
+    [DataRow(@"\p{Control}", "-U", true)]
+    [DataRow(@"\Aabsolute", "-U", true)]
+    [DataRow("(?-m:^absolute)", "-U", true)]
     public void CreatesStandardScopeFromParsedSyntax(
         string pattern,
         string arguments,
@@ -138,7 +139,7 @@ public sealed class NativeRegexSearchPlanFactoryTests
             lowArgs,
             asciiCaseInsensitive: false);
 
-        Assert.Equal(expectedWholeBuffer, plan.Options.Multiline);
+        Assert.AreEqual(expectedWholeBuffer, plan.Options.Multiline);
     }
 
     /// <summary>
@@ -146,14 +147,14 @@ public sealed class NativeRegexSearchPlanFactoryTests
     /// </summary>
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="expected">Whether the parsed expression explicitly consumes NUL.</param>
-    [Theory]
-    [InlineData(@"\x00", true)]
-    [InlineData(@"\x{0}", true)]
-    [InlineData(@"[\x00]", true)]
-    [InlineData(@"(?:prefix\x00)?", true)]
-    [InlineData(".", false)]
-    [InlineData(@"[\x00-\x01]", false)]
-    [InlineData(@"\W", false)]
+    [TestMethod]
+    [DataRow(@"\x00", true)]
+    [DataRow(@"\x{0}", true)]
+    [DataRow(@"[\x00]", true)]
+    [DataRow(@"(?:prefix\x00)?", true)]
+    [DataRow(".", false)]
+    [DataRow(@"[\x00-\x01]", false)]
+    [DataRow(@"\W", false)]
     public void RecordsExplicitNulFromParsedSyntax(string pattern, bool expected)
     {
         ArgumentNullException.ThrowIfNull(pattern);
@@ -164,7 +165,7 @@ public sealed class NativeRegexSearchPlanFactoryTests
             lowArgs,
             asciiCaseInsensitive: false);
 
-        Assert.Equal(expected, plan.ContainsExplicitNul);
+        Assert.AreEqual(expected, plan.ContainsExplicitNul);
     }
 
     /// <summary>
@@ -172,9 +173,9 @@ public sealed class NativeRegexSearchPlanFactoryTests
     /// </summary>
     /// <param name="arguments">The command-line options that select the record terminator.</param>
     /// <param name="pattern">The regex pattern.</param>
-    [Theory]
-    [InlineData("pattern", @"\n")]
-    [InlineData("--null-data pattern", @"\x00")]
+    [TestMethod]
+    [DataRow("pattern", @"\n")]
+    [DataRow("--null-data pattern", @"\x00")]
     public void RejectsExplicitRecordTerminatorFromParsedSyntax(
         string arguments,
         string pattern)
@@ -183,7 +184,7 @@ public sealed class NativeRegexSearchPlanFactoryTests
         ArgumentNullException.ThrowIfNull(pattern);
         CliLowArgs lowArgs = ParseLowArgs(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
-        Assert.Throws<RegexLineTerminatorException>(() => NativeRegexSearchPlanFactory.Create(
+        Assert.ThrowsExactly<RegexLineTerminatorException>(() => NativeRegexSearchPlanFactory.Create(
             [System.Text.Encoding.UTF8.GetBytes(pattern)],
             lowArgs,
             asciiCaseInsensitive: false));
@@ -192,7 +193,7 @@ public sealed class NativeRegexSearchPlanFactoryTests
     /// <summary>
     /// Verifies every native dispatch and rendering layer reuses the operation-scoped plan.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CliDispatchCompilesOnlyAtOperationBoundary()
     {
         string root = FindRepositoryRoot();
@@ -211,8 +212,8 @@ public sealed class NativeRegexSearchPlanFactoryTests
             "JsonSearchOperations.cs",
         ];
 
-        Assert.Equal(0, CountOccurrences(application, "NativeRegexSearchPlanFactory.Create("));
-        Assert.Equal(1, CountOccurrences(enginePlanner, "NativeRegexSearchPlanFactory.Create("));
+        Assert.AreEqual(0, CountOccurrences(application, "NativeRegexSearchPlanFactory.Create("));
+        Assert.AreEqual(1, CountOccurrences(enginePlanner, "NativeRegexSearchPlanFactory.Create("));
         Assert.DoesNotContain("ShouldAutoUse", pcre2Operations, StringComparison.Ordinal);
         Assert.DoesNotContain("DefaultRegexCompileFails", pcre2Operations, StringComparison.Ordinal);
         Assert.Contains("plan.Regex", pcre2Operations, StringComparison.Ordinal);
@@ -235,8 +236,8 @@ public sealed class NativeRegexSearchPlanFactoryTests
         }
 
         CliParseResult result = CliParser.Parse(osArguments);
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        return Assert.IsType<CliLowArgs>(result.LowArgs);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        return Assert.IsExactInstanceOfType<CliLowArgs>(result.LowArgs);
     }
 
     private static int CountOccurrences(string value, string search)

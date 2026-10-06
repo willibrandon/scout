@@ -6,13 +6,14 @@ namespace Scout;
 /// <summary>
 /// Verifies unanchored forward and reverse NFA construction estimates and hard budgets.
 /// </summary>
+[TestClass]
 public sealed class RegexNfaConstructionBudgetTests()
 {
     /// <summary>
     /// Verifies alternation estimates add every branch and its split topology instead of using
     /// only the largest branch.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AlternationEstimateRejectsCombinedBranchesThatIndividuallyFit()
     {
         string[] branches = Enumerable.Range(0, 256)
@@ -34,19 +35,17 @@ public sealed class RegexNfaConstructionBudgetTests()
         RegexSyntaxTree combined = Parse(string.Join('|', branches));
         RegexNfaConstructionEstimate combinedEstimate =
             RegexNfaCompiler.EstimateUnanchoredConstruction(combined.Root, options);
-
-        Assert.All(individualEstimates, estimate => Assert.True(estimate.Fits(sizeLimit)));
-        Assert.False(combinedEstimate.Fits(sizeLimit));
-        Assert.True(
-            combinedEstimate.TotalStateCount >
-            individualEstimates.Max(static estimate => estimate.TotalStateCount));
+        TestAssert.All(individualEstimates, estimate => Assert.IsTrue(estimate.Fits(sizeLimit)));
+        Assert.IsFalse(combinedEstimate.Fits(sizeLimit));
+        Assert.IsGreaterThan(
+            individualEstimates.Max(static estimate => estimate.TotalStateCount), combinedEstimate.TotalStateCount);
     }
 
     /// <summary>
     /// Verifies UTF-8 lowering is counted independently in each direction and agrees with the
     /// exact emitted topology for a single Unicode atom.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnicodeAtomEstimateTracksForwardAndReverseLoweringIndependently()
     {
         RegexSyntaxTree tree = Parse(@"\w");
@@ -56,16 +55,16 @@ public sealed class RegexNfaConstructionBudgetTests()
         RegexNfa forward = RegexNfaCompiler.CompileUnanchored(tree.Root, options);
         RegexNfa reverse = RegexNfaCompiler.CompileReversed(tree.Root, options);
 
-        Assert.Equal((ulong)forward.States.Count, estimate.ForwardStateCount);
-        Assert.Equal((ulong)reverse.States.Count, estimate.ReverseStateCount);
-        Assert.NotEqual(estimate.ForwardStateCount - 2, estimate.ReverseStateCount);
+        Assert.AreEqual((ulong)forward.States.Count, estimate.ForwardStateCount);
+        Assert.AreEqual((ulong)reverse.States.Count, estimate.ReverseStateCount);
+        Assert.AreNotEqual(estimate.ForwardStateCount - 2, estimate.ReverseStateCount);
     }
 
     /// <summary>
     /// Verifies a rejected expanded factory caches its negative result and cannot construct an
     /// oversized graph on later runner requests.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExpandedFactoryPermanentlyCachesAlternationBudgetRejection()
     {
         string pattern = string.Join(
@@ -78,48 +77,48 @@ public sealed class RegexNfaConstructionBudgetTests()
             options,
             dfaSizeLimit: 16 * 1024);
 
-        Assert.Null(factory.Create());
-        Assert.True(factory.IsPermanentlyRejected);
-        Assert.Null(factory.Create());
-        Assert.True(factory.IsPermanentlyRejected);
+        Assert.IsNull(factory.Create());
+        Assert.IsTrue(factory.IsPermanentlyRejected);
+        Assert.IsNull(factory.Create());
+        Assert.IsTrue(factory.IsPermanentlyRejected);
     }
 
     /// <summary>
     /// Verifies hard compiler reservations stop before exceeding the configured graph budget and
     /// roll back the abandoned partial construction.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HardConstructionBudgetRollsBackAbandonedGraph()
     {
         RegexSyntaxTree tree = Parse("(?:abcdefgh|ijklmnop){32}");
         var budget = new RegexNfaConstructionBudget(sizeLimit: 512);
 
-        Assert.False(RegexNfaCompiler.TryCompileUnanchored(
+        Assert.IsFalse(RegexNfaCompiler.TryCompileUnanchored(
             tree.Root,
             CreateAsciiOptions(),
             budget,
             out RegexNfa? nfa));
-        Assert.Null(nfa);
-        Assert.Equal(0UL, budget.UsedBytes);
+        Assert.IsNull(nfa);
+        Assert.AreEqual(0UL, budget.UsedBytes);
     }
 
     /// <summary>
     /// Verifies the shared budget accounts for the materialized forward and reverse graphs and
     /// validates their actual state payloads before both are retained.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedBudgetMatchesMaterializedForwardAndReverseEstimate()
     {
         RegexSyntaxTree tree = Parse(@"\w{2,4}\s+\p{Greek}");
         RegexCompileOptions options = CreateUnicodeOptions();
         var budget = new RegexNfaConstructionBudget(sizeLimit: 16UL * 1024UL * 1024UL);
 
-        Assert.True(RegexNfaCompiler.TryCompileUnanchored(
+        Assert.IsTrue(RegexNfaCompiler.TryCompileUnanchored(
             tree.Root,
             options,
             budget,
             out RegexNfa? forward));
-        Assert.True(RegexNfaCompiler.TryCompileReversed(
+        Assert.IsTrue(RegexNfaCompiler.TryCompileReversed(
             tree.Root,
             options,
             budget,
@@ -128,26 +127,26 @@ public sealed class RegexNfaConstructionBudgetTests()
         ulong retainedBytes = RegexNfaConstructionBudget.SaturatingAdd(
             RegexNfaConstructionBudget.EstimateRetainedBytes(forward!),
             RegexNfaConstructionBudget.EstimateRetainedBytes(reverse!));
-        Assert.Equal(retainedBytes, budget.UsedBytes);
-        Assert.True(budget.CanRetain(forward!, reverse!));
+        Assert.AreEqual(retainedBytes, budget.UsedBytes);
+        Assert.IsTrue(budget.CanRetain(forward!, reverse!));
     }
 
     /// <summary>
     /// Verifies a lazy factory retains a forward runner when only later reverse reconstruction
     /// exceeds the remaining shared construction budget.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FactoryRetainsForwardRunnerWhenReverseExceedsRemainingBudget()
     {
         RegexSyntaxTree tree = Parse("(?:ab|ac){8}");
         RegexCompileOptions options = CreateAsciiOptions();
         RegexNfa anchored = RegexNfaCompiler.Compile(tree.Root, options);
-        Assert.True(RegexUnanchoredLazyDfa.TryCompileForwardNfa(
+        Assert.IsTrue(RegexUnanchoredLazyDfa.TryCompileForwardNfa(
             anchored,
             tree.Root,
             options,
             out RegexNfa? forward));
-        Assert.True(RegexUnanchoredLazyDfa.TryCompileReverseNfa(
+        Assert.IsTrue(RegexUnanchoredLazyDfa.TryCompileReverseNfa(
             tree.Root,
             options,
             out RegexNfa? reverse));
@@ -160,45 +159,45 @@ public sealed class RegexNfaConstructionBudgetTests()
 
         RegexUnanchoredLazyDfa? runner = factory.Create();
 
-        Assert.NotNull(runner);
-        Assert.Equal(0, factory.ReverseInitializationCount);
+        Assert.IsNotNull(runner);
+        Assert.AreEqual(0, factory.ReverseInitializationCount);
         byte[] haystack = Encoding.ASCII.GetBytes(
             "!!abababababababab!acacacacacacacac!!");
-        Assert.True(runner!.TryFindEnd(
+        Assert.IsTrue(runner!.TryFindEnd(
             haystack,
             startAt: 0,
             out int end,
             out bool endGaveUp));
-        Assert.False(endGaveUp);
-        Assert.Equal(18, end);
-        Assert.True(runner.TryCountMatches(haystack, startAt: 0, out long count));
-        Assert.Equal(2, count);
-        Assert.False(runner.TryFind(
+        Assert.IsFalse(endGaveUp);
+        Assert.AreEqual(18, end);
+        Assert.IsTrue(runner.TryCountMatches(haystack, startAt: 0, out long count));
+        Assert.AreEqual(2, count);
+        Assert.IsFalse(runner.TryFind(
             haystack,
             startAt: 0,
             out _,
             out bool findGaveUp));
-        Assert.True(findGaveUp);
-        Assert.True(factory.IsReverseUnavailable);
-        Assert.Equal(1, factory.ReverseInitializationCount);
-        Assert.False(runner.TryFind(
+        Assert.IsTrue(findGaveUp);
+        Assert.IsTrue(factory.IsReverseUnavailable);
+        Assert.AreEqual(1, factory.ReverseInitializationCount);
+        Assert.IsFalse(runner.TryFind(
             "!!acacacacacacacac!!"u8,
             startAt: 0,
             out _,
             out bool repeatedFindGaveUp));
-        Assert.True(repeatedFindGaveUp);
-        Assert.Equal(1, factory.ReverseInitializationCount);
+        Assert.IsTrue(repeatedFindGaveUp);
+        Assert.AreEqual(1, factory.ReverseInitializationCount);
     }
 
     /// <summary>
     /// Verifies copy-safe runner lease tokens end exactly once and cannot end a later lease.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RunnerLeaseTokensRejectDuplicateAndStaleEnds()
     {
         RegexSyntaxTree tree = Parse("ab");
         RegexCompileOptions options = CreateAsciiOptions();
-        Assert.True(RegexUnanchoredLazyDfa.TryCreate(
+        Assert.IsTrue(RegexUnanchoredLazyDfa.TryCreate(
             tree.Root,
             options,
             dfaSizeLimit: 1024 * 1024,
@@ -206,33 +205,33 @@ public sealed class RegexNfaConstructionBudgetTests()
 
         long first = runner!.BeginRunnerLease();
 
-        Assert.NotEqual(0, first);
-        Assert.True(runner.TryEndRunnerLease(first));
-        Assert.False(runner.TryEndRunnerLease(first));
+        Assert.AreNotEqual(0, first);
+        Assert.IsTrue(runner.TryEndRunnerLease(first));
+        Assert.IsFalse(runner.TryEndRunnerLease(first));
 
         long second = runner.BeginRunnerLease();
 
-        Assert.True(second > first);
-        Assert.False(runner.TryEndRunnerLease(first));
-        Assert.True(runner.TryEndRunnerLease(second));
+        Assert.IsGreaterThan(first, second);
+        Assert.IsFalse(runner.TryEndRunnerLease(first));
+        Assert.IsTrue(runner.TryEndRunnerLease(second));
     }
 
     /// <summary>
     /// Verifies public full-span search falls back authoritatively when a retained forward runner
     /// cannot add its reverse NFA within the shared construction budget.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutomatonFallsBackAfterForwardOnlyRunnerRejectsReverseConstruction()
     {
         RegexSyntaxTree tree = Parse("(?:ab|ac){8}");
         RegexCompileOptions options = CreateAsciiOptions();
         RegexNfa anchored = RegexNfaCompiler.Compile(tree.Root, options);
-        Assert.True(RegexUnanchoredLazyDfa.TryCompileForwardNfa(
+        Assert.IsTrue(RegexUnanchoredLazyDfa.TryCompileForwardNfa(
             anchored,
             tree.Root,
             options,
             out RegexNfa? forward));
-        Assert.True(RegexUnanchoredLazyDfa.TryCompileReverseNfa(
+        Assert.IsTrue(RegexUnanchoredLazyDfa.TryCompileReverseNfa(
             tree.Root,
             options,
             out RegexNfa? reverse));
@@ -254,36 +253,36 @@ public sealed class RegexNfaConstructionBudgetTests()
         Encoding.ASCII.GetBytes("abababababababab!").CopyTo(
             haystack,
             haystack.Length - 17);
-        RegexMatch expected = Assert.IsType<RegexMatch>(fallback.Find(haystack));
+        RegexMatch expected = Assert.IsExactInstanceOfType<RegexMatch>(fallback.Find(haystack));
         RegexMatchEndRunner matchEndRunner = constrained.RentMatchEndRunner(
             haystack,
             startAt: 0);
 
         try
         {
-            Assert.True(matchEndRunner.IsAvailable);
-            Assert.False(matchEndRunner.UsesAsciiProjection);
-            Assert.True(matchEndRunner.TryFindEnd(
+            Assert.IsTrue(matchEndRunner.IsAvailable);
+            Assert.IsFalse(matchEndRunner.UsesAsciiProjection);
+            Assert.IsTrue(matchEndRunner.TryFindEnd(
                 haystack,
                 startAt: 0,
                 out int end,
                 out bool completed));
-            Assert.True(completed);
-            Assert.Equal(expected.End, end);
+            Assert.IsTrue(completed);
+            Assert.AreEqual(expected.End, end);
         }
         finally
         {
             matchEndRunner.Dispose();
         }
 
-        Assert.Equal(expected, constrained.Find(haystack));
+        Assert.AreEqual(expected, constrained.Find(haystack));
     }
 
     /// <summary>
     /// Verifies expanded Unicode syntax admits a forward-only runner when reverse construction
     /// cannot fit alongside its retained forward graph.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExpandedFactoryRetainsForwardRunnerWhenReverseExceedsRemainingBudget()
     {
         RegexSyntaxTree tree = Parse(@"\w");
@@ -294,13 +293,13 @@ public sealed class RegexNfaConstructionBudgetTests()
         RegexNfaConstructionEstimate estimate =
             RegexNfaCompiler.EstimateUnanchoredConstruction(tree.Root, options);
 
-        Assert.True(estimate.ForwardFits(sizeLimit));
-        Assert.False(estimate.Fits(sizeLimit));
-        Assert.True(RegexUnanchoredLazyDfa.CanCompileExpandedForwardNfaWithinBudget(
+        Assert.IsTrue(estimate.ForwardFits(sizeLimit));
+        Assert.IsFalse(estimate.Fits(sizeLimit));
+        Assert.IsTrue(RegexUnanchoredLazyDfa.CanCompileExpandedForwardNfaWithinBudget(
             tree.Root,
             options,
             sizeLimit));
-        Assert.False(RegexUnanchoredLazyDfa.CanCompileExpandedNfaWithinBudget(
+        Assert.IsFalse(RegexUnanchoredLazyDfa.CanCompileExpandedNfaWithinBudget(
             tree.Root,
             options,
             sizeLimit));
@@ -311,22 +310,22 @@ public sealed class RegexNfaConstructionBudgetTests()
             sizeLimit);
         RegexUnanchoredLazyDfa? runner = factory.Create();
 
-        Assert.NotNull(runner);
-        Assert.True(runner!.TryCountMatches("!!alpha!!"u8, startAt: 0, out long count));
-        Assert.Equal(5, count);
-        Assert.False(runner.TryFind(
+        Assert.IsNotNull(runner);
+        Assert.IsTrue(runner!.TryCountMatches("!!alpha!!"u8, startAt: 0, out long count));
+        Assert.AreEqual(5, count);
+        Assert.IsFalse(runner.TryFind(
             "!!alpha!!"u8,
             startAt: 0,
             out _,
             out bool gaveUp));
-        Assert.True(gaveUp);
+        Assert.IsTrue(gaveUp);
     }
 
     /// <summary>
     /// Verifies all-ASCII full-span searches use their compact projection without materializing
     /// the larger expanded Unicode runner, including authoritative no-match results.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiFullSpanSearchDoesNotInitializeExpandedUnicodeRunner()
     {
         RegexAutomaton automaton = CreateProjectedUnicodeAutomaton();
@@ -334,24 +333,24 @@ public sealed class RegexNfaConstructionBudgetTests()
             GetExpandedUnanchoredFactory(automaton);
         byte[] noMatch = Enumerable.Repeat((byte)'!', 8192).ToArray();
 
-        Assert.False(expandedFactory.IsValueCreated);
-        Assert.Null(automaton.Find(noMatch));
-        Assert.Equal(0, automaton.SumMatchSpans(noMatch));
-        Assert.False(expandedFactory.IsValueCreated);
+        Assert.IsFalse(expandedFactory.IsValueCreated);
+        Assert.IsNull(automaton.Find(noMatch));
+        Assert.AreEqual(0, automaton.SumMatchSpans(noMatch));
+        Assert.IsFalse(expandedFactory.IsValueCreated);
 
         byte[] matching = Enumerable.Repeat((byte)'!', 8192).ToArray();
         "alpha bravo charl"u8.CopyTo(matching.AsSpan(4096));
 
-        Assert.Equal(new RegexMatch(4096, 17), automaton.Find(matching));
-        Assert.Equal(17, automaton.SumMatchSpans(matching));
-        Assert.False(expandedFactory.IsValueCreated);
+        Assert.AreEqual(new RegexMatch(4096, 17), automaton.Find(matching));
+        Assert.AreEqual(17, automaton.SumMatchSpans(matching));
+        Assert.IsFalse(expandedFactory.IsValueCreated);
     }
 
     /// <summary>
     /// Verifies a mixed full-span sum bypasses the unsafe ASCII projection and falls through to
     /// the authoritative ordinary runner without retaining a projected partial total.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MixedFullSpanSumInitializesAuthoritativeExpandedRunner()
     {
         RegexAutomaton automaton = CreateProjectedUnicodeAutomaton();
@@ -365,9 +364,9 @@ public sealed class RegexNfaConstructionBudgetTests()
 
         long expected = fallback.SumMatchSpans(haystack);
 
-        Assert.False(expandedFactory.IsValueCreated);
-        Assert.Equal(expected, automaton.SumMatchSpans(haystack));
-        Assert.True(expandedFactory.IsValueCreated);
+        Assert.IsFalse(expandedFactory.IsValueCreated);
+        Assert.AreEqual(expected, automaton.SumMatchSpans(haystack));
+        Assert.IsTrue(expandedFactory.IsValueCreated);
     }
 
     private static RegexSyntaxTree Parse(string pattern)
@@ -422,18 +421,18 @@ public sealed class RegexNfaConstructionBudgetTests()
     private static Lazy<RegexUnanchoredLazyDfaFactory?> GetExpandedUnanchoredFactory(
         RegexAutomaton automaton)
     {
-        RegexMetaEngine engine = Assert.IsType<RegexMetaEngine>(
+        RegexMetaEngine engine = Assert.IsExactInstanceOfType<RegexMetaEngine>(
             typeof(RegexAutomaton)
                 .GetField("engine", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(automaton));
         Func<RegexUnanchoredLazyDfa?> runnerFactory =
-            Assert.IsType<Func<RegexUnanchoredLazyDfa?>>(
+            Assert.IsExactInstanceOfType<Func<RegexUnanchoredLazyDfa?>>(
                 typeof(RegexMetaEngine)
                     .GetField("_unanchoredLazyDfaFactory", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .GetValue(engine));
         RegexExpandedUnanchoredLazyDfaFactory expandedFactory =
-            Assert.IsType<RegexExpandedUnanchoredLazyDfaFactory>(runnerFactory.Target);
-        return Assert.IsType<Lazy<RegexUnanchoredLazyDfaFactory?>>(
+            Assert.IsExactInstanceOfType<RegexExpandedUnanchoredLazyDfaFactory>(runnerFactory.Target);
+        return Assert.IsExactInstanceOfType<Lazy<RegexUnanchoredLazyDfaFactory?>>(
             typeof(RegexExpandedUnanchoredLazyDfaFactory)
                 .GetField("_factory", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(expandedFactory));
@@ -450,8 +449,8 @@ public sealed class RegexNfaConstructionBudgetTests()
             forwardBytes,
             reverseBytes);
 
-        Assert.True(forwardBytes < sizeLimit);
-        Assert.True(sizeLimit < pairedBytes);
+        Assert.IsLessThan(sizeLimit, forwardBytes);
+        Assert.IsLessThan(pairedBytes, sizeLimit);
         return sizeLimit;
     }
 
@@ -464,8 +463,8 @@ public sealed class RegexNfaConstructionBudgetTests()
             reverseBytes);
         ulong sizeLimit = pairedBytes - 1;
 
-        Assert.True(forwardBytes < sizeLimit);
-        Assert.True(sizeLimit < pairedBytes);
+        Assert.IsLessThan(sizeLimit, forwardBytes);
+        Assert.IsLessThan(pairedBytes, sizeLimit);
         return sizeLimit;
     }
 }

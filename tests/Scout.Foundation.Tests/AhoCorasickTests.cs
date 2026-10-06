@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the initial byte-oriented Aho-Corasick port surface.
 /// </summary>
+[TestClass]
 public sealed class AhoCorasickTests
 {
     /// <summary>
     /// Verifies standard non-overlapping search reports matches when first seen.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllUsesStandardNonOverlappingSemantics()
     {
         AhoCorasickAutomaton automaton = Build("abcd"u8.ToArray(), "ab"u8.ToArray(), "abc"u8.ToArray());
@@ -25,7 +26,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies standard search resumes after the reported match end.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllResumesAfterMatchEnd()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -42,7 +43,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies overlapping search reports every pattern ending at a byte offset.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindOverlappingReportsAllMatchesInUpstreamOrder()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -62,7 +63,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies duplicate byte patterns keep their distinct pattern identifiers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindOverlappingRetainsDuplicatePatternIds()
     {
         AhoCorasickAutomaton automaton = Build("foo"u8.ToArray(), "foo"u8.ToArray());
@@ -75,7 +76,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies empty patterns use upstream standard non-overlapping boundary behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllUsesFirstEmptyPatternAtEveryBoundary()
     {
         AhoCorasickAutomaton automaton = Build("a"u8.ToArray(), []);
@@ -88,7 +89,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies overlapping empty patterns are emitted at byte boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindOverlappingEmitsEmptyPatternBoundaries()
     {
         AhoCorasickAutomaton automaton = Build([], "a"u8.ToArray(), []);
@@ -101,7 +102,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies arbitrary non-UTF-8 bytes are matched without decoding.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindOverlappingPreservesArbitraryBytes()
     {
         AhoCorasickAutomaton automaton = Build([0xff, 0x00], [0x00]);
@@ -115,7 +116,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies standard anchored search only reports matches starting at the current offset.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllAnchoredRequiresMatchAtCurrentOffset()
     {
         AhoCorasickAutomaton automaton = BuildBoth(
@@ -135,7 +136,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies standard anchored search stops when the next offset has no match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllAnchoredStopsWhenNextOffsetDoesNotMatch()
     {
         AhoCorasickAutomaton automaton = BuildBoth("abcd"u8.ToArray(), "ab"u8.ToArray(), "abc"u8.ToArray());
@@ -148,18 +149,18 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies anchored search exposes the first anchored match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAnchoredReturnsFirstAnchoredMatch()
     {
         AhoCorasickAutomaton automaton = BuildBoth("abcd"u8.ToArray(), "ab"u8.ToArray());
 
-        Assert.Equal(new AhoCorasickMatch(1, 0, 2), automaton.FindAnchored("abcd"u8));
+        Assert.AreEqual(new AhoCorasickMatch(1, 0, 2), automaton.FindAnchored("abcd"u8));
     }
 
     /// <summary>
     /// Verifies standard anchored empty patterns match every boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindAllAnchoredUsesFirstEmptyPatternAtEveryBoundary()
     {
         AhoCorasickAutomaton automaton = BuildBoth([], "a"u8.ToArray());
@@ -172,7 +173,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost-first keeps the earliest pattern among same-start matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostFirstPrefersEarliestPattern()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -191,7 +192,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost-first can prefer a shorter pattern by pattern order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostFirstUsesPatternOrderBeforeLength()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -207,7 +208,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost-longest chooses the longest match among same-start matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostLongestPrefersLongestPattern()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -223,7 +224,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost-longest breaks equal-length ties by pattern order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostLongestBreaksLengthTiesByPatternOrder()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -240,7 +241,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost modes skip an empty match immediately after a non-empty match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostSkipsEmptyMatchImmediatelyAfterNonEmptyMatch()
     {
         AhoCorasickAutomaton automaton = Build(
@@ -256,7 +257,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies empty-only leftmost matching advances by one boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostEmptyOnlyMatchesEveryBoundary()
     {
         AhoCorasickAutomaton automaton = Build(AhoCorasickMatchKind.LeftmostFirst, [], []);
@@ -269,7 +270,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost anchored search does not scan forward to a later start.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostAnchoredDoesNotScanForward()
     {
         AhoCorasickAutomaton automaton = BuildBoth(
@@ -285,7 +286,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost anchored search continues exactly at each match end.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostAnchoredContinuesAtMatchEnd()
     {
         AhoCorasickAutomaton automaton = BuildBoth(
@@ -303,7 +304,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies leftmost-longest anchored search still prefers the longest current match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LeftmostLongestAnchoredPrefersLongestPattern()
     {
         AhoCorasickAutomaton automaton = BuildBoth(
@@ -322,7 +323,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive search folds pattern and haystack bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveFindsFoldedMatch()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -337,7 +338,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive non-overlapping search keeps first duplicate pattern.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveNonOverlappingKeepsFirstDuplicate()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -353,7 +354,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive overlapping search reports duplicate patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveOverlappingReportsDuplicates()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -369,7 +370,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive leftmost-first preserves pattern-order semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveLeftmostFirstUsesPatternOrder()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -385,7 +386,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive leftmost-longest still prefers longest match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveLeftmostLongestPrefersLongest()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -401,7 +402,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies ASCII case-insensitive matching does not fold non-ASCII bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AsciiCaseInsensitiveDoesNotFoldNonAsciiBytes()
     {
         AhoCorasickAutomaton automaton = BuildAsciiCaseInsensitive(
@@ -416,41 +417,41 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies upstream default start-kind support rejects anchored searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultStartKindRejectsAnchoredSearch()
     {
         AhoCorasickAutomaton automaton = Build("foo"u8.ToArray());
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
             () => automaton.FindAnchored("foo"u8));
-        Assert.Equal(
+        Assert.AreEqual(
             "anchored search requested but automaton only supports unanchored searches",
             exception.Message);
-        Assert.Throws<InvalidOperationException>(() => automaton.EnumerateAnchored("foo"u8));
+        Assert.ThrowsExactly<InvalidOperationException>(() => automaton.EnumerateAnchored("foo"u8));
     }
 
     /// <summary>
     /// Verifies anchored-only automatons reject unanchored searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AnchoredStartKindRejectsUnanchoredSearch()
     {
         AhoCorasickAutomaton automaton = AhoCorasickAutomaton.Builder()
             .WithStartKind(AhoCorasickStartKind.Anchored)
             .Build(["foo"u8.ToArray()]);
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+        InvalidOperationException exception = Assert.ThrowsExactly<InvalidOperationException>(
             () => automaton.Find("foo"u8));
-        Assert.Equal(
+        Assert.AreEqual(
             "unanchored search requested but automaton only supports anchored searches",
             exception.Message);
-        Assert.Throws<InvalidOperationException>(() => automaton.Enumerate("foo"u8));
+        Assert.ThrowsExactly<InvalidOperationException>(() => automaton.Enumerate("foo"u8));
     }
 
     /// <summary>
     /// Verifies builder options are reflected in the built automaton.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuilderAppliesSupportedOptions()
     {
         AhoCorasickAutomaton automaton = AhoCorasickAutomaton.Builder()
@@ -459,9 +460,9 @@ public sealed class AhoCorasickTests
             .WithAsciiCaseInsensitive(true)
             .Build(["ab"u8.ToArray(), "ABCD"u8.ToArray()]);
 
-        Assert.Equal(AhoCorasickMatchKind.LeftmostLongest, automaton.MatchKind);
-        Assert.Equal(AhoCorasickStartKind.Both, automaton.StartKind);
-        Assert.True(automaton.AsciiCaseInsensitive);
+        Assert.AreEqual(AhoCorasickMatchKind.LeftmostLongest, automaton.MatchKind);
+        Assert.AreEqual(AhoCorasickStartKind.Both, automaton.StartKind);
+        Assert.IsTrue(automaton.AsciiCaseInsensitive);
         AssertMatches(
             automaton.FindAllAnchored("aBcD"u8),
             [(1, 0, 4)]);
@@ -470,7 +471,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies small automatons still use eager dense transition tables.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SmallAutomatonsUseEagerDenseTransitions()
     {
         byte[][] patterns = Enumerable
@@ -479,7 +480,7 @@ public sealed class AhoCorasickTests
             .ToArray();
         AhoCorasickAutomaton automaton = Build(patterns);
 
-        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        Assert.IsNotNull(GetAnyDenseTransitions(automaton));
         AssertMatches(
             automaton.FindAll("xx needle-15 yy needle-07"u8),
             [(15, 3, 12), (7, 16, 25)]);
@@ -488,7 +489,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies larger automatons use lazy dense transition rows and still search correctly.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchesWithLazyDenseTransitionRows()
     {
         byte[][] patterns = Enumerable
@@ -497,7 +498,7 @@ public sealed class AhoCorasickTests
             .ToArray();
         AhoCorasickAutomaton automaton = Build(patterns);
 
-        Assert.Null(GetAnyDenseTransitions(automaton));
+        Assert.IsNull(GetAnyDenseTransitions(automaton));
         AssertMatches(
             automaton.FindAll("xx needle-0699 yy needle-0007"u8),
             [(699, 3, 14), (7, 18, 29)]);
@@ -506,7 +507,7 @@ public sealed class AhoCorasickTests
     /// <summary>
     /// Verifies hot lazy automatons promote to contiguous dense transitions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PromotesHotLazyRowsToDenseTransitions()
     {
         byte[][] patterns = Enumerable
@@ -521,15 +522,15 @@ public sealed class AhoCorasickTests
             haystack[(index * 4) + 3] = (byte)' ';
         }
 
-        Assert.Null(GetAnyDenseTransitions(automaton));
-        Assert.Equal(700, automaton.FindAll(haystack).Count);
-        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        Assert.IsNull(GetAnyDenseTransitions(automaton));
+        Assert.HasCount(700, automaton.FindAll(haystack));
+        Assert.IsNotNull(GetAnyDenseTransitions(automaton));
     }
 
     /// <summary>
     /// Verifies larger automatons can be promoted before a long scan starts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CanEagerlyPromoteLargeAutomatonToDenseTransitions()
     {
         byte[][] patterns = Enumerable
@@ -538,10 +539,10 @@ public sealed class AhoCorasickTests
             .ToArray();
         AhoCorasickAutomaton automaton = Build(patterns);
 
-        Assert.Null(GetAnyDenseTransitions(automaton));
+        Assert.IsNull(GetAnyDenseTransitions(automaton));
         automaton.EnsureDenseTransitions(maxStates: 4096);
 
-        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        Assert.IsNotNull(GetAnyDenseTransitions(automaton));
         AssertMatches(
             automaton.FindAll("xx needle-0699 yy needle-0007"u8),
             [(699, 3, 14), (7, 18, 29)]);
@@ -597,13 +598,13 @@ public sealed class AhoCorasickTests
         IReadOnlyList<AhoCorasickMatch> actual,
         IReadOnlyList<(int PatternId, int Start, int End)> expected)
     {
-        Assert.Equal(expected.Count, actual.Count);
+        Assert.HasCount(expected.Count, actual);
         for (int index = 0; index < expected.Count; index++)
         {
             (int patternId, int start, int end) = expected[index];
-            Assert.Equal(patternId, actual[index].PatternId);
-            Assert.Equal(start, actual[index].Start);
-            Assert.Equal(end, actual[index].End);
+            Assert.AreEqual(patternId, actual[index].PatternId);
+            Assert.AreEqual(start, actual[index].Start);
+            Assert.AreEqual(end, actual[index].End);
         }
     }
 

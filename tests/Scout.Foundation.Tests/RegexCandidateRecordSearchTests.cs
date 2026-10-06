@@ -6,6 +6,7 @@ namespace Scout;
 /// Verifies syntax-derived regex prefilters discover candidate records that are then matched by
 /// the authoritative regex engine.
 /// </summary>
+[TestClass]
 public sealed class RegexCandidateRecordSearchTests
 {
     private const string HeldOutPattern =
@@ -15,7 +16,7 @@ public sealed class RegexCandidateRecordSearchTests
     /// Verifies the held-out workload uses the CLI-equivalent General plan with its Teddy
     /// prefilter and preserves matching-line output on a large segment.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HeldOutPatternUsesGeneralPrefilteredSearchPlan()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -30,7 +31,7 @@ public sealed class RegexCandidateRecordSearchTests
         byte[] haystack = Encoding.ASCII.GetBytes(source.ToString());
         var sink = new CapturingLineSink();
 
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlan(
             haystack,
@@ -39,19 +40,19 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.Equal(RegexEngineKind.OnePassDfa, plan.Matcher.EngineKind);
-        Assert.Equal(RegexPrefilterKind.Teddy, plan.Matcher.PrefilterKind);
-        Assert.True(plan.Matcher.HasAsciiProjectedMatchEndRunner);
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(65, sink.LineNumber);
-        Assert.Equal("enum Ready"u8.ToArray(), sink.Line.ToArray());
+        Assert.AreEqual(RegexEngineKind.OnePassDfa, plan.Matcher.EngineKind);
+        Assert.AreEqual(RegexPrefilterKind.Teddy, plan.Matcher.PrefilterKind);
+        Assert.IsTrue(plan.Matcher.HasAsciiProjectedMatchEndRunner);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(65, sink.LineNumber);
+        Assert.AreSequenceEqual("enum Ready"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies record slicing declines plans whose matches may cross record boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CandidateRecordSearchDeclinesMultilinePlans()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -77,17 +78,17 @@ public sealed class RegexCandidateRecordSearchTests
             nullData: false,
             requireMatchColumn: false);
 
-        Assert.False(handled);
-        Assert.False(matched);
-        Assert.Equal(0, searchedLines);
-        Assert.Equal(0UL, sink.MatchedLines);
+        Assert.IsFalse(handled);
+        Assert.IsFalse(matched);
+        Assert.AreEqual(0, searchedLines);
+        Assert.AreEqual(0UL, sink.MatchedLines);
     }
 
     /// <summary>
     /// Verifies candidate-record search leaves engines without retained verifier state on their
     /// existing authoritative paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CandidateRecordSearchDeclinesEnginesWithoutRetainedVerifierState()
     {
         byte[][] patterns = [@"\babc\b"u8.ToArray()];
@@ -95,16 +96,16 @@ public sealed class RegexCandidateRecordSearchTests
         RegexPrefilterRunner runner =
             plan.Matcher.CreateCandidateRecordPrefilterRunner(haystackLength: 64 * 1024);
 
-        Assert.Equal(RegexEngineKind.BoundedBacktracker, plan.Matcher.EngineKind);
-        Assert.Equal(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
-        Assert.False(runner.IsAvailable);
+        Assert.AreEqual(RegexEngineKind.BoundedBacktracker, plan.Matcher.EngineKind);
+        Assert.AreEqual(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
+        Assert.IsFalse(runner.IsAvailable);
     }
 
     /// <summary>
     /// Verifies sparse candidate records preserve selected-line counts, line numbers, and byte
     /// offsets after large candidate-free ranges.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SparseCandidatesPreserveSelectedRecordMetadata()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -138,19 +139,19 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(64, sink.LineNumber);
-        Assert.Equal(lastMatchOffset, sink.ByteOffset);
-        Assert.Equal("union Last\n"u8.ToArray(), sink.Line.ToArray());
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(64, sink.LineNumber);
+        Assert.AreEqual(lastMatchOffset, sink.ByteOffset);
+        Assert.AreSequenceEqual("union Last\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
     }
 
     /// <summary>
     /// Verifies prefix hits that do not satisfy the regex cannot select a record and do not hide
     /// a later authoritative match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FalseCandidatesRequireAuthoritativeRecordMatches()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -174,18 +175,18 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(97, sink.LineNumber);
-        Assert.Equal(matchOffset, sink.ByteOffset);
-        Assert.Equal("enum Accepted\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(97, sink.LineNumber);
+        Assert.AreEqual(matchOffset, sink.ByteOffset);
+        Assert.AreSequenceEqual("enum Accepted\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies a false exact-prefix candidate cannot hide a later authoritative match in the
     /// same record.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FalseExactCandidateContinuesWithinTheSameRecord()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -198,7 +199,7 @@ public sealed class RegexCandidateRecordSearchTests
 
         RegexPrefilterRunner runner =
             plan.Matcher.CreateCandidateRecordPrefilterRunner(haystack.Length);
-        Assert.True(runner.UsesExactStartCandidates);
+        Assert.IsTrue(runner.UsesExactStartCandidates);
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlan(
             haystack,
@@ -207,18 +208,18 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(9, sink.MatchColumn);
-        Assert.Equal("struct! enum Accepted\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(9, sink.MatchColumn);
+        Assert.AreSequenceEqual("struct! enum Accepted\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies several prefilter hits and authoritative matches in one record emit that record
     /// exactly once.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultipleCandidatesInOneRecordEmitTheRecordOnce()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -236,13 +237,13 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreSequenceEqual(
             "struct First; enum Second; union Third;\n"u8.ToArray(),
             sink.Line.ToArray());
-        Assert.Equal(3, LiteralLineSearcher.CountMatchesWithRegexPlan(
+        Assert.AreEqual(3, LiteralLineSearcher.CountMatchesWithRegexPlan(
             haystack,
             patterns,
             plan));
@@ -252,7 +253,7 @@ public sealed class RegexCandidateRecordSearchTests
     /// Verifies a required literal found inside a possible match selects the containing record
     /// for full authoritative verification.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RequiredInnerLiteralCandidatesVerifyCompleteRecords()
     {
         byte[][] patterns = [@"\w+GeneratedRecord"u8.ToArray()];
@@ -270,7 +271,7 @@ public sealed class RegexCandidateRecordSearchTests
 
         RegexPrefilterRunner runner =
             plan.Matcher.CreateCandidateRecordPrefilterRunner(haystack.Length);
-        Assert.False(runner.UsesExactStartCandidates);
+        Assert.IsFalse(runner.UsesExactStartCandidates);
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlan(
             haystack,
@@ -279,18 +280,18 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.Equal(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(97, sink.LineNumber);
-        Assert.Equal("abcGeneratedRecord\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.AreEqual(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(97, sink.LineNumber);
+        Assert.AreSequenceEqual("abcGeneratedRecord\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies dense ineffective candidates hand off at a record boundary without missing the
     /// boundary record or emitting an earlier record twice.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DenseCandidatesHandOffWithoutMissingOrDuplicatingRecords()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -318,7 +319,7 @@ public sealed class RegexCandidateRecordSearchTests
             "union Last\n",
         ];
 
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
 
         for (int index = 0; index < expectedSelectedRecords.Length; index++)
         {
@@ -331,21 +332,21 @@ public sealed class RegexCandidateRecordSearchTests
                 maxMatchingLines: (ulong)index + 1,
                 requireMatchColumn: false);
 
-            Assert.True(matched);
-            Assert.Equal((ulong)index + 1, sink.MatchedLines);
-            Assert.Equal(
+            Assert.IsTrue(matched);
+            Assert.AreEqual((ulong)index + 1, sink.MatchedLines);
+            Assert.AreSequenceEqual(
                 Encoding.ASCII.GetBytes(expectedSelectedRecords[index]),
                 sink.Line.ToArray());
         }
 
-        Assert.True(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsTrue(HasActivatedAsciiProjection(plan.Matcher));
     }
 
     /// <summary>
     /// Verifies dense candidates hand off to record verification when a caller requires the
     /// authoritative match column.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DenseCandidateHandoffReportsAuthoritativeMatchColumn()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -367,18 +368,18 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 1, sink.LineNumber);
-        Assert.Equal(9, sink.MatchColumn);
-        Assert.Equal("padding enum Result\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount + 1, sink.LineNumber);
+        Assert.AreEqual(9, sink.MatchColumn);
+        Assert.AreSequenceEqual("padding enum Result\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies dense candidates preserve searched-record accounting when unfiltered search
     /// reaches a matching-line limit.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DenseCandidateHandoffHonorsMatchingLineLimitAndSearchedLineCount()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -405,12 +406,12 @@ public sealed class RegexCandidateRecordSearchTests
             maxMatchingLines: 2,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 3, sink.LineNumber);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 3, searchedLines);
-        Assert.Equal("struct Second\n"u8.ToArray(), sink.Line.ToArray());
-        Assert.True(plan.Matcher.HasAsciiProjectedMatchEndRunner);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount + 3, sink.LineNumber);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount + 3, searchedLines);
+        Assert.AreSequenceEqual("struct Second\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(plan.Matcher.HasAsciiProjectedMatchEndRunner);
     }
 
     /// <summary>
@@ -419,9 +420,9 @@ public sealed class RegexCandidateRecordSearchTests
     /// <param name="terminator">The record terminator text.</param>
     /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
     /// <param name="nullData">Whether NUL terminates records.</param>
-    [Theory]
-    [InlineData("\r\n", true, false)]
-    [InlineData("\0", false, true)]
+    [TestMethod]
+    [DataRow("\r\n", true, false)]
+    [DataRow("\0", false, true)]
     public void CandidateRecordSearchPreservesConfiguredRecordBoundaries(
         string terminator,
         bool crlf,
@@ -458,17 +459,17 @@ public sealed class RegexCandidateRecordSearchTests
             nullData: nullData,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(65, sink.LineNumber);
-        Assert.Equal(Encoding.UTF8.GetBytes(selectedRecord), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(65, sink.LineNumber);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(selectedRecord), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies a matching-line limit reports the number of records searched through the first
     /// selected candidate record.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CandidateRecordSearchHonorsMatchingLineLimit()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -494,18 +495,18 @@ public sealed class RegexCandidateRecordSearchTests
             maxMatchingLines: 1,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(65, sink.LineNumber);
-        Assert.Equal(65, searchedLines);
-        Assert.Equal("struct First\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(65, sink.LineNumber);
+        Assert.AreEqual(65, searchedLines);
+        Assert.AreSequenceEqual("struct First\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies definitive prefilter exhaustion reports every searched record, including a final
     /// unterminated record.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CandidateRecordSearchCountsRecordsAfterPrefilterExhaustion()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -528,17 +529,17 @@ public sealed class RegexCandidateRecordSearchTests
             out long searchedLines,
             requireMatchColumn: false);
 
-        Assert.False(matched);
-        Assert.Equal(0UL, sink.MatchedLines);
-        Assert.Equal(65, searchedLines);
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(matched);
+        Assert.AreEqual(0UL, sink.MatchedLines);
+        Assert.AreEqual(65, searchedLines);
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
     }
 
     /// <summary>
     /// Verifies a dense candidate stream makes the operation-scoped prefilter inert and signals
     /// that authoritative search must resume without the filter.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DenseCandidateRunnerSignalsUnfilteredHandoff()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -549,25 +550,25 @@ public sealed class RegexCandidateRecordSearchTests
             plan.Matcher.CreateCandidateRecordPrefilterRunner(haystack.Length);
         int searchOffset = 0;
 
-        Assert.True(runner.IsAvailable);
+        Assert.IsTrue(runner.IsAvailable);
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.True(runner.TryFindCandidate(haystack, searchOffset, out int candidate));
+            Assert.IsTrue(runner.TryFindCandidate(haystack, searchOffset, out int candidate));
             searchOffset = candidate + 1;
         }
 
-        Assert.False(runner.IsInert);
-        Assert.False(runner.TryFindCandidate(haystack, searchOffset, out int ignoredCandidate));
-        Assert.Equal(-1, ignoredCandidate);
-        Assert.True(runner.IsInert);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount, runner.SkipCount);
+        Assert.IsFalse(runner.IsInert);
+        Assert.IsFalse(runner.TryFindCandidate(haystack, searchOffset, out int ignoredCandidate));
+        Assert.AreEqual(-1, ignoredCandidate);
+        Assert.IsTrue(runner.IsInert);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount, runner.SkipCount);
     }
 
     /// <summary>
     /// Verifies a sparse candidate stream remains effective and a failed scan authoritatively
     /// reports that no candidate remains.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SparseCandidateRunnerReportsAuthoritativeExhaustion()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -583,24 +584,24 @@ public sealed class RegexCandidateRecordSearchTests
             plan.Matcher.CreateCandidateRecordPrefilterRunner(haystack.Length);
         int searchOffset = 0;
 
-        Assert.True(runner.IsAvailable);
+        Assert.IsTrue(runner.IsAvailable);
         for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
         {
-            Assert.True(runner.TryFindCandidate(haystack, searchOffset, out int candidate));
+            Assert.IsTrue(runner.TryFindCandidate(haystack, searchOffset, out int candidate));
             searchOffset = candidate + 1;
         }
 
-        Assert.False(runner.TryFindCandidate(haystack, searchOffset, out int ignoredCandidate));
-        Assert.Equal(-1, ignoredCandidate);
-        Assert.False(runner.IsInert);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 1, runner.SkipCount);
+        Assert.IsFalse(runner.TryFindCandidate(haystack, searchOffset, out int ignoredCandidate));
+        Assert.AreEqual(-1, ignoredCandidate);
+        Assert.IsFalse(runner.IsInert);
+        Assert.AreEqual(RegexPrefilterState.MinimumSkipCount + 1, runner.SkipCount);
     }
 
     /// <summary>
     /// Verifies candidate-record search reports the authoritative match start when the caller
     /// requests a column.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CandidateRecordSearchReportsAuthoritativeMatchColumn()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -618,18 +619,18 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(17, sink.MatchColumn);
-        Assert.Equal("padding padding enum Result\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(17, sink.MatchColumn);
+        Assert.AreSequenceEqual("padding padding enum Result\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies candidate discovery across non-ASCII records leaves Unicode word-boundary
     /// decisions to the authoritative matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonAsciiCandidateRecordsUseAuthoritativeWordBoundaries()
     {
         byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
@@ -648,10 +649,10 @@ public sealed class RegexCandidateRecordSearchTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(3, sink.LineNumber);
-        Assert.Equal("\u03BB struct Accepted\n", Encoding.UTF8.GetString(sink.Line));
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(3, sink.LineNumber);
+        Assert.AreEqual("\u03BB struct Accepted\n", Encoding.UTF8.GetString(sink.Line));
     }
 
     private static RegexSearchPlan CreateGeneralPlan(byte[][] patterns)

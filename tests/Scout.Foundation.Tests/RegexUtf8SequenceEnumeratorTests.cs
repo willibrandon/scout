@@ -6,12 +6,13 @@ namespace Scout;
 /// <summary>
 /// Verifies ordered UTF-8 sequence decomposition for minimized Unicode-class compilation.
 /// </summary>
+[TestClass]
 public sealed class RegexUtf8SequenceEnumeratorTests()
 {
     /// <summary>
     /// Verifies sequences cover every valid boundary in lexical order without crossing the surrogate gap.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmitsOrderedDisjointSequencesAcrossScalarBoundaries()
     {
         var enumerator = new RegexUtf8SequenceEnumerator(0x7F, 0x10FFFF);
@@ -22,36 +23,36 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
             sequences.Add(sequence);
         }
 
-        Assert.NotEmpty(sequences);
+        Assert.IsNotEmpty(sequences);
         int previousEnd = 0x7E;
         for (int sequenceIndex = 0; sequenceIndex < sequences.Count; sequenceIndex++)
         {
             RegexUtf8ByteSequence sequence = sequences[sequenceIndex];
-            Assert.InRange(sequence.Length, 1, 4);
+            Assert.IsInRange(1, 4, sequence.Length);
             for (int rangeIndex = 0; rangeIndex < sequence.Length; rangeIndex++)
             {
                 RegexUtf8ByteRange range = sequence[rangeIndex];
-                Assert.True(range.Start <= range.End);
+                Assert.IsLessThanOrEqualTo(range.End, range.Start);
             }
 
             int start = DecodeBoundary(sequence, useEnd: false);
             int end = DecodeBoundary(sequence, useEnd: true);
             int expectedStart = previousEnd == 0xD7FF ? 0xE000 : previousEnd + 1;
-            Assert.Equal(expectedStart, start);
-            Assert.True(start <= end);
+            Assert.AreEqual(expectedStart, start);
+            Assert.IsLessThanOrEqualTo(end, start);
             if (sequenceIndex > 0)
             {
-                Assert.True(CompareBoundaries(
+                Assert.IsLessThan(0, CompareBoundaries(
                     sequences[sequenceIndex - 1],
                     leftUseEnd: true,
                     sequence,
-                    rightUseEnd: false) < 0);
+                    rightUseEnd: false));
             }
 
             previousEnd = end;
         }
 
-        Assert.Equal(0x10FFFF, previousEnd);
+        Assert.AreEqual(0x10FFFF, previousEnd);
     }
 
     /// <summary>
@@ -59,14 +60,14 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
     /// </summary>
     /// <param name="start">The first valid scalar.</param>
     /// <param name="end">The last valid scalar.</param>
-    [Theory]
-    [InlineData(0x01, 0x7E)]
-    [InlineData(0x81, 0x7FE)]
-    [InlineData(0x801, 0xD7FE)]
-    [InlineData(0xD7F0, 0xE010)]
-    [InlineData(0xE001, 0xFFFE)]
-    [InlineData(0x10001, 0x10FFFE)]
-    [InlineData(0x81, 0x10FFFE)]
+    [TestMethod]
+    [DataRow(0x01, 0x7E)]
+    [DataRow(0x81, 0x7FE)]
+    [DataRow(0x801, 0xD7FE)]
+    [DataRow(0xD7F0, 0xE010)]
+    [DataRow(0xE001, 0xFFFE)]
+    [DataRow(0x10001, 0x10FFFE)]
+    [DataRow(0x81, 0x10FFFE)]
     public void EmitsUnalignedScalarRanges(int start, int end)
     {
         var enumerator = new RegexUtf8SequenceEnumerator(start, end);
@@ -77,7 +78,7 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
             sequences.Add(sequence);
         }
 
-        Assert.NotEmpty(sequences);
+        Assert.IsNotEmpty(sequences);
         int previousEnd = start - 1;
         for (int sequenceIndex = 0; sequenceIndex < sequences.Count; sequenceIndex++)
         {
@@ -86,12 +87,12 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
             int sequenceEnd = DecodeBoundary(sequence, useEnd: true);
             int expectedStart = previousEnd == 0xD7FF ? 0xE000 : previousEnd + 1;
 
-            Assert.Equal(expectedStart, sequenceStart);
-            Assert.True(sequenceStart <= sequenceEnd);
+            Assert.AreEqual(expectedStart, sequenceStart);
+            Assert.IsLessThanOrEqualTo(sequenceEnd, sequenceStart);
             previousEnd = sequenceEnd;
         }
 
-        Assert.Equal(end, previousEnd);
+        Assert.AreEqual(end, previousEnd);
     }
 
     private static int CompareBoundaries(
@@ -127,8 +128,8 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
         }
 
         OperationStatus status = Rune.DecodeFromUtf8(bytes, out Rune rune, out int consumed);
-        Assert.Equal(OperationStatus.Done, status);
-        Assert.Equal(bytes.Length, consumed);
+        Assert.AreEqual(OperationStatus.Done, status);
+        Assert.AreEqual(bytes.Length, consumed);
         return rune.Value;
     }
 }

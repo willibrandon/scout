@@ -5,16 +5,19 @@ namespace Scout;
 /// <summary>
 /// Verifies mixed-alternation matching remains authoritative without sacrificing throughput.
 /// </summary>
-[Collection(MixedAlternationThroughputTestGroup.Name)]
-public sealed class MixedAlternationThroughputTests()
+/// <param name="testContext">The context for the current test.</param>
+[DoNotParallelize]
+[TestClass]
+public sealed class MixedAlternationThroughputTests(TestContext testContext)
 {
     /// <summary>
     /// Verifies context construction scans a large buffer through conservative whole-buffer candidates.
     /// </summary>
-    [Fact(Timeout = 5000)]
+    [TestMethod]
+    [Timeout(5000, CooperativeCancellation = true)]
     public void BuildSearchResultUsesWholeBufferMixedAlternationCandidates()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         const string Pattern =
             "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
@@ -52,21 +55,22 @@ public sealed class MixedAlternationThroughputTests()
             regexPlan);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Equal(350_001, result.Lines.Count);
+        Assert.HasCount(350_001, result.Lines);
         Assert.DoesNotContain(
-            result.Lines.Take(350_000),
-            line => line.SelectedMatch);
-        Assert.True(result.Lines[^1].SelectedMatch);
-        Assert.Equal(1, result.Lines[^1].MatchColumn);
+            line => line.SelectedMatch,
+            result.Lines.Take(350_000));
+        Assert.IsTrue(result.Lines[^1].SelectedMatch);
+        Assert.AreEqual(1, result.Lines[^1].MatchColumn);
     }
 
     /// <summary>
     /// Verifies mixed literal and regex alternatives use a conservative prefilter and authoritative verification.
     /// </summary>
-    [Fact(Timeout = 5000)]
+    [TestMethod]
+    [Timeout(5000, CooperativeCancellation = true)]
     public void SearchMixedAlternationUsesConservativeCandidatesWithAuthoritativeVerification()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         const string pattern =
             "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
@@ -107,21 +111,21 @@ public sealed class MixedAlternationThroughputTests()
             out long matches);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.Matches);
-        Assert.Equal(350_001, sink.LineNumber);
-        Assert.Equal("CreateAhoCorasick"u8.ToArray(), sink.Match);
-        Assert.Equal(1, matchingLines);
-        Assert.Equal(1, matches);
+        Assert.AreNotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.Matches);
+        Assert.AreEqual(350_001, sink.LineNumber);
+        Assert.AreSequenceEqual("CreateAhoCorasick"u8.ToArray(), sink.Match);
+        Assert.AreEqual(1, matchingLines);
+        Assert.AreEqual(1, matches);
 
         cancellationToken.ThrowIfCancellationRequested();
         var rejectedSink = new CapturingMatchLineSink();
-        Assert.False(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+        Assert.IsFalse(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
             "CreateButNotAhoCorasick\n"u8,
             patterns,
             plan,
             ref rejectedSink));
-        Assert.Equal(0UL, rejectedSink.Matches);
+        Assert.AreEqual(0UL, rejectedSink.Matches);
     }
 }

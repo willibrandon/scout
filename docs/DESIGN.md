@@ -375,13 +375,13 @@ Behavior-bearing annotations are **not** suppressions and remain allowed where c
 Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quarantined test fails CI. There is **zero** waiver path for v1.0 — **the release gate requires zero skipped and zero waived tests.** During *pre-release internal milestones only*, an in-progress test may be temporarily marked with a tracked, time-boxed entry in `PARITY.md`, but every such entry **must be burned down before v1.0** and the count is asserted to be zero at Release. (This matches the stakeholder's "do not skip": nothing ships skipped.)
 
 1. **Unit tests** — port of ~52 inline `#[cfg(test)]` modules, one assertion-for-assertion.
-2. **Integration tests** — port of `tests/*.rs` driving the built `scout` binary as a subprocess on the same fixtures; the `rgtest!` macro harness is reimplemented as a fixture + source generator emitting one xUnit test per upstream case.
+2. **Integration tests** — port of `tests/*.rs` driving the built `scout` binary as a subprocess on the same fixtures; the `rgtest!` macro harness is reimplemented as a fixture + source generator emitting one MSTest test per upstream case.
 3. **Differential / conformance suite (mandatory)** — runs **both** `scout` and the pinned real `rg` over a large corpus × thousands of flag combinations. Deterministic cases assert **byte-identical stdout, stderr, and exit code**. Cases with upstream-unstable fields or ordering, such as elapsed-time summaries, JSON summaries, and default parallel directory/file-list output, must opt into an explicit normalizer; any remaining diff is fixed or recorded in `PARITY.md`.
 4. **Regex conformance** — port of the `regex` crate's test suite, gating `Scout.Automata` independently.
 5. **Encoding conformance** — `encoding_rs` test vectors gating `Scout.Encoding` (§4.4.1).
 6. **Fuzzing** — port of `fuzz/` targets via `SharpFuzz` (regex parse, glob compile, search loop).
 
-**Framework:** **xUnit v3** throughout (decided). Coverage tracked, but **parity, not %, is the bar.** All layers run on Linux, macOS, Windows × x64/arm64.
+**Framework:** **MSTest with Microsoft.Testing.Platform** throughout. Coverage tracked, but **parity, not %, is the bar.** All layers run on Linux, macOS, Windows × x64/arm64.
 
 ### 8.5 CI / test prerequisites — exactly pinned (revised per Codex)
 
@@ -498,7 +498,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **Name** `Scout` (binary `scout`, **no `sc` alias**, namespace `Scout`).
 - **Upstream pin** = commit `e89fff89ac9af12e8d4ce9d5fd07beb408ca730f` with vendored lockfile + UCD (§0).
 - **Repository** = standalone; this doc is the seed artifact.
-- **Test framework** = xUnit v3.
+- **Test framework** = MSTest with Microsoft.Testing.Platform.
 - **Regex engines** = all ported up front (M1).
 - **Encoding** = full `encoding_rs` port up front (§4.4.1).
 - **JSON** = explicit byte writer (§4.5.1).

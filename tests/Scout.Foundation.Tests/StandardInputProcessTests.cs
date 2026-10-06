@@ -5,16 +5,17 @@ namespace Scout;
 /// <summary>
 /// Verifies standard-input behavior through real managed child-process pipes.
 /// </summary>
-[Collection(ApplicationProcessStateGroup.Name)]
+[DoNotParallelize]
+[TestClass]
 public sealed class StandardInputProcessTests
 {
     /// <summary>
     /// Verifies matching redirected input is searched after the parent closes the pipe writer.
     /// </summary>
     /// <param name="explicitStandardInput">Whether the command names standard input with <c>-</c>.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public async Task MatchingRedirectedInputIsSearchedAtPipeEndOfFileAsync(
         bool explicitStandardInput)
     {
@@ -27,8 +28,8 @@ public sealed class StandardInputProcessTests
             input,
             arguments).ConfigureAwait(true);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual(string.Empty, error);
         Assert.StartsWith("1:ScoutScout\r\n\n", output, StringComparison.Ordinal);
         Assert.Contains("2 matches\n", output, StringComparison.Ordinal);
         Assert.Contains("1 matched lines\n", output, StringComparison.Ordinal);
@@ -39,9 +40,9 @@ public sealed class StandardInputProcessTests
     /// Verifies nonmatching redirected input returns ripgrep's no-match exit code at pipe EOF.
     /// </summary>
     /// <param name="explicitStandardInput">Whether the command names standard input with <c>-</c>.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public async Task NonmatchingRedirectedInputReturnsNoMatchAtPipeEndOfFileAsync(
         bool explicitStandardInput)
     {
@@ -54,8 +55,8 @@ public sealed class StandardInputProcessTests
             input,
             arguments).ConfigureAwait(true);
 
-        Assert.Equal(1, exitCode);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(1, exitCode);
+        Assert.AreEqual(string.Empty, error);
         Assert.StartsWith("\n0 matches\n", output, StringComparison.Ordinal);
         Assert.Contains("0 matched lines\n", output, StringComparison.Ordinal);
         Assert.Contains("9 bytes searched\n", output, StringComparison.Ordinal);
@@ -68,7 +69,7 @@ public sealed class StandardInputProcessTests
         string hostPath = Path.Join(
             AppContext.BaseDirectory,
             "Scout.App.ProcessHost.dll");
-        Assert.True(File.Exists(hostPath), hostPath);
+        Assert.IsTrue(File.Exists(hostPath), hostPath);
         string dotnetHost = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
         var startInfo = new ProcessStartInfo(dotnetHost)
         {
@@ -90,7 +91,7 @@ public sealed class StandardInputProcessTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
         Task<string> errorTask = process.StandardError.ReadToEndAsync();
         await process.StandardInput.BaseStream.WriteAsync(input).ConfigureAwait(false);

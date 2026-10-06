@@ -6,17 +6,19 @@ namespace Scout;
 /// <summary>
 /// Verifies raw Unix current-directory access.
 /// </summary>
+[TestClass]
+[DoNotParallelize]
 public sealed unsafe partial class RawUnixCurrentDirectoryTests
 {
     /// <summary>
     /// Verifies the current directory is exposed as platform bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GetReturnsCurrentDirectoryBytes()
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            Assert.Throws<PlatformNotSupportedException>(RawUnixCurrentDirectory.Get);
+            Assert.ThrowsExactly<PlatformNotSupportedException>(RawUnixCurrentDirectory.Get);
         }
         else
         {
@@ -28,7 +30,7 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
 
                 byte[] actual = RawUnixCurrentDirectory.Get();
 
-                Assert.Equal(Encoding.UTF8.GetBytes(Directory.GetCurrentDirectory()), actual);
+                Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(Directory.GetCurrentDirectory()), actual);
                 Assert.DoesNotContain((byte)0, actual);
             }
             finally
@@ -42,7 +44,7 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
     /// <summary>
     /// Verifies Linux current-directory bytes are not decoded through UTF-8.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GetPreservesInvalidUtf8CurrentDirectoryOnLinux()
     {
         if (OperatingSystem.IsLinux())
@@ -56,15 +58,15 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
             try
             {
                 RawUnixDirectory.Create(invalidPath);
-                Assert.Equal(0, ChangeDirectory(invalidPath));
+                Assert.AreEqual(0, ChangeDirectory(invalidPath));
 
                 byte[] actual = RawUnixCurrentDirectory.Get();
 
-                Assert.Equal(invalidPath, actual);
+                Assert.AreSequenceEqual(invalidPath, actual);
             }
             finally
             {
-                Assert.Equal(0, ChangeDirectory(previousDirectory));
+                Assert.AreEqual(0, ChangeDirectory(previousDirectory));
                 _ = Close(previousDirectory);
                 _ = RemoveDirectory(invalidPath);
                 Directory.Delete(root, recursive: true);
@@ -72,7 +74,7 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
         }
         else
         {
-            Assert.True(OperatingSystem.IsMacOS() || OperatingSystem.IsWindows());
+            Assert.IsTrue(OperatingSystem.IsMacOS() || OperatingSystem.IsWindows());
         }
     }
 
@@ -98,7 +100,7 @@ public sealed unsafe partial class RawUnixCurrentDirectoryTests
         fixed (byte* currentDirectoryPointer = currentDirectory)
         {
             int fileDescriptor = Open(currentDirectoryPointer, flags: 0);
-            Assert.True(fileDescriptor >= 0, "Failed to open the current directory file descriptor.");
+            Assert.IsGreaterThanOrEqualTo(0, fileDescriptor, "Failed to open the current directory file descriptor.");
             return fileDescriptor;
         }
     }

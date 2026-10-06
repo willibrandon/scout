@@ -5,13 +5,14 @@ namespace Scout;
 /// <summary>
 /// Verifies streamed PikeVM search semantics independently of specialized regex engines.
 /// </summary>
+[TestClass]
 public sealed class PikeVmTests()
 {
     /// <summary>
     /// Verifies streamed candidates agree with sequential anchored matching across ASCII,
     /// variable-width UTF-8, acyclic closures, cyclic closures, and positional predicates.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StreamedFindMatchesSequentialAnchoredSearch()
     {
         string[] patterns =
@@ -61,7 +62,7 @@ public sealed class PikeVmTests()
 
                     RegexMatch? actual = streamedVm.Find(haystack, ref candidates);
 
-                    Assert.True(
+                    Assert.IsTrue(
                         expected == actual,
                         $"Pattern '{patterns[patternIndex]}', haystack {Convert.ToHexString(haystack)}, start {startAt}: expected {expected}, actual {actual}.");
                 }
@@ -76,12 +77,12 @@ public sealed class PikeVmTests()
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="haystackText">The UTF-8 haystack.</param>
     /// <param name="startAt">The first permitted candidate start.</param>
-    [Theory]
-    [InlineData("a(?:.*|)", "a\u03B4", 0)]
-    [InlineData("needle", "\u03B4needle", 0)]
-    [InlineData("a", "a\u03B4", 0)]
-    [InlineData("a+", "aaa\u03B4aaa", 3)]
-    [InlineData("a+", "aaa\u03B4aaa", 4)]
+    [TestMethod]
+    [DataRow("a(?:.*|)", "a\u03B4", 0)]
+    [DataRow("needle", "\u03B4needle", 0)]
+    [DataRow("a", "a\u03B4", 0)]
+    [DataRow("a+", "aaa\u03B4aaa", 3)]
+    [DataRow("a+", "aaa\u03B4aaa", 4)]
     public void SpeculativeAsciiFindMatchesSequentialSearch(
         string pattern,
         string haystackText,
@@ -101,17 +102,17 @@ public sealed class PikeVmTests()
 
         RegexMatch? actual = actualVm.Find(haystack, ref candidates);
 
-        Assert.Equal(expected, actual);
+        Assert.AreEqual(expected, actual);
         if (pattern == "a(?:.*|)")
         {
-            Assert.Equal(new RegexMatch(0, 3), actual);
+            Assert.AreEqual(new RegexMatch(0, 3), actual);
         }
     }
 
     /// <summary>
     /// Verifies repeated streamed searches preserve matches before, between, and after non-ASCII scalars.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SpeculativeAsciiIterationHandlesNonAsciiAroundMatches()
     {
         RegexNfa nfa = CompileNfa("a+");
@@ -137,7 +138,7 @@ public sealed class PikeVmTests()
             startAt = match.Value.End;
         }
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<RegexMatch>(
             [new RegexMatch(2, 2), new RegexMatch(6, 3), new RegexMatch(11, 1)],
             matches);
     }
@@ -145,7 +146,7 @@ public sealed class PikeVmTests()
     /// <summary>
     /// Verifies speculative ASCII execution preserves structural candidate-start filtering around UTF-8 input.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SpeculativeAsciiFindPreservesCandidateStartFiltering()
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?m)^a"u8);
@@ -160,8 +161,8 @@ public sealed class PikeVmTests()
             tree.Root,
             options,
             utf8ByteTrieCache: null);
-        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
-        Assert.NotNull(predicate);
+        Assert.IsTrue(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.IsNotNull(predicate);
         byte[] haystack = Encoding.UTF8.GetBytes("x\u03B4a\na");
         var expectedVm = new PikeVm(nfa);
         var actualVm = new PikeVm(nfa);
@@ -175,15 +176,15 @@ public sealed class PikeVmTests()
 
         RegexMatch? actual = actualVm.Find(haystack, ref candidates);
 
-        Assert.Equal(new RegexMatch(5, 1), expected);
-        Assert.Equal(expected, actual);
+        Assert.AreEqual(expected, new RegexMatch(5, 1));
+        Assert.AreEqual(expected, actual);
     }
 
     /// <summary>
     /// Verifies non-ASCII search preserves active required-literal ranges instead of sharing
     /// their mutable scratch with a speculative value copy.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindPreservesBufferedRequiredLiteralRangesAcrossNonAsciiInput()
     {
         const string pattern = "(?:Z.{99}|Q)(?:needle).$";
@@ -194,9 +195,9 @@ public sealed class PikeVmTests()
             multiLine: false,
             dotMatchesNewline: false);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        Assert.NotNull(prefilter);
-        Assert.Equal(RegexPrefilterKind.RequiredLiteral, prefilter.Kind);
-        Assert.True(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.IsNotNull(prefilter);
+        Assert.AreEqual(RegexPrefilterKind.RequiredLiteral, prefilter.Kind);
+        Assert.IsTrue(prefilter.UsesRequiredLiteralPrefixGate);
         RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
             tree.Root,
             options,
@@ -218,13 +219,13 @@ public sealed class PikeVmTests()
             prefilter,
             requiredRangeBuffer);
 
-        Assert.True(candidates.MoveNext(out int firstCandidate));
-        Assert.Equal(99, firstCandidate);
-        Assert.True(candidates.HasBufferedRequiredRanges);
+        Assert.IsTrue(candidates.MoveNext(out int firstCandidate));
+        Assert.AreEqual(99, firstCandidate);
+        Assert.IsTrue(candidates.HasBufferedRequiredRanges);
 
         RegexMatch? match = new PikeVm(nfa).Find(haystack, ref candidates);
 
-        Assert.Equal(new RegexMatch(140, 108), match);
+        Assert.AreEqual(new RegexMatch(140, 108), match);
     }
 
     private static RegexNfa CompileNfa(string pattern)

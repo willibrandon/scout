@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies vimgrep output from authoritative match-line events.
 /// </summary>
+[TestClass]
 public sealed class VimgrepSinkTests
 {
     /// <summary>
     /// Verifies short-line records stream as each match arrives.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StreamsShortLineRecords()
     {
         using MemoryStream output = new();
@@ -20,11 +21,11 @@ public sealed class VimgrepSinkTests
         ReadOnlySpan<byte> line = "zero one one\n"u8;
 
         sink.MatchedLine(3, 20, 25, 6, line, line.Slice(5, 3));
-        Assert.NotEmpty(output.ToArray());
+        Assert.IsNotEmpty(output.ToArray());
         sink.MatchedLine(3, 20, 29, 10, line, line.Slice(9, 3));
         sink.FinishLine(3, 20, line);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "3:6:25:zero one one\n3:10:29:zero one one\n",
             System.Text.Encoding.UTF8.GetString(output.ToArray()));
     }
@@ -32,7 +33,7 @@ public sealed class VimgrepSinkTests
     /// <summary>
     /// Verifies long-line records use the count supplied by authoritative events.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefersLongOmittedLineUntilItsMatchCountIsKnown()
     {
         using MemoryStream output = new();
@@ -44,10 +45,10 @@ public sealed class VimgrepSinkTests
         sink.MatchedLine(1, 0, 0, 1, line, line.Slice(0, 2));
         sink.MatchedLine(1, 0, 3, 4, line, line.Slice(3, 2));
         sink.MatchedLine(1, 0, 6, 7, line, line.Slice(6, 2));
-        Assert.Empty(output.ToArray());
+        Assert.IsEmpty(output.ToArray());
         sink.FinishLine(1, 0, line);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "[Omitted long line with 3 matches]\n" +
             "[Omitted long line with 3 matches]\n" +
             "[Omitted long line with 3 matches]\n",
@@ -57,7 +58,7 @@ public sealed class VimgrepSinkTests
     /// <summary>
     /// Verifies retained context matches preserve their adjusted line and byte offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AppliesContextOffsetsToDeferredRecords()
     {
         using MemoryStream output = new();
@@ -74,7 +75,7 @@ public sealed class VimgrepSinkTests
         sink.MatchedLine(1, 0, 4, 5, line, line.Slice(4, 5));
         sink.FinishLine(1, 0, line);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "7:5:104:[Omitted long line with 1 matches]\n",
             System.Text.Encoding.UTF8.GetString(output.ToArray()));
     }
@@ -82,7 +83,7 @@ public sealed class VimgrepSinkTests
     /// <summary>
     /// Verifies only-matching output applies the line limit to each authoritative span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AppliesLineLimitToOnlyMatchingSpans()
     {
         using MemoryStream output = new();
@@ -96,10 +97,10 @@ public sealed class VimgrepSinkTests
         ReadOnlySpan<byte> line = "zero match tail\n"u8;
 
         sink.MatchedLine(2, 30, 35, 6, line, line.Slice(5, 5));
-        Assert.Empty(output.ToArray());
+        Assert.IsEmpty(output.ToArray());
         sink.FinishLine(2, 30, line);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "2:6:35:[Omitted long matching line]\n",
             System.Text.Encoding.UTF8.GetString(output.ToArray()));
     }

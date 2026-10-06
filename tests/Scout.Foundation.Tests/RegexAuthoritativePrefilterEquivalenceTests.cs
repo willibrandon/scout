@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies conservative prefilters cannot change authoritative regex results.
 /// </summary>
+[TestClass]
 public sealed class RegexAuthoritativePrefilterEquivalenceTests
 {
     /// <summary>
     /// Verifies enabling a syntax-derived prefilter preserves ordered spans, counts, and captures.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SyntaxDerivedPrefilterPreservesAuthoritativeResults()
     {
         AssertEquivalent(
@@ -38,11 +39,11 @@ public sealed class RegexAuthoritativePrefilterEquivalenceTests
             compilePrefilter: false);
         byte[] bytes = Encoding.UTF8.GetBytes(haystack);
 
-        Assert.NotEqual(RegexPrefilterKind.None, prefiltered.PrefilterKind);
-        Assert.Equal(RegexPrefilterKind.None, unfiltered.PrefilterKind);
-        Assert.Equal(FindAll(unfiltered, bytes), FindAll(prefiltered, bytes));
-        Assert.Equal(unfiltered.CountMatches(bytes), prefiltered.CountMatches(bytes));
-        Assert.Equal(unfiltered.SumMatchSpans(bytes), prefiltered.SumMatchSpans(bytes));
+        Assert.AreNotEqual(RegexPrefilterKind.None, prefiltered.PrefilterKind);
+        Assert.AreEqual(RegexPrefilterKind.None, unfiltered.PrefilterKind);
+        Assert.AreSequenceEqual(FindAll(unfiltered, bytes), FindAll(prefiltered, bytes));
+        Assert.AreEqual(unfiltered.CountMatches(bytes), prefiltered.CountMatches(bytes));
+        Assert.AreEqual(unfiltered.SumMatchSpans(bytes), prefiltered.SumMatchSpans(bytes));
         AssertCapturesEqual(
             unfiltered.FindCaptures(bytes),
             prefiltered.FindCaptures(bytes),
@@ -91,10 +92,17 @@ public sealed class RegexAuthoritativePrefilterEquivalenceTests
         RegexCaptures? actual,
         int captureCount)
     {
-        Assert.Equal(expected?.Match, actual?.Match);
+        if (expected is null)
+        {
+            Assert.IsNull(actual);
+            return;
+        }
+
+        Assert.IsNotNull(actual);
+        Assert.AreEqual(expected.Match, actual.Match);
         for (int index = 0; index <= captureCount; index++)
         {
-            Assert.Equal(expected?.GetGroup(index), actual?.GetGroup(index));
+            Assert.AreEqual(expected.GetGroup(index), actual.GetGroup(index));
         }
     }
 }

@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the Native AOT Windows build exercises redirected standard input through an anonymous pipe.
 /// </summary>
+[TestClass]
 public sealed class NativeStandardInputConfigurationTests
 {
     /// <summary>
     /// Verifies both native Windows build modes run matching and nonmatching pipe smoke cases.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WindowsNativeBuildRunsAnonymousPipeStandardInputSmoke()
     {
         string root = FindRepositoryRoot();

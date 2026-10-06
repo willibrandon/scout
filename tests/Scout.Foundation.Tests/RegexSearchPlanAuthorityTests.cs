@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies plan-owning search APIs derive match semantics from the compiled plan.
 /// </summary>
+[TestClass]
 public sealed class RegexSearchPlanAuthorityTests
 {
     /// <summary>
     /// Verifies an unrelated empty pattern list cannot suppress a non-empty authoritative plan.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyNeedlesDoNotSuppressAuthoritativePlan()
     {
         byte[][] patterns = [@"\bfoo\b"u8.ToArray()];
@@ -23,9 +24,9 @@ public sealed class RegexSearchPlanAuthorityTests
             plan,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal("foo\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreSequenceEqual("foo\n"u8.ToArray(), sink.Line.ToArray());
     }
 }

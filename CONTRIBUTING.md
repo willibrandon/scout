@@ -6,8 +6,8 @@ revision, and make the evidence easy to review.
 
 ## Prerequisites
 
-- [.NET SDK 10.0.102](https://dotnet.microsoft.com/download/dotnet/10.0),
-  pinned by `global.json` with roll-forward disabled.
+- The [.NET SDK](https://dotnet.microsoft.com/download/dotnet/10.0) selected
+  by `global.json` and the .NET 9 runtime for the `net9.0` tests.
 - Git and a terminal with ANSI support.
 - A C toolchain for native binaries: `clang` on Unix, or a Visual Studio
   Developer Command Prompt on Windows.
@@ -51,14 +51,15 @@ For tests, run the narrowest suite that covers your change, then broaden before
 review:
 
 ```sh
-dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore
-dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
-dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+dotnet test --project tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore
+dotnet test --project tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
 ```
 
-The test projects use VSTest and Coverlet. `xunit.v3.mtp-off` is xUnit's
-supported package for this setup on .NET 10; it keeps `dotnet test`, the Visual
-Studio adapter, and the coverage collector working together.
+The test projects use MSTest.Sdk with Microsoft.Testing.Platform. The runner is
+selected in `global.json`, so `dotnet test` uses MTP directly. To collect coverage,
+add `--coverage --coverage-output-format cobertura`; to write test results, add
+`--report-trx --results-directory TestResults`.
 
 The full solution test run is expected before release-grade changes, but it
 requires the pinned oracle setup:
@@ -67,7 +68,7 @@ requires the pinned oracle setup:
 eng/setup-ripgrep-oracle.sh
 eng/fetch-corpora.sh --all
 eng/preflight.sh
-dotnet test Scout.slnx --no-restore
+dotnet test --solution Scout.slnx --no-restore
 ```
 
 On Windows, use `eng/setup-ripgrep-oracle.ps1` and install host prerequisites

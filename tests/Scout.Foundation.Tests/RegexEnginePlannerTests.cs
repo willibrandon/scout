@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies operation-scoped regex engine selection and matcher ownership.
 /// </summary>
+[TestClass]
 public sealed class RegexEnginePlannerTests
 {
     /// <summary>
     /// Verifies explicit default selection retains the authoritative native matcher and its options.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultEngineRetainsAuthoritativeNativePlan()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=default", "--word-regexp", "needle");
@@ -20,19 +21,19 @@ public sealed class RegexEnginePlannerTests
                 out owner.Resource,
                 out ScoutError? error);
 
-            Assert.True(created, error?.FormatAlternate());
-            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(owner.Resource);
-            Assert.False(selectedPlan.UsesPcre2);
-            RegexSearchPlan nativePlan = Assert.IsType<RegexSearchPlan>(selectedPlan.NativePlan);
-            Assert.True(nativePlan.Options.WordRegexp);
-            Assert.Equal(new RegexMatch(1, 6), nativePlan.Matcher.Find(" needle "u8));
+            Assert.IsTrue(created, error?.FormatAlternate());
+            RegexEnginePlan selectedPlan = Assert.IsExactInstanceOfType<RegexEnginePlan>(owner.Resource);
+            Assert.IsFalse(selectedPlan.UsesPcre2);
+            RegexSearchPlan nativePlan = Assert.IsExactInstanceOfType<RegexSearchPlan>(selectedPlan.NativePlan);
+            Assert.IsTrue(nativePlan.Options.WordRegexp);
+            Assert.AreEqual(new RegexMatch(1, 6), nativePlan.Matcher.Find(" needle "u8));
         }
     }
 
     /// <summary>
     /// Verifies auto selection retains the native plan when authoritative construction succeeds.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoEngineRetainsSuccessfulNativePlan()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=auto", "--fixed-strings", "a.c");
@@ -45,19 +46,19 @@ public sealed class RegexEnginePlannerTests
                 out owner.Resource,
                 out ScoutError? error);
 
-            Assert.True(created, error?.FormatAlternate());
-            RegexEnginePlan selectedPlan = Assert.IsType<RegexEnginePlan>(owner.Resource);
-            Assert.False(selectedPlan.UsesPcre2);
-            Assert.NotNull(selectedPlan.NativePlan);
-            Assert.Equal("a\\.c"u8.ToArray(), Assert.Single(selectedPlan.Patterns));
-            Assert.Equal("a.c"u8.ToArray(), rawPattern);
+            Assert.IsTrue(created, error?.FormatAlternate());
+            RegexEnginePlan selectedPlan = Assert.IsExactInstanceOfType<RegexEnginePlan>(owner.Resource);
+            Assert.IsFalse(selectedPlan.UsesPcre2);
+            Assert.IsNotNull(selectedPlan.NativePlan);
+            Assert.AreSequenceEqual("a\\.c"u8.ToArray(), Assert.ContainsSingle(selectedPlan.Patterns));
+            Assert.AreSequenceEqual("a.c"u8.ToArray(), rawPattern);
         }
     }
 
     /// <summary>
     /// Verifies auto selection reports both construction errors when neither engine is available.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoEngineReportsBothConstructionErrors()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=auto", "(?=a)a");
@@ -78,11 +79,11 @@ public sealed class RegexEnginePlannerTests
     /// Verifies PCRE2-capable escapes rejected by the native parser reach the PCRE2 construction attempt.
     /// </summary>
     /// <param name="pattern">The PCRE2-capable pattern rejected by the native engine.</param>
-    [Theory]
-    [InlineData(@"(Scout)\1")]
-    [InlineData(@"(?<word>Scout)\k<word>")]
-    [InlineData(@"Scout\KRegex")]
-    [InlineData(@"\X")]
+    [TestMethod]
+    [DataRow(@"(Scout)\1")]
+    [DataRow(@"(?<word>Scout)\k<word>")]
+    [DataRow(@"Scout\KRegex")]
+    [DataRow(@"\X")]
     public void AutoEngineRoutesUnsupportedEscapesToPcre2Attempt(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
@@ -100,7 +101,7 @@ public sealed class RegexEnginePlannerTests
     /// <summary>
     /// Verifies explicit default selection returns only the native construction error.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultEngineReturnsNativeConstructionError()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=default", "(?=a)a");
@@ -114,14 +115,14 @@ public sealed class RegexEnginePlannerTests
     /// <summary>
     /// Verifies operation-scoped planning preserves ripgrep-compatible repetition diagnostics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultEnginePreservesRepetitionParseDiagnostic()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=default", "*");
 
         ScoutError error = GetPlanningError(["*"u8.ToArray()], lowArgs);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "regex parse error:\n    (?:*)\n       ^\n" +
             "error: repetition operator missing expression",
             error.Message);
@@ -130,7 +131,7 @@ public sealed class RegexEnginePlannerTests
     /// <summary>
     /// Verifies native syntax errors include the complete compiled expression and error location.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultEngineFormatsUnclosedGroupParseDiagnostic()
     {
         const string Pattern = "StartAsync(|DevServerHost|server-2022|CollectionUrl|DevServer.*Process";
@@ -138,7 +139,7 @@ public sealed class RegexEnginePlannerTests
 
         ScoutError error = GetPlanningError([System.Text.Encoding.UTF8.GetBytes(Pattern)], lowArgs);
 
-        Assert.Equal(
+        Assert.AreEqual(
             "regex parse error:\n" +
             "    (?:StartAsync(|DevServerHost|server-2022|CollectionUrl|DevServer.*Process)\n" +
             "    ^\n" +
@@ -149,20 +150,20 @@ public sealed class RegexEnginePlannerTests
     /// <summary>
     /// Verifies explicit PCRE2 selection reports the linked-runtime diagnostic directly.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void Pcre2EngineReportsUnavailableRuntimeDirectly()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=pcre2", "needle");
 
         ScoutError error = GetPlanningError(["needle"u8.ToArray()], lowArgs);
 
-        Assert.Equal(Pcre2Library.UnavailableErrorMessage, error.Message);
+        Assert.AreEqual(Pcre2Library.UnavailableErrorMessage, error.Message);
     }
 
     /// <summary>
     /// Verifies native size-policy failure participates in auto fallback selection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoEngineFallsBackAfterNativeSizePolicyFailure()
     {
         CliLowArgs lowArgs = ParseLowArgs(
@@ -179,7 +180,7 @@ public sealed class RegexEnginePlannerTests
     /// <summary>
     /// Verifies native binary NUL policy remains part of authoritative engine construction.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultEnginePreservesBinaryNulPolicy()
     {
         CliLowArgs lowArgs = ParseLowArgs("--engine=default", @"\x00");
@@ -196,8 +197,8 @@ public sealed class RegexEnginePlannerTests
         using (var owner = new DisposableOwner<RegexEnginePlan>())
         {
             bool created = RegexEnginePlanner.TryCreate(patterns, lowArgs, out owner.Resource, out ScoutError? error);
-            Assert.False(created);
-            return Assert.IsType<ScoutError>(error);
+            Assert.IsFalse(created);
+            return Assert.IsExactInstanceOfType<ScoutError>(error);
         }
     }
 
@@ -210,7 +211,7 @@ public sealed class RegexEnginePlannerTests
         }
 
         CliParseResult result = CliParser.Parse(osArguments);
-        Assert.Equal(CliParseStatus.Ok, result.Status);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
         return result.LowArgs!;
     }
 }

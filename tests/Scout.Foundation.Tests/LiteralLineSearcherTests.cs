@@ -5,13 +5,14 @@ namespace Scout;
 /// <summary>
 /// Verifies literal line search behavior.
 /// </summary>
+[TestClass]
 public sealed class LiteralLineSearcherTests
 {
     /// <summary>
     /// Verifies inverted max-count lookahead is restricted to callers requesting an inspected extent
     /// while the compiled plan remains the sole matching authority.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertedMaxCountLookaheadIsOptInForExtentSearch()
     {
         var patterns = new CountingPatternList(["foo"u8.ToArray()]);
@@ -30,9 +31,9 @@ public sealed class LiteralLineSearcherTests
             maxMatchingLines: 1,
             requireMatchColumn: false);
 
-        Assert.True(directMatched);
-        Assert.Equal(1UL, directSink.MatchedLines);
-        Assert.Equal(0, patterns.AccessCount);
+        Assert.IsTrue(directMatched);
+        Assert.AreEqual(1UL, directSink.MatchedLines);
+        Assert.AreEqual(0, patterns.AccessCount);
 
         var extentSink = new CapturingLineSink();
         patterns.ResetAccessCount();
@@ -46,16 +47,16 @@ public sealed class LiteralLineSearcherTests
                 maxMatchingLines: 1,
                 requireMatchColumn: false);
 
-        Assert.True(extentMatched);
-        Assert.Equal(1UL, extentSink.MatchedLines);
-        Assert.Equal(0, patterns.AccessCount);
-        Assert.Equal(8UL, searchedBytes);
+        Assert.IsTrue(extentMatched);
+        Assert.AreEqual(1UL, extentSink.MatchedLines);
+        Assert.AreEqual(0, patterns.AccessCount);
+        Assert.AreEqual(8UL, searchedBytes);
     }
 
     /// <summary>
     /// Verifies whole-record matching keeps the single-pattern literal contract.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SinglePatternLineRegexpTreatsMetacharactersLiterally()
     {
         var sink = new CapturingLineSink();
@@ -66,16 +67,16 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             lineRegexp: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal("a.c\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreSequenceEqual("a.c\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies line feeds remain literal content in NUL-terminated whole-record matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SinglePatternLineRegexpMatchesCompleteNullTerminatedRecord()
     {
         var sink = new CapturingLineSink();
@@ -87,16 +88,16 @@ public sealed class LiteralLineSearcherTests
             lineRegexp: true,
             nullData: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal("a\nb\0"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreSequenceEqual("a\nb\0"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies parsed character-class intersections remain authoritative in line-oriented search.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesUsesAuthoritativeCharacterClassIntersection()
     {
         byte[][] patterns = ["[a-z&&def]+"u8.ToArray()];
@@ -105,13 +106,13 @@ public sealed class LiteralLineSearcherTests
             "abc\ndef\nfed\nxyz\n"u8,
             patterns);
 
-        Assert.Equal(2, matches);
+        Assert.AreEqual(2, matches);
     }
 
     /// <summary>
     /// Verifies a leading unscoped multiline flag is interpreted by the parsed automaton.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesHonorsLeadingUnscopedMultilineFlag()
     {
         byte[][] patterns = ["(?m)^Scout.*$"u8.ToArray()];
@@ -120,7 +121,7 @@ public sealed class LiteralLineSearcherTests
             "Scout one\nnot Scout\nScout two\n"u8,
             patterns);
 
-        Assert.Equal(2, matches);
+        Assert.AreEqual(2, matches);
     }
 
     /// <summary>
@@ -133,13 +134,13 @@ public sealed class LiteralLineSearcherTests
     /// <param name="expectedMatchedLines">The expected selected-record count.</param>
     /// <param name="expectedLineNumber">The expected last selected-record number.</param>
     /// <param name="expectedByteOffset">The expected last selected-record byte offset.</param>
-    [Theory]
-    [InlineData("^$", "abc\n\nx\n", false, 1, 2, 4)]
-    [InlineData("(?m)^$", "abc\n\nx\n", false, 1, 2, 4)]
-    [InlineData("^$", "abc\r\n\r\nx\r\n", false, 0, 0, 0)]
-    [InlineData("(?m)^$", "abc\r\n\r\nx\r\n", false, 0, 0, 0)]
-    [InlineData("^$", "abc\r\n\r\nx\r\n", true, 1, 2, 5)]
-    [InlineData("(?m)^$", "abc\r\n\r\nx\r\n", true, 1, 2, 5)]
+    [TestMethod]
+    [DataRow("^$", "abc\n\nx\n", false, 1UL, 2L, 4L)]
+    [DataRow("(?m)^$", "abc\n\nx\n", false, 1UL, 2L, 4L)]
+    [DataRow("^$", "abc\r\n\r\nx\r\n", false, 0UL, 0L, 0L)]
+    [DataRow("(?m)^$", "abc\r\n\r\nx\r\n", false, 0UL, 0L, 0L)]
+    [DataRow("^$", "abc\r\n\r\nx\r\n", true, 1UL, 2L, 5L)]
+    [DataRow("(?m)^$", "abc\r\n\r\nx\r\n", true, 1UL, 2L, 5L)]
     public void SearchAssignsEmptyLineAnchorMatchesToTheirRecords(
         string pattern,
         string haystack,
@@ -170,21 +171,21 @@ public sealed class LiteralLineSearcherTests
             plan,
             crlf: crlf);
 
-        Assert.Equal(expectedMatchedLines > 0, matched);
-        Assert.Equal(expectedMatchedLines, sink.MatchedLines);
-        Assert.Equal((long)expectedMatchedLines, countedLines);
+        Assert.AreEqual(expectedMatchedLines > 0, matched);
+        Assert.AreEqual(expectedMatchedLines, sink.MatchedLines);
+        Assert.AreEqual((long)expectedMatchedLines, countedLines);
         if (expectedMatchedLines > 0)
         {
-            Assert.Equal(expectedLineNumber, sink.LineNumber);
-            Assert.Equal(expectedByteOffset, sink.ByteOffset);
-            Assert.Equal(1, sink.MatchColumn);
+            Assert.AreEqual(expectedLineNumber, sink.LineNumber);
+            Assert.AreEqual(expectedByteOffset, sink.ByteOffset);
+            Assert.AreEqual(1, sink.MatchColumn);
         }
     }
 
     /// <summary>
     /// Verifies a possible line candidate cannot select a record without an authoritative match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PossibleLineCandidateRequiresAuthoritativeVerification()
     {
         byte[][] patterns = ["^$"u8.ToArray()];
@@ -204,15 +205,15 @@ public sealed class LiteralLineSearcherTests
             crlf: true,
             requireMatchColumn: true);
 
-        Assert.False(matched);
-        Assert.Equal(0UL, sink.MatchedLines);
+        Assert.IsFalse(matched);
+        Assert.AreEqual(0UL, sink.MatchedLines);
     }
 
     /// <summary>
     /// Verifies a zero-width match at the end of an unterminated final record selects that record
     /// without exposing a synthetic match column.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EndAnchorAtHaystackEndSelectsUnterminatedFinalRecord()
     {
         byte[][] patterns = ["$"u8.ToArray()];
@@ -228,11 +229,11 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             requireMatchColumn: true);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(4, sink.ByteOffset);
-        Assert.Equal(0, sink.MatchColumn);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(4, sink.ByteOffset);
+        Assert.AreEqual(0, sink.MatchColumn);
     }
 
     /// <summary>
@@ -241,9 +242,9 @@ public sealed class LiteralLineSearcherTests
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="haystack">The records to search.</param>
     /// <param name="expected">The expected non-overlapping match count.</param>
-    [Theory]
-    [InlineData(@"\bGeneratedRecord\b", "GeneratedRecords\nGeneratedRecord\nx GeneratedRecord y\n", 2)]
-    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "public class Other\r\ninternal sealed class GeneratedRecord\r\n", 1)]
+    [TestMethod]
+    [DataRow(@"\bGeneratedRecord\b", "GeneratedRecords\nGeneratedRecord\nx GeneratedRecord y\n", 2L)]
+    [DataRow(@"^internal sealed class GeneratedRecord\r?$", "public class Other\r\ninternal sealed class GeneratedRecord\r\n", 1L)]
     public void CountMatchesUsesAuthoritativeGeneralRegexPlan(
         string pattern,
         string haystack,
@@ -255,14 +256,14 @@ public sealed class LiteralLineSearcherTests
             Encoding.UTF8.GetBytes(haystack),
             patterns);
 
-        Assert.Equal(expected, matches);
+        Assert.AreEqual(expected, matches);
     }
 
     /// <summary>
     /// Verifies whole-record regex plans can group delayed match ends while retaining the guards
     /// for NUL records, multiline matching, preserved CRLF bytes, inversion, and absolute anchors.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineRegexpUsesIndependentRecordProjectionOnlyWhenSemanticallySafe()
     {
         byte[][] patterns = [@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray()];
@@ -273,72 +274,72 @@ public sealed class LiteralLineSearcherTests
                 asciiCaseInsensitive: false,
                 lineRegexp: true));
 
-        Assert.NotNull(plan);
-        Assert.True(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsNotNull(plan);
+        Assert.IsTrue(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             plan,
             invertMatch: false,
             requireMatchColumn: false));
         using (RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0))
         {
-            Assert.True(runner.IsAvailable);
-            Assert.True(runner.UsesAsciiProjection);
+            Assert.IsTrue(runner.IsAvailable);
+            Assert.IsTrue(runner.UsesAsciiProjection);
         }
 
-        Assert.Equal(2, LiteralLineSearcher.CountMatchingLines(
+        Assert.AreEqual(2, LiteralLineSearcher.CountMatchingLines(
             haystack,
             patterns,
             lineRegexp: true));
-        Assert.Equal(1, LiteralLineSearcher.CountMatchingLines(
+        Assert.AreEqual(1, LiteralLineSearcher.CountMatchingLines(
             haystack,
             patterns,
             lineRegexp: true,
             maxMatchingLines: 1));
-        Assert.Equal(2, LiteralLineSearcher.CountMatchingLines(
+        Assert.AreEqual(2, LiteralLineSearcher.CountMatchingLines(
             haystack,
             patterns,
             invertMatch: true,
             lineRegexp: true));
 
-        RegexSearchPlan nulPlan = Assert.IsType<RegexSearchPlan>(RegexSearchPlan.Create(
+        RegexSearchPlan nulPlan = Assert.IsExactInstanceOfType<RegexSearchPlan>(RegexSearchPlan.Create(
             patterns,
             new RegexSearchPlanOptions(
                 asciiCaseInsensitive: false,
                 lineRegexp: true,
                 nullData: true)));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             nulPlan,
             invertMatch: false,
             requireMatchColumn: false));
 
-        RegexSearchPlan multilinePlan = Assert.IsType<RegexSearchPlan>(RegexSearchPlan.Create(
+        RegexSearchPlan multilinePlan = Assert.IsExactInstanceOfType<RegexSearchPlan>(RegexSearchPlan.Create(
             patterns,
             new RegexSearchPlanOptions(
                 asciiCaseInsensitive: false,
                 lineRegexp: true,
                 multiline: true)));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             multilinePlan,
             invertMatch: false,
             requireMatchColumn: false));
 
-        RegexSearchPlan preservedCrlfPlan = Assert.IsType<RegexSearchPlan>(RegexSearchPlan.Create(
+        RegexSearchPlan preservedCrlfPlan = Assert.IsExactInstanceOfType<RegexSearchPlan>(RegexSearchPlan.Create(
             patterns,
             new RegexSearchPlanOptions(
                 asciiCaseInsensitive: false,
                 lineRegexp: true,
                 crlf: true,
                 preserveCrlfCarriageReturn: true)));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             preservedCrlfPlan,
             invertMatch: false,
             requireMatchColumn: false));
 
-        RegexSearchPlan absolutePlan = Assert.IsType<RegexSearchPlan>(RegexSearchPlan.Create(
+        RegexSearchPlan absolutePlan = Assert.IsExactInstanceOfType<RegexSearchPlan>(RegexSearchPlan.Create(
             [@"\Aalpha bravo charl"u8.ToArray()],
             new RegexSearchPlanOptions(
                 asciiCaseInsensitive: false,
                 lineRegexp: true)));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             absolutePlan,
             invertMatch: false,
             requireMatchColumn: false));
@@ -347,7 +348,7 @@ public sealed class LiteralLineSearcherTests
     /// <summary>
     /// Verifies an anchored bounded class is evaluated once by the authoritative matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesUsesAuthoritativeBoundedClassPlan()
     {
         byte[][] patterns = ["^[A-Za-z_]{70,90}$"u8.ToArray()];
@@ -355,14 +356,14 @@ public sealed class LiteralLineSearcherTests
 
         long matches = LiteralLineSearcher.CountMatches(haystack, patterns);
 
-        Assert.Equal(1, matches);
+        Assert.AreEqual(1, matches);
     }
 
     /// <summary>
     /// Verifies syntax-derived minimum byte lengths reject short records without hiding a later
     /// Unicode-class match under LF, CRLF, or NUL record semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MinimumMatchLengthPreservesRecordTerminatorSemantics()
     {
         byte[][] patterns = [@"\w{91}\s+\w{91}\s+\w{91}"u8.ToArray()];
@@ -389,31 +390,31 @@ public sealed class LiteralLineSearcherTests
                     wordRegexp: false,
                     crlf,
                     nullData));
-            Assert.NotNull(plan);
-            Assert.Equal(275, plan.MinimumMatchLength);
+            Assert.IsNotNull(plan);
+            Assert.AreEqual(275, plan.MinimumMatchLength);
 
-            Assert.False(LiteralLineSearcher.HasMatch(
+            Assert.IsFalse(LiteralLineSearcher.HasMatch(
                 shortOnly,
                 patterns,
                 crlf: crlf,
                 nullData: nullData));
-            Assert.Equal(0, LiteralLineSearcher.CountMatches(
+            Assert.AreEqual(0, LiteralLineSearcher.CountMatches(
                 shortOnly,
                 patterns,
                 maxMatchingLines: 1,
                 crlf: crlf,
                 nullData: nullData));
-            Assert.True(LiteralLineSearcher.HasMatch(
+            Assert.IsTrue(LiteralLineSearcher.HasMatch(
                 mixed,
                 patterns,
                 crlf: crlf,
                 nullData: nullData));
-            Assert.Equal(1, LiteralLineSearcher.CountMatchingLines(
+            Assert.AreEqual(1, LiteralLineSearcher.CountMatchingLines(
                 mixed,
                 patterns,
                 crlf: crlf,
                 nullData: nullData));
-            Assert.Equal(1, LiteralLineSearcher.CountMatches(
+            Assert.AreEqual(1, LiteralLineSearcher.CountMatches(
                 mixed,
                 patterns,
                 maxMatchingLines: 1,
@@ -421,14 +422,14 @@ public sealed class LiteralLineSearcherTests
                 nullData: nullData));
 
             var sink = new CapturingMatchSink();
-            Assert.True(LiteralLineSearcher.SearchMatches(
+            Assert.IsTrue(LiteralLineSearcher.SearchMatches(
                 mixed,
                 patterns,
                 ref sink,
                 maxMatchingLines: 1,
                 crlf: crlf,
                 nullData: nullData));
-            Assert.Equal(1UL, sink.Matches);
+            Assert.AreEqual(1UL, sink.Matches);
         }
     }
 
@@ -437,11 +438,11 @@ public sealed class LiteralLineSearcherTests
     /// </summary>
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="haystack">The complete line segment to search.</param>
-    [Theory]
-    [InlineData(@"\bGeneratedRecord\b", "internal sealed class GeneratedRecord\r\n")]
-    [InlineData(@"\b\w{5}\s+\w{5}\s+\w{5}\b", "alpha bravo charl\r\n")]
-    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "internal sealed class GeneratedRecord\r\n")]
-    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    [TestMethod]
+    [DataRow(@"\bGeneratedRecord\b", "internal sealed class GeneratedRecord\r\n")]
+    [DataRow(@"\b\w{5}\s+\w{5}\s+\w{5}\b", "alpha bravo charl\r\n")]
+    [DataRow(@"^internal sealed class GeneratedRecord\r?$", "internal sealed class GeneratedRecord\r\n")]
+    [DataRow(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
     public void CountsIndependentCompleteLineSegmentWithGeneralRegexPlan(
         string pattern,
         string haystack)
@@ -462,18 +463,18 @@ public sealed class LiteralLineSearcherTests
             out long count,
             out bool containsNul);
 
-        Assert.True(counted);
-        Assert.Equal(1, count);
-        Assert.False(containsNul);
+        Assert.IsTrue(counted);
+        Assert.AreEqual(1, count);
+        Assert.IsFalse(containsNul);
     }
 
     /// <summary>
     /// Verifies regex plans whose matches depend on artificial segment boundaries are not counted independently.
     /// </summary>
     /// <param name="pattern">The boundary-dependent regex pattern.</param>
-    [Theory]
-    [InlineData("a*")]
-    [InlineData(@"\Afoo")]
+    [TestMethod]
+    [DataRow("a*")]
+    [DataRow(@"\Afoo")]
     public void IndependentCompleteLineSegmentRejectsBoundaryDependentRegexPlan(string pattern)
     {
         byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
@@ -492,13 +493,13 @@ public sealed class LiteralLineSearcherTests
             out _,
             out _);
 
-        Assert.False(counted);
+        Assert.IsFalse(counted);
     }
 
     /// <summary>
     /// Verifies absolute anchors retain ripgrep's ordinary per-record semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesTreatsAbsoluteAnchorsAsRecordAnchorsInOrdinarySearch()
     {
         byte[][] patterns = [@"\Afoo\z"u8.ToArray()];
@@ -507,13 +508,13 @@ public sealed class LiteralLineSearcherTests
             "foo\nbar\nfoo\n"u8,
             patterns);
 
-        Assert.Equal(2, matches);
+        Assert.AreEqual(2, matches);
     }
 
     /// <summary>
     /// Verifies plain regex patterns use the literal search path through the multi-pattern API.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchUsesLiteralRegexFastPathForPlainPatterns()
     {
         var sink = new CapturingLineSink();
@@ -524,16 +525,16 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal("Sherlock Holmes\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreSequenceEqual("Sherlock Holmes\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies the literal regex path reports each matching line once.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchUsesLiteralRegexFastPathOncePerLine()
     {
         var sink = new CapturingLineSink();
@@ -544,16 +545,16 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(3, sink.LineNumber);
-        Assert.Equal("needle\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(3, sink.LineNumber);
+        Assert.AreSequenceEqual("needle\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies the literal regex path keeps exact line metadata after skipping many nonmatching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchUsesLiteralRegexFastPathCountsSkippedLines()
     {
         var sink = new CapturingLineSink();
@@ -564,18 +565,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(4, sink.LineNumber);
-        Assert.Equal(17, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("needle here\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(4, sink.LineNumber);
+        Assert.AreEqual(17, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("needle here\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies the literal regex path keeps line metadata with NUL-terminated records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchUsesLiteralRegexFastPathCountsSkippedNullDataLines()
     {
         var sink = new CapturingLineSink();
@@ -587,18 +588,18 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             nullData: true);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(3, sink.LineNumber);
-        Assert.Equal(11, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("needle here\0"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(3, sink.LineNumber);
+        Assert.AreEqual(11, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("needle here\0"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies the authoritative plan searches pure literal alternations.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanHandlesLiteralAlternation()
     {
         var sink = new CapturingLineSink();
@@ -609,17 +610,17 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(4, sink.LineNumber);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("omega\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(4, sink.LineNumber);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("omega\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies authoritative line counting applies max-count to matching lines rather than matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchingLinesAuthoritativePlanHonorsLiteralAlternationLimit()
     {
         byte[][] patterns = ["foo|bar"u8.ToArray()];
@@ -629,26 +630,26 @@ public sealed class LiteralLineSearcherTests
             patterns,
             maxMatchingLines: 2);
 
-        Assert.Equal(2, count);
+        Assert.AreEqual(2, count);
     }
 
     /// <summary>
     /// Verifies authoritative match counting preserves leftmost-first alternation priority.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesAuthoritativePlanPreservesLiteralAlternationPriority()
     {
         byte[][] patterns = ["foo|foobar|bar"u8.ToArray()];
 
         long count = LiteralLineSearcher.CountMatches("foobar foo bar\n"u8, patterns);
 
-        Assert.Equal(4, count);
+        Assert.AreEqual(4, count);
     }
 
     /// <summary>
     /// Verifies multi-pattern match-line search reports literal regex match offsets late in a line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesReportsLiteralRegexOffsets()
     {
         var sink = new CapturingMatchLineSink();
@@ -658,7 +659,7 @@ public sealed class LiteralLineSearcherTests
     /// <summary>
     /// Verifies multi-pattern match-line search reports global match offsets across multiple lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesReportsLiteralRegexOffsetsAcrossLines()
     {
         var sink = new CapturingMatchLineSink();
@@ -668,19 +669,19 @@ public sealed class LiteralLineSearcherTests
             ["class"u8.ToArray()],
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.Matches);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(31, sink.LineByteOffset);
-        Assert.Equal(99, sink.MatchByteOffset);
-        Assert.Equal(69, sink.MatchColumn);
-        Assert.Equal("class"u8.ToArray(), sink.Match.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.Matches);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(31, sink.LineByteOffset);
+        Assert.AreEqual(99, sink.MatchByteOffset);
+        Assert.AreEqual(69, sink.MatchColumn);
+        Assert.AreSequenceEqual("class"u8.ToArray(), sink.Match.ToArray());
     }
 
     /// <summary>
     /// Verifies scoped group match-line search reports inner match offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesReportsScopedRegexInnerOffsets()
     {
         var sink = new CapturingMatchLineSink();
@@ -697,18 +698,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.Matches);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(68, sink.MatchByteOffset);
-        Assert.Equal(69, sink.MatchColumn);
-        Assert.Equal("class"u8.ToArray(), sink.Match.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.Matches);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(68, sink.MatchByteOffset);
+        Assert.AreEqual(69, sink.MatchColumn);
+        Assert.AreSequenceEqual("class"u8.ToArray(), sink.Match.ToArray());
     }
 
     /// <summary>
     /// Verifies match search preserves scoped ungreedy repetition spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchesHonorsScopedUngreedyRegexSpans()
     {
         var sink = new CapturingMatchSink();
@@ -719,20 +720,20 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.Matches);
-        Assert.Equal(0, sink.FirstByteOffset);
-        Assert.Equal("ab"u8.ToArray(), sink.FirstMatch);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(7, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("ab"u8.ToArray(), sink.Match);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.Matches);
+        Assert.AreEqual(0, sink.FirstByteOffset);
+        Assert.AreSequenceEqual("ab"u8.ToArray(), sink.FirstMatch);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(7, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("ab"u8.ToArray(), sink.Match);
     }
 
     /// <summary>
     /// Verifies authoritative class-sequence matching reports line metadata for ASCII matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanMatchesAsciiClassSequence()
     {
         var sink = new CapturingLineSink();
@@ -743,18 +744,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(5, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("abcde fghij klmno\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(5, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("abcde fghij klmno\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies a conservative prefilter preserves line output for a leading alternation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchPrefilteredAuthoritativePlanMatchesLeadingAlternation()
     {
         var sink = new CapturingLineSink();
@@ -765,36 +766,36 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(17, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("struct file;\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(17, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("struct file;\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies plan-owning search APIs reject a missing plan instead of compiling one implicitly.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WithRegexPlanApiRequiresPlan()
     {
         byte[][] patterns = ["needle"u8.ToArray()];
 
-        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+        ArgumentNullException exception = Assert.ThrowsExactly<ArgumentNullException>(() =>
             LiteralLineSearcher.CountMatchesWithRegexPlan(
                 "needle\n"u8,
                 patterns,
                 regexPlan: null!));
 
-        Assert.Equal("regexPlan", exception.ParamName);
+        Assert.AreEqual("regexPlan", exception.ParamName);
     }
 
     /// <summary>
     /// Verifies plan-owning search APIs reject incompatible semantics while convenience APIs
     /// compile the requested semantics explicitly.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WithRegexPlanApiRejectsIncompatiblePlan()
     {
         byte[][] patterns = ["needle"u8.ToArray()];
@@ -802,7 +803,7 @@ public sealed class LiteralLineSearcherTests
             patterns,
             asciiCaseInsensitive: false);
 
-        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() =>
             LiteralLineSearcher.CountMatchesWithRegexPlan(
                 "NEEDLE\n"u8,
                 patterns,
@@ -810,8 +811,8 @@ public sealed class LiteralLineSearcherTests
                 asciiCaseInsensitive: true,
                 maxMatchingLines: 0));
 
-        Assert.Equal("regexPlan", exception.ParamName);
-        Assert.Equal(1, LiteralLineSearcher.CountMatches(
+        Assert.AreEqual("regexPlan", exception.ParamName);
+        Assert.AreEqual(1, LiteralLineSearcher.CountMatches(
             "NEEDLE\n"u8,
             patterns,
             asciiCaseInsensitive: true));
@@ -820,21 +821,21 @@ public sealed class LiteralLineSearcherTests
     /// <summary>
     /// Verifies Scout's prepared no-Unicode wrapper keeps one authoritative matcher with an optional prefilter.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanUsesAuthoritativeMatcherForPreparedLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
         RegexSearchPlan plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
-        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
+        Assert.IsNotNull(plan);
+        Assert.AreNotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
     }
 
     /// <summary>
     /// Verifies the CLI's neutral regex wrapper retains the authoritative matcher in general mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanUsesAuthoritativeMatcherForCliWrappedLeadingAlternationInGeneralMode()
     {
         using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
@@ -842,28 +843,28 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
-        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
+        Assert.IsNotNull(plan);
+        Assert.AreNotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
     }
 
     /// <summary>
     /// Verifies Scout's prepared capture wrapper keeps capture semantics in the authoritative matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanUsesAuthoritativeMatcherForPreparedCaptureLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
-        Assert.Equal(2, plan.CaptureCount);
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(2, plan.CaptureCount);
     }
 
     /// <summary>
     /// Verifies scoped flags that change match spans still use automaton spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanKeepsScopedUngreedySpansOnAutomatonPath()
     {
         byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
@@ -871,15 +872,15 @@ public sealed class LiteralLineSearcherTests
             patterns,
             asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMatch? match = plan.Matcher.Find("abbbb"u8);
-        Assert.Equal(new RegexMatch(0, 2), match);
+        Assert.AreEqual(new RegexMatch(0, 2), match);
     }
 
     /// <summary>
     /// Verifies conservative candidate discovery preserves line-oriented matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchPrefilteredAuthoritativePlanDoesNotMatchAcrossLines()
     {
         var sink = new CapturingLineSink();
@@ -890,14 +891,14 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.False(matched);
-        Assert.Equal(0UL, sink.MatchedLines);
+        Assert.IsFalse(matched);
+        Assert.AreEqual(0UL, sink.MatchedLines);
     }
 
     /// <summary>
     /// Verifies authoritative verification continues after a false candidate prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchPrefilteredAuthoritativePlanContinuesAfterFalseCandidate()
     {
         var sink = new CapturingLineSink();
@@ -908,18 +909,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(0, sink.ByteOffset);
-        Assert.Equal(12, sink.MatchColumn);
-        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(0, sink.ByteOffset);
+        Assert.AreEqual(12, sink.MatchColumn);
+        Assert.AreSequenceEqual("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies dot-star alternatives with one shared literal prefix use one authoritative matcher and conservative candidates.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchSharedDelegatePrefixAlternationUsesAuthoritativePlan()
     {
         const string pattern =
@@ -958,21 +959,21 @@ public sealed class LiteralLineSearcherTests
             out long matchingLines,
             out long matches);
 
-        Assert.True(matched);
-        Assert.Equal(4UL, sink.Matches);
-        Assert.Equal(unrelatedLineCount + 4, sink.LineNumber);
-        Assert.Equal(12, sink.MatchColumn);
-        Assert.Equal("delegate void UpdateEDIEvent"u8.ToArray(), sink.Match);
-        Assert.Equal(4, matchingLines);
-        Assert.Equal(4, matches);
-        Assert.NotNull(plan);
-        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(4UL, sink.Matches);
+        Assert.AreEqual(unrelatedLineCount + 4, sink.LineNumber);
+        Assert.AreEqual(12, sink.MatchColumn);
+        Assert.AreSequenceEqual("delegate void UpdateEDIEvent"u8.ToArray(), sink.Match);
+        Assert.AreEqual(4, matchingLines);
+        Assert.AreEqual(4, matches);
+        Assert.IsNotNull(plan);
+        Assert.AreNotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
     }
 
     /// <summary>
     /// Verifies authoritative match-line traversal retains an unterminated record selected only by its end.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesRetainsEndEmptySelectionWithoutReportingSpan()
     {
         byte[][] patterns = ["$"u8.ToArray()];
@@ -987,16 +988,16 @@ public sealed class LiteralLineSearcherTests
             plan,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(0UL, sink.Matches);
-        Assert.Equal(1UL, sink.SelectedLines);
-        Assert.Equal(1, sink.LastSelectedLineNumber);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(0UL, sink.Matches);
+        Assert.AreEqual(1UL, sink.SelectedLines);
+        Assert.AreEqual(1, sink.LastSelectedLineNumber);
     }
 
     /// <summary>
     /// Verifies absolute-start anchors select every record while retaining only spans valid in the original prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesRetainsAbsoluteStartSelectionWithoutSyntheticSpans()
     {
         byte[][] patterns = [@"\A"u8.ToArray()];
@@ -1011,20 +1012,20 @@ public sealed class LiteralLineSearcherTests
             plan,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.Matches);
-        Assert.Equal(2UL, sink.SelectedLines);
-        Assert.Equal(1, sink.LastMatchedLineNumber);
-        Assert.Equal(2, sink.LastSelectedLineNumber);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.Matches);
+        Assert.AreEqual(2UL, sink.SelectedLines);
+        Assert.AreEqual(1, sink.LastMatchedLineNumber);
+        Assert.AreEqual(2, sink.LastSelectedLineNumber);
     }
 
     /// <summary>
     /// Verifies occurrence counting includes a physical-EOF match that output replay treats as selection-only.
     /// </summary>
     /// <param name="pattern">The end-asserted expression.</param>
-    [Theory]
-    [InlineData("$")]
-    [InlineData(@"\z")]
+    [TestMethod]
+    [DataRow("$")]
+    [DataRow(@"\z")]
     public void CountMatchesIncludesSelectionOnlyPhysicalEnd(string pattern)
     {
         byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
@@ -1053,10 +1054,10 @@ public sealed class LiteralLineSearcherTests
             out long matchingLines,
             out long reportableMatches);
 
-        Assert.Equal(2, count);
-        Assert.Equal(1, singleRecordCount);
-        Assert.Equal(2, matchingLines);
-        Assert.Equal(1, reportableMatches);
+        Assert.AreEqual(2, count);
+        Assert.AreEqual(1, singleRecordCount);
+        Assert.AreEqual(2, matchingLines);
+        Assert.AreEqual(1, reportableMatches);
     }
 
     /// <summary>
@@ -1066,12 +1067,12 @@ public sealed class LiteralLineSearcherTests
     /// <param name="pattern">The expression to count.</param>
     /// <param name="contents">The complete input contents.</param>
     /// <param name="expected">The expected occurrence count.</param>
-    [Theory]
-    [InlineData(@"\A|\z", "a", 1)]
-    [InlineData(@"(?:\A)?", "a", 1)]
-    [InlineData(@"(?:\z)?", "a", 1)]
-    [InlineData("(?:)*", "a", 1)]
-    [InlineData(@"\A|\z", "a\nb", 3)]
+    [TestMethod]
+    [DataRow(@"\A|\z", "a", 1L)]
+    [DataRow(@"(?:\A)?", "a", 1L)]
+    [DataRow(@"(?:\z)?", "a", 1L)]
+    [DataRow("(?:)*", "a", 1L)]
+    [DataRow(@"\A|\z", "a\nb", 3L)]
     public void CountMatchesRetainsReportableCountAtPhysicalEnd(
         string pattern,
         string contents,
@@ -1089,13 +1090,13 @@ public sealed class LiteralLineSearcherTests
             patterns,
             plan);
 
-        Assert.Equal(expected, count);
+        Assert.AreEqual(expected, count);
     }
 
     /// <summary>
     /// Verifies authoritative match-line traversal does not create a record after a trailing terminator.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesDoesNotReportPostTerminatorEmptyMatch()
     {
         byte[][] patterns = ["^"u8.ToArray()];
@@ -1110,23 +1111,23 @@ public sealed class LiteralLineSearcherTests
             plan,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.Matches);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(4, sink.MatchByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Empty(sink.Match);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.Matches);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(4, sink.MatchByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.IsEmpty(sink.Match);
     }
 
     /// <summary>
     /// Verifies one-pass statistics counting agrees with the independent match and line counters.
     /// </summary>
-    [Theory]
-    [InlineData("foo|bar.", "foo bar1\nnone\nbar2 foo\n", false, false, false, false)]
-    [InlineData(@"\bfoo\b|bar", "food foo\nbar\n", false, false, false, false)]
-    [InlineData("foo|bar", "foo\r\nbar\r\n", false, false, true, false)]
-    [InlineData("foo|bar", "foo\0bar\0", false, false, false, true)]
-    [InlineData("foo.*", "foo\nfoobar\nnone\n", true, false, false, false)]
+    [TestMethod]
+    [DataRow("foo|bar.", "foo bar1\nnone\nbar2 foo\n", false, false, false, false)]
+    [DataRow(@"\bfoo\b|bar", "food foo\nbar\n", false, false, false, false)]
+    [DataRow("foo|bar", "foo\r\nbar\r\n", false, false, true, false)]
+    [DataRow("foo|bar", "foo\0bar\0", false, false, false, true)]
+    [DataRow("foo.*", "foo\nfoobar\nnone\n", true, false, false, false)]
     public void CountMatchesAndMatchingLinesAgreesWithIndependentCounters(
         string pattern,
         string haystack,
@@ -1159,7 +1160,7 @@ public sealed class LiteralLineSearcherTests
             out long matchingLines,
             out long matches);
 
-        Assert.Equal(
+        Assert.AreEqual(
             LiteralLineSearcher.CountMatchingLines(
                 bytes,
                 patterns,
@@ -1171,7 +1172,7 @@ public sealed class LiteralLineSearcherTests
                 crlf,
                 nullData),
             matchingLines);
-        Assert.Equal(
+        Assert.AreEqual(
             LiteralLineSearcher.CountMatches(
                 bytes,
                 patterns,
@@ -1188,7 +1189,7 @@ public sealed class LiteralLineSearcherTests
     /// <summary>
     /// Verifies combined statistics exclude a line terminator from authoritative regex matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountMatchesAndMatchingLinesExcludesLineTerminator()
     {
         byte[][] patterns = ["foo[^x]"u8.ToArray()];
@@ -1209,15 +1210,15 @@ public sealed class LiteralLineSearcherTests
             out long matchingLines,
             out long matches);
 
-        Assert.Equal(0, matchingLines);
-        Assert.Equal(0, matches);
+        Assert.AreEqual(0, matchingLines);
+        Assert.AreEqual(0, matches);
     }
 
     /// <summary>
     /// Verifies forward match-end iteration emits each selected line once while counting every
     /// non-overlapping match on the last line admitted by the match-line limit.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchEndIterationCountsEveryMatchOnLimitedLine()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
@@ -1229,14 +1230,14 @@ public sealed class LiteralLineSearcherTests
             asciiCaseInsensitive: false);
         var sink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
-        Assert.True(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsNotNull(plan);
+        Assert.IsTrue(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             plan,
             invertMatch: false,
             requireMatchColumn: false));
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.True(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsTrue(runner.UsesAsciiProjection);
         runner.Dispose();
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
@@ -1249,14 +1250,14 @@ public sealed class LiteralLineSearcherTests
             maxMatchingLines: 1,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, matchedLines);
-        Assert.Equal(2, matches);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(4_097, sink.ByteOffset);
-        Assert.Equal(0, sink.MatchColumn);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, matchedLines);
+        Assert.AreEqual(2, matches);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(4_097, sink.ByteOffset);
+        Assert.AreEqual(0, sink.MatchColumn);
+        Assert.AreSequenceEqual(
             "abcde fghij klmno pqrst uvwxy zabcd\n"u8.ToArray(),
             sink.Line.ToArray());
     }
@@ -1267,9 +1268,9 @@ public sealed class LiteralLineSearcherTests
     /// <param name="terminator">The record terminator text.</param>
     /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
     /// <param name="nullData">Whether NUL terminates records.</param>
-    [Theory]
-    [InlineData("\r\n", true, false)]
-    [InlineData("\0", false, true)]
+    [TestMethod]
+    [DataRow("\r\n", true, false)]
+    [DataRow("\0", false, true)]
     public void MatchEndIterationPreservesRecordTerminators(
         string terminator,
         bool crlf,
@@ -1287,10 +1288,10 @@ public sealed class LiteralLineSearcherTests
         var plan = RegexSearchPlan.Create(patterns, options);
         var sink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.True(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsTrue(runner.UsesAsciiProjection);
         runner.Dispose();
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
@@ -1305,13 +1306,13 @@ public sealed class LiteralLineSearcherTests
             nullData: nullData,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, matchedLines);
-        Assert.Equal(2, matches);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(4_096 + Encoding.UTF8.GetByteCount(terminator), sink.ByteOffset);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, matchedLines);
+        Assert.AreEqual(2, matches);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(4_096 + Encoding.UTF8.GetByteCount(terminator), sink.ByteOffset);
+        Assert.AreSequenceEqual(
             Encoding.UTF8.GetBytes(selectedRecord + terminator),
             sink.Line.ToArray());
     }
@@ -1320,7 +1321,7 @@ public sealed class LiteralLineSearcherTests
     /// Verifies plain line selection and searched-line accounting retain one forward runner
     /// across a complete haystack larger than the runner activation threshold.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchEndIterationSupportsPlainSearchAndSearchedLineCounting()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
@@ -1332,10 +1333,10 @@ public sealed class LiteralLineSearcherTests
             asciiCaseInsensitive: false);
         var searchSink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.True(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsTrue(runner.UsesAsciiProjection);
         runner.Dispose();
 
         bool searched = LiteralLineSearcher.SearchWithRegexPlan(
@@ -1345,10 +1346,10 @@ public sealed class LiteralLineSearcherTests
             ref searchSink,
             requireMatchColumn: false);
 
-        Assert.True(searched);
-        Assert.Equal(2UL, searchSink.MatchedLines);
-        Assert.Equal(3, searchSink.LineNumber);
-        Assert.Equal("pqrst uvwxy zabcd\n"u8.ToArray(), searchSink.Line.ToArray());
+        Assert.IsTrue(searched);
+        Assert.AreEqual(2UL, searchSink.MatchedLines);
+        Assert.AreEqual(3, searchSink.LineNumber);
+        Assert.AreSequenceEqual("pqrst uvwxy zabcd\n"u8.ToArray(), searchSink.Line.ToArray());
 
         var countingSink = new CapturingLineSink();
         bool counted = LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
@@ -1359,18 +1360,18 @@ public sealed class LiteralLineSearcherTests
             out long searchedLines,
             requireMatchColumn: false);
 
-        Assert.True(counted);
-        Assert.Equal(3, searchedLines);
-        Assert.Equal(2UL, countingSink.MatchedLines);
-        Assert.Equal(3, countingSink.LineNumber);
-        Assert.Equal("pqrst uvwxy zabcd\n"u8.ToArray(), countingSink.Line.ToArray());
+        Assert.IsTrue(counted);
+        Assert.AreEqual(3, searchedLines);
+        Assert.AreEqual(2UL, countingSink.MatchedLines);
+        Assert.AreEqual(3, countingSink.LineNumber);
+        Assert.AreSequenceEqual("pqrst uvwxy zabcd\n"u8.ToArray(), countingSink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies a large general no-prefilter plan uses its ASCII projection while preserving
     /// selected-line and match statistics on a haystack larger than the activation threshold.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeGeneralPlanUsesAsciiProjectionForLineStatistics()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
@@ -1382,14 +1383,14 @@ public sealed class LiteralLineSearcherTests
             asciiCaseInsensitive: false);
         var sink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
-        Assert.True(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsNotNull(plan);
+        Assert.IsTrue(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             plan,
             invertMatch: false,
             requireMatchColumn: false));
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.True(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsTrue(runner.UsesAsciiProjection);
         runner.Dispose();
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
@@ -1402,12 +1403,12 @@ public sealed class LiteralLineSearcherTests
             maxMatchingLines: 1,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, matchedLines);
-        Assert.Equal(2, matches);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, matchedLines);
+        Assert.AreEqual(2, matches);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreSequenceEqual(
             "abcde fghij klmno pqrst uvwxy zabcd\n"u8.ToArray(),
             sink.Line.ToArray());
     }
@@ -1416,7 +1417,7 @@ public sealed class LiteralLineSearcherTests
     /// Verifies an end-only projected runner does not select a whole-segment path when reporting
     /// a match column requires the authoritative match start.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchEndOnlyRunnerKeepsColumnSearchPerRecord()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
@@ -1433,9 +1434,9 @@ public sealed class LiteralLineSearcherTests
             asciiCaseInsensitive: false);
         var sink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
-        Assert.False(plan.Matcher.CanSearchWholeHaystackWithFullMatches);
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsNotNull(plan);
+        Assert.IsFalse(plan.Matcher.CanSearchWholeHaystackWithFullMatches);
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlan(
             haystack,
@@ -1444,18 +1445,18 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             requireMatchColumn: true);
 
-        Assert.True(matched);
-        Assert.Equal(601, sink.LineNumber);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("alpha bravo charl\n"u8.ToArray(), sink.Line.ToArray());
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsTrue(matched);
+        Assert.AreEqual(601, sink.LineNumber);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("alpha bravo charl\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
     }
 
     /// <summary>
     /// Verifies a forward-only generic runner handles mixed records authoritatively when its
     /// ASCII projection cannot cover the complete segment.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ForwardOnlyGenericRunnerHandlesMixedRecords()
     {
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
@@ -1467,18 +1468,18 @@ public sealed class LiteralLineSearcherTests
             asciiCaseInsensitive: false);
         var sink = new CapturingLineSink();
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.False(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsFalse(runner.UsesAsciiProjection);
         runner.Dispose();
         int asciiTailStart = haystack.AsSpan().IndexOf("pqrst uvwxy zabcd"u8);
-        Assert.True(asciiTailStart > 0);
+        Assert.IsGreaterThan(0, asciiTailStart);
         RegexMatchEndRunner tailRunner = plan.Matcher.RentMatchEndRunner(
             haystack,
             asciiTailStart);
-        Assert.True(tailRunner.IsAvailable);
-        Assert.False(tailRunner.UsesAsciiProjection);
+        Assert.IsTrue(tailRunner.IsAvailable);
+        Assert.IsFalse(tailRunner.UsesAsciiProjection);
         tailRunner.Dispose();
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
@@ -1490,19 +1491,19 @@ public sealed class LiteralLineSearcherTests
             out long matches,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(3UL, matchedLines);
-        Assert.Equal(3, matches);
-        Assert.Equal(3UL, sink.MatchedLines);
-        Assert.Equal(4, sink.LineNumber);
-        Assert.Equal("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(3UL, matchedLines);
+        Assert.AreEqual(3, matches);
+        Assert.AreEqual(3UL, sink.MatchedLines);
+        Assert.AreEqual(4, sink.LineNumber);
+        Assert.AreSequenceEqual("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies concurrent operations sharing one Pike VM plan retain independent mutable
     /// runners across line selection, match counting, and match enumeration.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SharedPikeVmPlanUsesIndependentOperationRunners()
     {
         byte[][] patterns = [@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray()];
@@ -1517,12 +1518,12 @@ public sealed class LiteralLineSearcherTests
             patterns,
             asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
-        Assert.Equal(RegexEngineKind.PikeVm, plan.Matcher.EngineKind);
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(RegexEngineKind.PikeVm, plan.Matcher.EngineKind);
         Parallel.For(0, 32, _ =>
         {
             var lineSink = new CapturingLineSink();
-            Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+            Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
                 haystack,
                 patterns,
                 plan,
@@ -1530,24 +1531,24 @@ public sealed class LiteralLineSearcherTests
                 out ulong matchedLines,
                 out long matches,
                 requireMatchColumn: false));
-            Assert.Equal(64UL, matchedLines);
-            Assert.Equal(128, matches);
+            Assert.AreEqual(64UL, matchedLines);
+            Assert.AreEqual(128, matches);
 
             var matchSink = new CapturingMatchSink();
-            Assert.True(LiteralLineSearcher.SearchMatches(
+            Assert.IsTrue(LiteralLineSearcher.SearchMatches(
                 haystack,
                 patterns,
                 ref matchSink));
-            Assert.Equal(128UL, matchSink.Matches);
+            Assert.AreEqual(128UL, matchSink.Matches);
 
             var matchLineSink = new CapturingMatchLineSink();
-            Assert.True(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+            Assert.IsTrue(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
                 haystack,
                 patterns,
                 plan,
                 ref matchLineSink));
-            Assert.Equal(128UL, matchLineSink.Matches);
-            Assert.Equal(128, LiteralLineSearcher.CountMatchesWithRegexPlan(
+            Assert.AreEqual(128UL, matchLineSink.Matches);
+            Assert.AreEqual(128, LiteralLineSearcher.CountMatchesWithRegexPlan(
                 haystack,
                 patterns,
                 plan));
@@ -1558,7 +1559,7 @@ public sealed class LiteralLineSearcherTests
     /// Verifies syntax that explicitly controls Unicode semantics cannot select an ASCII
     /// projection even when the complete search segment contains only ASCII bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnsafeInlineUnicodeProjectionUsesGenericRunner()
     {
         byte[][] patterns = [@"(?u:\w{5}\s+\w{5}\s+\w{5})"u8.ToArray()];
@@ -1568,12 +1569,12 @@ public sealed class LiteralLineSearcherTests
             patterns,
             asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         RegexMatchEndRunner runner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.True(runner.IsAvailable);
-        Assert.False(runner.UsesAsciiProjection);
+        Assert.IsTrue(runner.IsAvailable);
+        Assert.IsFalse(runner.UsesAsciiProjection);
         runner.Dispose();
-        Assert.Equal(1, plan.Matcher.CountMatches(haystack));
+        Assert.AreEqual(1, plan.Matcher.CountMatches(haystack));
     }
 
     /// <summary>
@@ -1581,9 +1582,9 @@ public sealed class LiteralLineSearcherTests
     /// for LF and NUL record modes.
     /// </summary>
     /// <param name="terminator">The record terminator.</param>
-    [Theory]
-    [InlineData((byte)'\n')]
-    [InlineData((byte)0)]
+    [TestMethod]
+    [DataRow((byte)'\n')]
+    [DataRow((byte)0)]
     public void ProjectedRecordRunEligibilityHonorsCoalescing(byte terminator)
     {
         byte[] longAsciiRun = CreateMixedRecordCorpus(
@@ -1607,25 +1608,25 @@ public sealed class LiteralLineSearcherTests
         byte[] fragmented = CreateFragmentedMixedRecordCorpus(terminator);
         bool nullData = terminator == 0;
 
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             longAsciiRun,
             nullData));
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             slightlyShorterLongAsciiRun,
             nullData));
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             minimumAsciiRun,
             nullData));
-        Assert.False(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsFalse(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             belowMinimumAsciiRun,
             nullData));
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             allAscii,
             nullData));
-        Assert.False(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsFalse(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             allNonAscii,
             nullData));
-        Assert.False(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsFalse(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             fragmented,
             nullData));
     }
@@ -1634,7 +1635,7 @@ public sealed class LiteralLineSearcherTests
     /// Verifies a projection-only mixed LF segment enters retained ASCII record-run search,
     /// verifies Unicode records authoritatively, and preserves the separate NUL-count contract.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ProjectionOnlyMixedSegmentUsesRecordRunsAcrossEndAndCountLanes()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
@@ -1645,18 +1646,18 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern);
         var sink = new CapturingLineSink();
 
-        Assert.True(plan.Matcher.HasAsciiProjectedMatchEndRunner);
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(plan.Matcher.HasAsciiProjectedMatchEndRunner);
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             haystack,
             nullData: false));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             plan,
             invertMatch: false,
             requireMatchColumn: true));
         RegexMatchEndRunner ordinaryRunner = plan.Matcher.RentMatchEndRunner(haystack, startAt: 0);
-        Assert.False(ordinaryRunner.IsAvailable);
+        Assert.IsFalse(ordinaryRunner.IsAvailable);
         ordinaryRunner.Dispose();
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
 
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             haystack,
@@ -1667,30 +1668,30 @@ public sealed class LiteralLineSearcherTests
             out long matches,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(3UL, matchedLines);
-        Assert.Equal(3, matches);
-        Assert.Equal(5, sink.LineNumber);
-        Assert.Equal("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
-        Assert.True(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsTrue(matched);
+        Assert.AreEqual(3UL, matchedLines);
+        Assert.AreEqual(3, matches);
+        Assert.AreEqual(5, sink.LineNumber);
+        Assert.AreSequenceEqual("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(HasActivatedAsciiProjection(plan.Matcher));
 
         var lineSink = new CapturingLineSink();
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
             haystack,
             patterns,
             plan,
             ref lineSink,
             out long searchedLines,
             requireMatchColumn: false));
-        Assert.Equal(5, searchedLines);
-        Assert.Equal(3UL, lineSink.MatchedLines);
-        Assert.Equal(3, LiteralLineSearcher.CountMatchesWithRegexPlan(
+        Assert.AreEqual(5, searchedLines);
+        Assert.AreEqual(3UL, lineSink.MatchedLines);
+        Assert.AreEqual(3, LiteralLineSearcher.CountMatchesWithRegexPlan(
             haystack,
             patterns,
             plan));
 
         RegexSearchPlan countPlan = CreateProjectionOnlyGeneralPlan(sourcePattern);
-        Assert.False(LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
+        Assert.IsFalse(LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
             haystack,
             patterns,
             countPlan,
@@ -1703,9 +1704,9 @@ public sealed class LiteralLineSearcherTests
             nullData: false,
             out long sharedCount,
             out bool sharedContainsNul));
-        Assert.Equal(0, sharedCount);
-        Assert.False(sharedContainsNul);
-        Assert.True(LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+        Assert.AreEqual(0, sharedCount);
+        Assert.IsFalse(sharedContainsNul);
+        Assert.IsTrue(LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
             haystack,
             patterns,
             countPlan,
@@ -1717,14 +1718,14 @@ public sealed class LiteralLineSearcherTests
             nullData: false,
             out long separateCount,
             out bool separateContainsNul));
-        Assert.Equal(3, separateCount);
-        Assert.True(separateContainsNul);
+        Assert.AreEqual(3, separateCount);
+        Assert.IsTrue(separateContainsNul);
     }
 
     /// <summary>
     /// Verifies a throwing callback preserves the mutable sink while returning its runner leases.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ProjectedRecordSearchRetainsSinkStateWhenCallbackThrows()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
@@ -1736,23 +1737,23 @@ public sealed class LiteralLineSearcherTests
             haystack, plan, ref sink, out _, out _, countSearchedLines: false,
             maxMatchingLines: null, nullData: false);
 
-        Assert.Throws<InvalidOperationException>(Search);
-        Assert.Equal(1, sink.Callbacks);
+        Assert.ThrowsExactly<InvalidOperationException>(Search);
+        Assert.AreEqual(1, sink.Callbacks);
 
         // A fresh operation can reuse the returned leases and still complete normally.
         var nextSink = new CapturingLineSink();
-        Assert.True(RegexProjectedRecordRunSearcher.TrySearchLines(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.TrySearchLines(
             haystack, plan, ref nextSink, out bool matched, out _, countSearchedLines: false,
             maxMatchingLines: null, nullData: false));
-        Assert.True(matched);
-        Assert.Equal(1UL, nextSink.MatchedLines);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, nextSink.MatchedLines);
     }
 
     /// <summary>
     /// Verifies a profitable all-ASCII segment uses one projected record-run search without
     /// changing line or match counts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ProjectionOnlyAsciiSegmentUsesRecordRunsAcrossEndAndCountLanes()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
@@ -1763,10 +1764,10 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern);
         var sink = new CapturingLineSink();
 
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             haystack,
             nullData: false));
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             haystack,
             patterns,
             plan,
@@ -1775,11 +1776,11 @@ public sealed class LiteralLineSearcherTests
             out long matches,
             requireMatchColumn: false));
 
-        Assert.Equal(2UL, matchedLines);
-        Assert.Equal(2, matches);
-        Assert.Equal(4, sink.LineNumber);
-        Assert.Equal("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
-        Assert.Equal(2, LiteralLineSearcher.CountMatchesWithRegexPlan(
+        Assert.AreEqual(2UL, matchedLines);
+        Assert.AreEqual(2, matches);
+        Assert.AreEqual(4, sink.LineNumber);
+        Assert.AreSequenceEqual("pqrst uvwxy zabcd\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.AreEqual(2, LiteralLineSearcher.CountMatchesWithRegexPlan(
             haystack,
             patterns,
             plan));
@@ -1789,7 +1790,7 @@ public sealed class LiteralLineSearcherTests
     /// Verifies the shared dense projection handles short fragmented ASCII runs while
     /// non-ASCII records remain authoritative without activating the primary DFA.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DenseProjectionHandlesFragmentedShortAsciiRuns()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
@@ -1809,20 +1810,20 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern);
         var sink = new CapturingLineSink();
 
-        Assert.True(plan.Matcher.HasAsciiProjectedMatchEndRunner);
-        Assert.False(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(plan.Matcher.HasAsciiProjectedMatchEndRunner);
+        Assert.IsFalse(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             haystack,
             nullData: false));
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
-        Assert.False(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
-        Assert.True(RegexProjectedRecordRunSearcher.TryCountMatches(
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.TryCountMatches(
             haystack,
             plan,
             nullData: false,
             out long projectedCount));
-        Assert.Equal(256, projectedCount);
+        Assert.AreEqual(256, projectedCount);
         var projectedSink = new CapturingLineSink();
-        Assert.True(RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
             haystack,
             plan,
             ref projectedSink,
@@ -1831,14 +1832,14 @@ public sealed class LiteralLineSearcherTests
             out long projectedMatches,
             maxMatchingLines: null,
             nullData: false));
-        Assert.True(projectedMatched);
-        Assert.Equal(256UL, projectedMatchedLines);
-        Assert.Equal(256, projectedMatches);
-        Assert.Equal(256UL, projectedSink.MatchedLines);
-        Assert.True(HasActivatedAsciiProjection(plan.Matcher));
-        Assert.False(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
-        Assert.False(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+        Assert.IsTrue(projectedMatched);
+        Assert.AreEqual(256UL, projectedMatchedLines);
+        Assert.AreEqual(256, projectedMatches);
+        Assert.AreEqual(256UL, projectedSink.MatchedLines);
+        Assert.IsTrue(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
+        Assert.IsFalse(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             haystack,
             patterns,
             plan,
@@ -1847,26 +1848,26 @@ public sealed class LiteralLineSearcherTests
             out long matches,
             requireMatchColumn: false));
 
-        Assert.Equal(256UL, matchedLines);
-        Assert.Equal(256, matches);
-        Assert.Equal(511, sink.LineNumber);
-        Assert.True(HasActivatedAsciiProjection(plan.Matcher));
-        Assert.False(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
-        Assert.False(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
-        Assert.Equal(256, LiteralLineSearcher.CountMatchesWithRegexPlan(
+        Assert.AreEqual(256UL, matchedLines);
+        Assert.AreEqual(256, matches);
+        Assert.AreEqual(511, sink.LineNumber);
+        Assert.IsTrue(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
+        Assert.IsFalse(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
+        Assert.AreEqual(256, LiteralLineSearcher.CountMatchesWithRegexPlan(
             haystack,
             patterns,
             plan));
-        Assert.True(HasActivatedAsciiProjection(plan.Matcher));
-        Assert.False(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
-        Assert.False(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
+        Assert.IsTrue(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
+        Assert.IsFalse(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
     }
 
     /// <summary>
     /// Verifies a segment without any ASCII record run stays on the compact authoritative
     /// record runner instead of activating the primary expanded DFA.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonAsciiSegmentUsesCompactAuthoritativeRecordRunner()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
@@ -1880,17 +1881,17 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern);
         var sink = new CapturingLineSink();
 
-        Assert.False(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsFalse(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             haystack,
             nullData: false,
             minimumRunLength: plan.Matcher.AsciiProjectedMatchEndActivationLength));
-        Assert.True(RegexProjectedRecordRunSearcher.TryCountMatches(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.TryCountMatches(
             haystack,
             plan,
             nullData: false,
             out long count));
-        Assert.Equal(256, count);
-        Assert.True(RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
+        Assert.AreEqual(256, count);
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
             haystack,
             plan,
             ref sink,
@@ -1899,12 +1900,12 @@ public sealed class LiteralLineSearcherTests
             out long matches,
             maxMatchingLines: null,
             nullData: false));
-        Assert.True(matched);
-        Assert.Equal(256UL, matchedLines);
-        Assert.Equal(256, matches);
-        Assert.False(HasActivatedAsciiProjection(plan.Matcher));
-        Assert.False(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
-        Assert.False(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
+        Assert.IsTrue(matched);
+        Assert.AreEqual(256UL, matchedLines);
+        Assert.AreEqual(256, matches);
+        Assert.IsFalse(HasActivatedAsciiProjection(plan.Matcher));
+        Assert.IsFalse(HasCreatedAsciiFastUnanchoredDfaPool(plan.Matcher));
+        Assert.IsFalse(HasActivatedPrimaryUnanchoredDfa(plan.Matcher));
     }
 
     /// <summary>
@@ -1914,10 +1915,10 @@ public sealed class LiteralLineSearcherTests
     /// <param name="terminator">The record terminator text.</param>
     /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
     /// <param name="nullData">Whether NUL terminates records.</param>
-    [Theory]
-    [InlineData("\n", false, false)]
-    [InlineData("\r\n", true, false)]
-    [InlineData("\0", false, true)]
+    [TestMethod]
+    [DataRow("\n", false, false)]
+    [DataRow("\r\n", true, false)]
+    [DataRow("\0", false, true)]
     public void ProjectedMixedRunsPreserveRecordSemanticsAndLimits(
         string terminator,
         bool crlf,
@@ -1929,7 +1930,7 @@ public sealed class LiteralLineSearcherTests
         RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern, crlf, nullData);
         var sink = new CapturingLineSink();
 
-        Assert.True(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
+        Assert.IsTrue(RegexProjectedRecordRunSearcher.HasEligibleProjectedRecordRun(
             haystack,
             nullData));
         bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
@@ -1943,15 +1944,15 @@ public sealed class LiteralLineSearcherTests
             nullData: nullData,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(5UL, matchedLines);
-        Assert.Equal(6, matches);
-        Assert.Equal(9, sink.LineNumber);
-        Assert.Equal(haystack.Length - 3, sink.ByteOffset);
-        Assert.Equal("XcY"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(5UL, matchedLines);
+        Assert.AreEqual(6, matches);
+        Assert.AreEqual(9, sink.LineNumber);
+        Assert.AreEqual(haystack.Length - 3, sink.ByteOffset);
+        Assert.AreSequenceEqual("XcY"u8.ToArray(), sink.Line.ToArray());
 
         var twoLineSink = new CapturingLineSink();
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             haystack,
             patterns,
             plan,
@@ -1962,12 +1963,12 @@ public sealed class LiteralLineSearcherTests
             crlf: crlf,
             nullData: nullData,
             requireMatchColumn: false));
-        Assert.Equal(2UL, twoMatchedLines);
-        Assert.Equal(2, twoMatches);
-        Assert.Equal(4, twoLineSink.LineNumber);
+        Assert.AreEqual(2UL, twoMatchedLines);
+        Assert.AreEqual(2, twoMatches);
+        Assert.AreEqual(4, twoLineSink.LineNumber);
 
         var threeLineSink = new CapturingLineSink();
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             haystack,
             patterns,
             plan,
@@ -1978,12 +1979,12 @@ public sealed class LiteralLineSearcherTests
             crlf: crlf,
             nullData: nullData,
             requireMatchColumn: false));
-        Assert.Equal(3UL, threeMatchedLines);
-        Assert.Equal(4, threeMatches);
-        Assert.Equal(5, threeLineSink.LineNumber);
+        Assert.AreEqual(3UL, threeMatchedLines);
+        Assert.AreEqual(4, threeMatches);
+        Assert.AreEqual(5, threeLineSink.LineNumber);
 
         var lineSink = new CapturingLineSink();
-        Assert.True(LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
+        Assert.IsTrue(LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
             haystack,
             patterns,
             plan,
@@ -1992,8 +1993,8 @@ public sealed class LiteralLineSearcherTests
             crlf: crlf,
             nullData: nullData,
             requireMatchColumn: false));
-        Assert.Equal(9, searchedLines);
-        Assert.Equal(6, LiteralLineSearcher.CountMatchesWithRegexPlan(
+        Assert.AreEqual(9, searchedLines);
+        Assert.AreEqual(6, LiteralLineSearcher.CountMatchesWithRegexPlan(
             haystack,
             patterns,
             plan,
@@ -2004,7 +2005,7 @@ public sealed class LiteralLineSearcherTests
             sourcePattern,
             crlf,
             nullData);
-        Assert.True(LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+        Assert.IsTrue(LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
             haystack,
             patterns,
             countPlan,
@@ -2016,14 +2017,14 @@ public sealed class LiteralLineSearcherTests
             nullData: nullData,
             out long separateCount,
             out bool containsNul));
-        Assert.Equal(6, separateCount);
-        Assert.Equal(haystack.Contains((byte)0), containsNul);
+        Assert.AreEqual(6, separateCount);
+        Assert.AreEqual(haystack.Contains((byte)0), containsNul);
     }
 
     /// <summary>
     /// Verifies multiline expressions that may cross records cannot map a match from only its end.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchEndIterationDeclinesCrossRecordMultilineMatches()
     {
         byte[][] patterns = ["alpha.*omega"u8.ToArray()];
@@ -2034,9 +2035,9 @@ public sealed class LiteralLineSearcherTests
                 multiline: true,
                 multilineDotall: true));
 
-        Assert.NotNull(plan);
-        Assert.Equal(new RegexMatch(0, 11), plan.Matcher.Find("alpha\nomega"u8));
-        Assert.False(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(new RegexMatch(0, 11), plan.Matcher.Find("alpha\nomega"u8));
+        Assert.IsFalse(LiteralLineSearcher.CanGroupAuthoritativeMatchesByEnd(
             plan,
             invertMatch: false,
             requireMatchColumn: false));
@@ -2045,7 +2046,7 @@ public sealed class LiteralLineSearcherTests
     /// <summary>
     /// Verifies match-line candidate scanning excludes the line terminator from match content.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesExcludesLineTerminatorFromCandidateMatches()
     {
         var sink = new CapturingMatchLineSink();
@@ -2055,14 +2056,14 @@ public sealed class LiteralLineSearcherTests
             ["foo[^x]"u8.ToArray()],
             ref sink);
 
-        Assert.False(matched);
-        Assert.Equal(0UL, sink.Matches);
+        Assert.IsFalse(matched);
+        Assert.AreEqual(0UL, sink.Matches);
     }
 
     /// <summary>
     /// Verifies authoritative matching emits match-line records for prepared captures.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesUsesAuthoritativePlanForPreparedCaptures()
     {
         var sink = new CapturingMatchLineSink();
@@ -2073,18 +2074,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.Matches);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(13, sink.MatchByteOffset);
-        Assert.Equal(14, sink.MatchColumn);
-        Assert.Equal("enum mode"u8.ToArray(), sink.Match);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.Matches);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(13, sink.MatchByteOffset);
+        Assert.AreEqual(14, sink.MatchColumn);
+        Assert.AreSequenceEqual("enum mode"u8.ToArray(), sink.Match);
     }
 
     /// <summary>
     /// Verifies authoritative line search can skip exact match-column work when the sink does not need it.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanCanSkipMatchColumn()
     {
         var sink = new CapturingLineSink();
@@ -2096,18 +2097,18 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(0, sink.ByteOffset);
-        Assert.Equal(0, sink.MatchColumn);
-        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(0, sink.ByteOffset);
+        Assert.AreEqual(0, sink.MatchColumn);
+        Assert.AreSequenceEqual("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>
     /// Verifies authoritative class-sequence matching is Unicode-aware.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanMatchesUnicodeWords()
     {
         var sink = new CapturingLineSink();
@@ -2119,18 +2120,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(5, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal(Encoding.UTF8.GetBytes("abcde caf\u00e9x klmno\n"), sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(5, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("abcde caf\u00e9x klmno\n"), sink.Line);
     }
 
     /// <summary>
     /// Verifies authoritative class-sequence matching recognizes Unicode whitespace separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanMatchesUnicodeWhitespace()
     {
         var sink = new CapturingLineSink();
@@ -2142,18 +2143,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(5, sink.ByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal(Encoding.UTF8.GetBytes("abcde\u00a0fghij klmno\n"), sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreEqual(5, sink.ByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("abcde\u00a0fghij klmno\n"), sink.Line);
     }
 
     /// <summary>
     /// Verifies authoritative whole-haystack search can omit the column when only line selection is needed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativeMatcherCanSkipUnicodeMatchColumn()
     {
         var sink = new CapturingLineSink();
@@ -2166,16 +2167,16 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(0, sink.MatchColumn);
-        Assert.Equal(haystack, sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(0, sink.MatchColumn);
+        Assert.AreSequenceEqual(haystack, sink.Line);
     }
 
     /// <summary>
     /// Verifies no-column authoritative matching still checks earlier Unicode-only matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanChecksEarlierUnicodeLineWhenColumnSkipped()
     {
         var sink = new CapturingLineSink();
@@ -2188,16 +2189,16 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             requireMatchColumn: false);
 
-        Assert.True(matched);
-        Assert.Equal(2UL, sink.MatchedLines);
-        Assert.Equal(2, sink.LineNumber);
-        Assert.Equal(Encoding.UTF8.GetBytes("abcde fghij klmno\n"), sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(2UL, sink.MatchedLines);
+        Assert.AreEqual(2, sink.LineNumber);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("abcde fghij klmno\n"), sink.Line);
     }
 
     /// <summary>
     /// Verifies authoritative Unicode matching stays on UTF-8 scalar boundaries while backtracking.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanBacktracksUnicodeScalars()
     {
         var sink = new CapturingLineSink();
@@ -2209,17 +2210,17 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal(haystack, sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual(haystack, sink.Line);
     }
 
     /// <summary>
     /// Verifies repeated capturing groups can backtrack inside each repeated group body.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchBacktracksRepeatedCapturingGroups()
     {
         var sink = new CapturingLineSink();
@@ -2227,25 +2228,25 @@ public sealed class LiteralLineSearcherTests
         byte[] haystack = "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n"u8.ToArray();
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
-        Assert.NotNull(plan.Matcher.Find(haystack));
+        Assert.IsNotNull(plan);
+        Assert.IsNotNull(plan.Matcher.Find(haystack));
 
         bool matched = LiteralLineSearcher.Search(
             haystack,
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal(haystack, sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual(haystack, sink.Line);
     }
 
     /// <summary>
     /// Verifies repeated capturing groups use the regex plan when emitting match-line records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchMatchLinesBacktracksRepeatedCapturingGroups()
     {
         var sink = new CapturingMatchLineSink();
@@ -2257,18 +2258,18 @@ public sealed class LiteralLineSearcherTests
             patterns,
             ref sink);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.Matches);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(0, sink.MatchByteOffset);
-        Assert.Equal(1, sink.MatchColumn);
-        Assert.Equal("ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses)"u8.ToArray(), sink.Match);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.Matches);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreEqual(0, sink.MatchByteOffset);
+        Assert.AreEqual(1, sink.MatchColumn);
+        Assert.AreSequenceEqual("ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses)"u8.ToArray(), sink.Match);
     }
 
     /// <summary>
     /// Verifies authoritative class-sequence matching honors max-count limiting.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchAuthoritativePlanHonorsMaxMatchingLines()
     {
         var sink = new CapturingLineSink();
@@ -2280,10 +2281,10 @@ public sealed class LiteralLineSearcherTests
             ref sink,
             maxMatchingLines: 1);
 
-        Assert.True(matched);
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal("abcde fghij klmno\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.IsTrue(matched);
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreSequenceEqual("abcde fghij klmno\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     private static byte[] CreateMixedRecordCorpus(

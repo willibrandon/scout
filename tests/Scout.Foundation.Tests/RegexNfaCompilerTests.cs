@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies Thompson NFA compilation independently of meta-engine selection.
 /// </summary>
+[TestClass]
 public sealed class RegexNfaCompilerTests()
 {
     /// <summary>
@@ -14,15 +15,15 @@ public sealed class RegexNfaCompilerTests()
     /// <param name="swapGreed">Whether to invert repetition preference.</param>
     /// <param name="reversed">Whether to compile the NFA in reverse.</param>
     /// <param name="lazy">Whether the effective repetition preference is lazy.</param>
-    [Theory]
-    [InlineData("a{2,5}z", false, false, false)]
-    [InlineData("a{2,5}?z", false, false, true)]
-    [InlineData("a{2,5}z", true, false, true)]
-    [InlineData("a{2,5}?z", true, false, false)]
-    [InlineData("za{2,5}", false, true, false)]
-    [InlineData("za{2,5}?", false, true, true)]
-    [InlineData("za{2,5}", true, true, true)]
-    [InlineData("za{2,5}?", true, true, false)]
+    [TestMethod]
+    [DataRow("a{2,5}z", false, false, false)]
+    [DataRow("a{2,5}?z", false, false, true)]
+    [DataRow("a{2,5}z", true, false, true)]
+    [DataRow("a{2,5}?z", true, false, false)]
+    [DataRow("za{2,5}", false, true, false)]
+    [DataRow("za{2,5}?", false, true, true)]
+    [DataRow("za{2,5}", true, true, true)]
+    [DataRow("za{2,5}?", true, true, false)]
     public void FiniteRepetitionUsesCommonExit(
         string pattern,
         bool swapGreed,
@@ -32,7 +33,7 @@ public sealed class RegexNfaCompilerTests()
         RegexNfa nfa = Compile(pattern, swapGreed, reversed);
         int accept = FindAccept(nfa);
         int continuation = FindLiteral(nfa, (byte)'z');
-        Assert.Equal(accept, nfa.States[continuation].Next);
+        Assert.AreEqual(accept, nfa.States[continuation].Next);
         int current = nfa.StartState;
 
         for (int count = 0; count < 2; count++)
@@ -43,16 +44,16 @@ public sealed class RegexNfaCompilerTests()
         for (int count = 2; count < 5; count++)
         {
             RegexNfaState split = nfa.States[current];
-            Assert.Equal(RegexNfaStateKind.Split, split.Kind);
+            Assert.AreEqual(RegexNfaStateKind.Split, split.Kind);
 
             int skip = lazy ? split.Next : split.Alternative;
             int consume = lazy ? split.Alternative : split.Next;
-            Assert.Equal(continuation, skip);
+            Assert.AreEqual(continuation, skip);
 
             current = AssertLiteral(nfa, consume, (byte)'a').Next;
         }
 
-        Assert.Equal(continuation, current);
+        Assert.AreEqual(continuation, current);
     }
 
     /// <summary>
@@ -63,13 +64,13 @@ public sealed class RegexNfaCompilerTests()
     /// <param name="swapGreed">Whether to invert repetition preference.</param>
     /// <param name="reversed">Whether to compile the NFA in reverse.</param>
     /// <param name="expectedLength">The expected anchored match length.</param>
-    [Theory]
-    [InlineData("a{2,5}a", "aaaaaa", false, false, 6)]
-    [InlineData("a{2,5}?a", "aaaaaa", false, false, 3)]
-    [InlineData("a{2,5}a", "aaaaaa", true, false, 3)]
-    [InlineData("a{2,5}?a", "aaaaaa", true, false, 6)]
-    [InlineData("a{2,5}z", "zaaaaa", false, true, 6)]
-    [InlineData("a{2,5}?z", "zaaaaa", false, true, 3)]
+    [TestMethod]
+    [DataRow("a{2,5}a", "aaaaaa", false, false, 6)]
+    [DataRow("a{2,5}?a", "aaaaaa", false, false, 3)]
+    [DataRow("a{2,5}a", "aaaaaa", true, false, 3)]
+    [DataRow("a{2,5}?a", "aaaaaa", true, false, 6)]
+    [DataRow("a{2,5}z", "zaaaaa", false, true, 6)]
+    [DataRow("a{2,5}?z", "zaaaaa", false, true, 3)]
     public void FiniteRepetitionPreservesMatchingPriority(
         string pattern,
         string haystack,
@@ -79,14 +80,14 @@ public sealed class RegexNfaCompilerTests()
     {
         var vm = new PikeVm(Compile(pattern, swapGreed, reversed));
 
-        Assert.True(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
-        Assert.Equal(expectedLength, length);
+        Assert.IsTrue(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
+        Assert.AreEqual(expectedLength, length);
     }
 
     /// <summary>
     /// Verifies exact, bounded, and empty-child repetitions retain their language semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FiniteRepetitionPreservesLanguageSemantics()
     {
         AssertMatch("a{3}z", "aaaz", expectedLength: 4);
@@ -103,9 +104,9 @@ public sealed class RegexNfaCompilerTests()
     /// retain exact forward and reverse construction estimates.
     /// </summary>
     /// <param name="pattern">The bounded line expression to compile.</param>
-    [Theory]
-    [InlineData("^[A-Za-z_]{70,90}$")]
-    [InlineData(@"^[A-Za-z_]{70,90}\r?$")]
+    [TestMethod]
+    [DataRow("^[A-Za-z_]{70,90}$")]
+    [DataRow(@"^[A-Za-z_]{70,90}\r?$")]
     public void BoundedAsciiCharacterClassesUseByteClassStates(string pattern)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(pattern));
@@ -128,19 +129,19 @@ public sealed class RegexNfaCompilerTests()
             }
 
             classStateCount++;
-            Assert.Null(state.ScalarRanges);
-            Assert.False(state.RequiresUtf8ScalarMatch);
+            Assert.IsNull(state.ScalarRanges);
+            Assert.IsFalse(state.RequiresUtf8ScalarMatch);
         }
 
-        Assert.Equal(90, classStateCount);
-        Assert.Equal((ulong)forward.States.Count, estimate.ForwardStateCount);
-        Assert.Equal((ulong)reverse.States.Count, estimate.ReverseStateCount);
+        Assert.AreEqual(90, classStateCount);
+        Assert.AreEqual((ulong)forward.States.Count, estimate.ForwardStateCount);
+        Assert.AreEqual((ulong)reverse.States.Count, estimate.ReverseStateCount);
     }
 
     /// <summary>
     /// Verifies ranges containing a non-ASCII scalar continue through Unicode scalar lowering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NonAsciiCharacterClassesRetainUnicodeScalarLowering()
     {
         const string Pattern = @"^[A-Za-z_\u0100]{2}$";
@@ -150,16 +151,16 @@ public sealed class RegexNfaCompilerTests()
         RegexAtomNode atom = FindFirstAtom(tree.Root, RegexSyntaxKind.CharacterClass) ??
             throw new InvalidOperationException("The syntax tree does not contain a character-class atom.");
 
-        Assert.True(RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+        Assert.IsTrue(RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
             atom,
             options,
             out List<RegexScalarRange> ranges));
-        Assert.False(RegexUtf8ByteCompiler.TryGetAsciiByteRanges(ranges, out _));
-        Assert.True(CountConsumingStates(nfa) > 2);
+        Assert.IsFalse(RegexUtf8ByteCompiler.TryGetAsciiByteRanges(ranges, out _));
+        Assert.IsGreaterThan(2, CountConsumingStates(nfa));
 
         var vm = new PikeVm(nfa);
-        Assert.True(vm.TryMatchAt("AĀ"u8, start: 0, out int length));
-        Assert.Equal(3, length);
+        Assert.IsTrue(vm.TryMatchAt("AĀ"u8, start: 0, out int length));
+        Assert.AreEqual(3, length);
     }
 
     /// <summary>
@@ -167,9 +168,9 @@ public sealed class RegexNfaCompilerTests()
     /// every repetition copy.
     /// </summary>
     /// <param name="pattern">The bounded line expression to compile.</param>
-    [Theory]
-    [InlineData("^[A-Za-z_]{70,90}$")]
-    [InlineData(@"^[A-Za-z_]{70,90}\r?$")]
+    [TestMethod]
+    [DataRow("^[A-Za-z_]{70,90}$")]
+    [DataRow(@"^[A-Za-z_]{70,90}\r?$")]
     public void BoundedAsciiCharacterClassCompileAllocationsStayBounded(string pattern)
     {
         const long AllocationLimit = 256 * 1024;
@@ -183,8 +184,8 @@ public sealed class RegexNfaCompilerTests()
         _ = RegexNfaCompiler.Compile(tree.Root, options);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.True(
-            allocated <= AllocationLimit,
+        Assert.IsLessThanOrEqualTo(
+            AllocationLimit, allocated,
             $"Expected bounded ASCII class compilation to allocate at most {AllocationLimit} bytes, but it allocated {allocated} bytes.");
     }
 
@@ -265,20 +266,20 @@ public sealed class RegexNfaCompilerTests()
                 continue;
             }
 
-            Assert.Equal(-1, accept);
+            Assert.AreEqual(-1, accept);
             accept = index;
         }
 
-        Assert.NotEqual(-1, accept);
+        Assert.AreNotEqual(-1, accept);
         return accept;
     }
 
     private static RegexNfaState AssertLiteral(RegexNfa nfa, int stateIndex, byte value)
     {
         RegexNfaState state = nfa.States[stateIndex];
-        Assert.Equal(RegexNfaStateKind.Atom, state.Kind);
-        Assert.Equal(RegexSyntaxKind.Literal, state.AtomKind);
-        Assert.True(state.Value.Span.SequenceEqual([value]));
+        Assert.AreEqual(RegexNfaStateKind.Atom, state.Kind);
+        Assert.AreEqual(RegexSyntaxKind.Literal, state.AtomKind);
+        Assert.IsTrue(state.Value.Span.SequenceEqual([value]));
         return state;
     }
 
@@ -295,11 +296,11 @@ public sealed class RegexNfaCompilerTests()
                 continue;
             }
 
-            Assert.Equal(-1, literal);
+            Assert.AreEqual(-1, literal);
             literal = index;
         }
 
-        Assert.NotEqual(-1, literal);
+        Assert.AreNotEqual(-1, literal);
         return literal;
     }
 
@@ -307,15 +308,15 @@ public sealed class RegexNfaCompilerTests()
     {
         var vm = new PikeVm(Compile(pattern));
 
-        Assert.True(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
-        Assert.Equal(expectedLength, length);
+        Assert.IsTrue(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
+        Assert.AreEqual(expectedLength, length);
     }
 
     private static void AssertNoMatch(string pattern, string haystack)
     {
         var vm = new PikeVm(Compile(pattern));
 
-        Assert.False(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
-        Assert.Equal(0, length);
+        Assert.IsFalse(vm.TryMatchAt(Encoding.UTF8.GetBytes(haystack), start: 0, out int length));
+        Assert.AreEqual(0, length);
     }
 }

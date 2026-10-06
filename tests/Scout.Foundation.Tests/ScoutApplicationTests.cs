@@ -8,13 +8,14 @@ namespace Scout;
 /// <summary>
 /// Verifies initial application dispatch behavior.
 /// </summary>
-[Collection(ApplicationProcessStateGroup.Name)]
+[DoNotParallelize]
+[TestClass]
 public sealed class ScoutApplicationTests
 {
     /// <summary>
     /// Verifies the short version mode writes Scout's version bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ShortVersionWritesScoutVersion()
     {
         using MemoryStream output = new();
@@ -29,15 +30,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(VersionOutput.Short.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(VersionOutput.Short.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies the long version mode writes Scout's long version bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LongVersionWritesScoutVersion()
     {
         using MemoryStream output = new();
@@ -52,15 +53,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(VersionOutput.GetLong(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(VersionOutput.GetLong(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies short help output matches Scout's generated artifact.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ShortHelpWritesScoutHelp()
     {
         using MemoryStream output = new();
@@ -75,15 +76,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(HelpOutput.Short.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(HelpOutput.Short.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies long help output matches Scout's generated artifact.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LongHelpWritesScoutHelp()
     {
         using MemoryStream output = new();
@@ -98,15 +99,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(HelpOutput.Long.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(HelpOutput.Long.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies generated help payload classes feed the help dispatcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HelpOutputsUseSourceGeneratedArtifacts()
     {
         AssertGeneratedArtifact(HelpOutput.Short.ToArray(), GeneratedShortHelpArtifact.CompressedBase64);
@@ -116,7 +117,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies a closed downstream pipe exits quietly after the consumer stops reading.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BrokenOutputPipeExitsSuccessfully()
     {
         using MemoryStream input = new("alpha\nbeta\n"u8.ToArray());
@@ -133,14 +134,14 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
 
-        Assert.Equal(ExitCode.Success, exitCode);
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(ExitCode.Success, exitCode);
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies parser errors are rendered with Scout's top-level prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParserErrorsUseScoutPrefix()
     {
         using MemoryStream output = new();
@@ -155,15 +156,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(2, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Equal("scout: unrecognized flag --bogus\n"u8.ToArray(), error.ToArray());
+        Assert.AreEqual(2, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.AreSequenceEqual("scout: unrecognized flag --bogus\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
     /// Verifies no-argument invocation prints short help for installer validation probes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoArgumentsWritesScoutHelp()
     {
         using MemoryStream output = new();
@@ -177,15 +178,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(HelpOutput.Short.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(HelpOutput.Short.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies invalid UTF-8 implicit pattern arguments use Scout's diagnostic prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvalidUtf8ImplicitPatternWritesScoutDiagnosticError()
     {
         using MemoryStream output = new();
@@ -201,15 +202,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(2, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Equal("scout: pattern given is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+        Assert.AreEqual(2, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.AreSequenceEqual("scout: pattern given is not valid UTF-8\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
     /// Verifies invalid UTF-8 explicit pattern arguments use Scout's diagnostic prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvalidUtf8ExplicitPatternWritesScoutDiagnosticError()
     {
         using MemoryStream output = new();
@@ -226,15 +227,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(2, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Equal("scout: error parsing flag -e: value is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+        Assert.AreEqual(2, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.AreSequenceEqual("scout: error parsing flag -e: value is not valid UTF-8\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
     /// Verifies invalid UTF-8 path arguments enter the Unix raw-path search path instead of being rejected at decode time.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvalidUtf8PathArgumentUsesRawUnixPath()
     {
         using MemoryStream output = new();
@@ -251,11 +252,11 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         string stderr = Encoding.UTF8.GetString(error.ToArray());
 
-        Assert.Equal(2, exitCode);
-        Assert.Empty(output.ToArray());
+        Assert.AreEqual(2, exitCode);
+        Assert.IsEmpty(output.ToArray());
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal("scout: invalid CLI arguments\n", stderr);
+            Assert.AreEqual("scout: invalid CLI arguments\n", stderr);
         }
         else
         {
@@ -267,7 +268,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies a literal search prints matching lines from a single file without path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchPrintsMatchingLinesForSingleFile()
     {
         string root = CreateTempDirectory();
@@ -286,15 +287,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("needle one\nbeta needle two\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("needle one\nbeta needle two\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies line-number output for a single searched file.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchPrintsLineNumbersForSingleFile()
     {
         string root = CreateTempDirectory();
@@ -314,15 +315,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("2:needle one\n3:beta needle two\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("2:needle one\n3:beta needle two\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies bundled short flags match pinned ripgrep behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CombinedShortFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -338,24 +339,24 @@ public sealed class ScoutApplicationTests
         (int invalidExitCode, byte[] invalidOutput, string invalidError) = RunScout("-m1n", "needle", path);
         (int pinnedInvalidExitCode, byte[] pinnedInvalidOutput, string pinnedInvalidError) = RunPinnedRipgrep("-m1n", "needle", path);
 
-        Assert.Equal(pinnedSwitchesExitCode, switchesExitCode);
-        Assert.Equal(pinnedSwitchesOutput, switchesOutput);
-        Assert.Equal(pinnedSwitchesError, switchesError);
-        Assert.Equal(pinnedValueExitCode, valueExitCode);
-        Assert.Equal(pinnedValueOutput, valueOutput);
-        Assert.Equal(pinnedValueError, valueError);
-        Assert.Equal(pinnedFollowingExitCode, followingExitCode);
-        Assert.Equal(pinnedFollowingOutput, followingOutput);
-        Assert.Equal(pinnedFollowingError, followingError);
-        Assert.Equal(pinnedInvalidExitCode, invalidExitCode);
-        Assert.Equal(pinnedInvalidOutput, invalidOutput);
-        Assert.Equal(pinnedInvalidError, invalidError);
+        Assert.AreEqual(pinnedSwitchesExitCode, switchesExitCode);
+        Assert.AreSequenceEqual(pinnedSwitchesOutput, switchesOutput);
+        Assert.AreEqual(pinnedSwitchesError, switchesError);
+        Assert.AreEqual(pinnedValueExitCode, valueExitCode);
+        Assert.AreSequenceEqual(pinnedValueOutput, valueOutput);
+        Assert.AreEqual(pinnedValueError, valueError);
+        Assert.AreEqual(pinnedFollowingExitCode, followingExitCode);
+        Assert.AreSequenceEqual(pinnedFollowingOutput, followingOutput);
+        Assert.AreEqual(pinnedFollowingError, followingError);
+        Assert.AreEqual(pinnedInvalidExitCode, invalidExitCode);
+        Assert.AreSequenceEqual(pinnedInvalidOutput, invalidOutput);
+        Assert.AreEqual(pinnedInvalidError, invalidError);
     }
 
     /// <summary>
     /// Verifies the no-line-number flag disables earlier line-number output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchNoLineNumberFlagDisablesEarlierLineNumberFlag()
     {
         string root = CreateTempDirectory();
@@ -376,15 +377,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("needle one\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("needle one\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies fixed-string mode treats regex metacharacters literally.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FixedStringsTreatsRegexMetacharactersLiterally()
     {
         string root = CreateTempDirectory();
@@ -405,15 +406,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-F", "a.c", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies default regex mode treats dot as a one-byte wildcard.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexDotMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -423,15 +424,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("a.c", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("a.c", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies auto selection dispatches through the native matcher retained during planning.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoRegexDispatchesSuccessfulNativePlan()
     {
         using MemoryStream input = new("alpha\nneedle\nomega\n"u8.ToArray());
@@ -449,15 +450,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
 
-        Assert.Equal(ExitCode.Success, exitCode);
-        Assert.Equal("needle\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(ExitCode.Success, exitCode);
+        Assert.AreSequenceEqual("needle\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies auto selection reports both engine errors after native construction fails.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoRegexReportsBothEngineConstructionFailures()
     {
         using MemoryStream input = new("a\n"u8.ToArray());
@@ -476,8 +477,8 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
         string diagnostic = Utf8(error.ToArray());
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output.ToArray());
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output.ToArray());
         Assert.StartsWith(
             "scout: regex could not be compiled with either the default regex engine or with PCRE2.",
             diagnostic,
@@ -491,16 +492,16 @@ public sealed class ScoutApplicationTests
     /// Verifies unsupported native escapes and invalid Unicode scalars return ordinary compile diagnostics.
     /// </summary>
     /// <param name="pattern">The invalid default-engine pattern.</param>
-    [Theory]
-    [InlineData(@"\q")]
-    [InlineData(@"\1")]
-    [InlineData(@"\K")]
-    [InlineData(@"\R")]
-    [InlineData(@"\X")]
-    [InlineData(@"\x{}")]
-    [InlineData(@"\uD800")]
-    [InlineData(@"\U00110000")]
-    [InlineData(@"\p{NotAUnicodeProperty}")]
+    [TestMethod]
+    [DataRow(@"\q")]
+    [DataRow(@"\1")]
+    [DataRow(@"\K")]
+    [DataRow(@"\R")]
+    [DataRow(@"\X")]
+    [DataRow(@"\x{}")]
+    [DataRow(@"\uD800")]
+    [DataRow(@"\U00110000")]
+    [DataRow(@"\p{NotAUnicodeProperty}")]
     public void DefaultRegexRejectsUnsupportedEscapesWithoutUnhandledFailures(string pattern)
     {
         string root = CreateTempDirectory();
@@ -509,8 +510,8 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout(pattern, path);
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output);
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output);
         Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
         Assert.Contains("\nerror: ", error, StringComparison.Ordinal);
     }
@@ -519,10 +520,10 @@ public sealed class ScoutApplicationTests
     /// Verifies multiline analysis reports invalid Unicode scalars without an unhandled exception.
     /// </summary>
     /// <param name="pattern">The expression containing an invalid Unicode scalar.</param>
-    [Theory]
-    [InlineData(@"\uD800")]
-    [InlineData(@"\U00110000")]
-    [InlineData(@"\x{110000}")]
+    [TestMethod]
+    [DataRow(@"\uD800")]
+    [DataRow(@"\U00110000")]
+    [DataRow(@"\x{110000}")]
     public void MultilineRegexRejectsInvalidScalarsWithoutUnhandledFailures(string pattern)
     {
         string root = CreateTempDirectory();
@@ -531,8 +532,8 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout("-U", pattern, path);
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output);
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output);
         Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
         Assert.Contains("\nerror: ", error, StringComparison.Ordinal);
     }
@@ -541,9 +542,9 @@ public sealed class ScoutApplicationTests
     /// Verifies malformed nested character classes fail instead of being flattened.
     /// </summary>
     /// <param name="pattern">The malformed nested class expression.</param>
-    [Theory]
-    [InlineData("[a-c[0-2]")]
-    [InlineData("[[a-z]")]
+    [TestMethod]
+    [DataRow("[a-c[0-2]")]
+    [DataRow("[[a-z]")]
     public void DefaultRegexRejectsMalformedNestedCharacterClasses(string pattern)
     {
         string root = CreateTempDirectory();
@@ -552,8 +553,8 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout(pattern, path);
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output);
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output);
         Assert.Contains("unclosed character class", error, StringComparison.Ordinal);
         Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
     }
@@ -561,7 +562,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies default regex mode supports byte character classes and escaped metacharacters.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexClassMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -571,15 +572,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout(@"file[0-9]\.txt", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(@"file[0-9]\.txt", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies default regex mode supports POSIX and shorthand bracket classes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexNestedClassSyntaxMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -599,30 +600,30 @@ public sealed class ScoutApplicationTests
         (int negatedExitCode, byte[] negatedOutput, string negatedError) = RunScout("-o", "[[:^digit:]]+", path);
         (int pinnedNegatedExitCode, byte[] pinnedNegatedOutput, string pinnedNegatedError) = RunPinnedRipgrep("-o", "[[:^digit:]]+", path);
 
-        Assert.Equal(pinnedDigitExitCode, digitExitCode);
-        Assert.Equal(pinnedDigitOutput, digitOutput);
-        Assert.Equal(pinnedDigitError, digitError);
-        Assert.Equal(pinnedAlphaExitCode, alphaExitCode);
-        Assert.Equal(pinnedAlphaOutput, alphaOutput);
-        Assert.Equal(pinnedAlphaError, alphaError);
-        Assert.Equal(pinnedEscapedDigitExitCode, escapedDigitExitCode);
-        Assert.Equal(pinnedEscapedDigitOutput, escapedDigitOutput);
-        Assert.Equal(pinnedEscapedDigitError, escapedDigitError);
-        Assert.Equal(pinnedWordExitCode, wordExitCode);
-        Assert.Equal(pinnedWordOutput, wordOutput);
-        Assert.Equal(pinnedWordError, wordError);
-        Assert.Equal(pinnedSpaceExitCode, spaceExitCode);
-        Assert.Equal(pinnedSpaceOutput, spaceOutput);
-        Assert.Equal(pinnedSpaceError, spaceError);
-        Assert.Equal(pinnedNegatedExitCode, negatedExitCode);
-        Assert.Equal(pinnedNegatedOutput, negatedOutput);
-        Assert.Equal(pinnedNegatedError, negatedError);
+        Assert.AreEqual(pinnedDigitExitCode, digitExitCode);
+        Assert.AreSequenceEqual(pinnedDigitOutput, digitOutput);
+        Assert.AreEqual(pinnedDigitError, digitError);
+        Assert.AreEqual(pinnedAlphaExitCode, alphaExitCode);
+        Assert.AreSequenceEqual(pinnedAlphaOutput, alphaOutput);
+        Assert.AreEqual(pinnedAlphaError, alphaError);
+        Assert.AreEqual(pinnedEscapedDigitExitCode, escapedDigitExitCode);
+        Assert.AreSequenceEqual(pinnedEscapedDigitOutput, escapedDigitOutput);
+        Assert.AreEqual(pinnedEscapedDigitError, escapedDigitError);
+        Assert.AreEqual(pinnedWordExitCode, wordExitCode);
+        Assert.AreSequenceEqual(pinnedWordOutput, wordOutput);
+        Assert.AreEqual(pinnedWordError, wordError);
+        Assert.AreEqual(pinnedSpaceExitCode, spaceExitCode);
+        Assert.AreSequenceEqual(pinnedSpaceOutput, spaceOutput);
+        Assert.AreEqual(pinnedSpaceError, spaceError);
+        Assert.AreEqual(pinnedNegatedExitCode, negatedExitCode);
+        Assert.AreSequenceEqual(pinnedNegatedOutput, negatedOutput);
+        Assert.AreEqual(pinnedNegatedError, negatedError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports greedy one-byte repetition.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexQuantifiersMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -632,15 +633,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-o", "ab+c", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", "ab+c", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies default regex mode supports counted repetition ranges.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexCountedRepetitionMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -656,24 +657,24 @@ public sealed class ScoutApplicationTests
         (int unboundedExitCode, byte[] unboundedOutput, string unboundedError) = RunScout("-n", "ab{2,}", path);
         (int pinnedUnboundedExitCode, byte[] pinnedUnboundedOutput, string pinnedUnboundedError) = RunPinnedRipgrep("-n", "ab{2,}", path);
 
-        Assert.Equal(pinnedLiteralExitCode, literalExitCode);
-        Assert.Equal(pinnedLiteralOutput, literalOutput);
-        Assert.Equal(pinnedLiteralError, literalError);
-        Assert.Equal(pinnedGroupExitCode, groupExitCode);
-        Assert.Equal(pinnedGroupOutput, groupOutput);
-        Assert.Equal(pinnedGroupError, groupError);
-        Assert.Equal(pinnedClassExitCode, classExitCode);
-        Assert.Equal(pinnedClassOutput, classOutput);
-        Assert.Equal(pinnedClassError, classError);
-        Assert.Equal(pinnedUnboundedExitCode, unboundedExitCode);
-        Assert.Equal(pinnedUnboundedOutput, unboundedOutput);
-        Assert.Equal(pinnedUnboundedError, unboundedError);
+        Assert.AreEqual(pinnedLiteralExitCode, literalExitCode);
+        Assert.AreSequenceEqual(pinnedLiteralOutput, literalOutput);
+        Assert.AreEqual(pinnedLiteralError, literalError);
+        Assert.AreEqual(pinnedGroupExitCode, groupExitCode);
+        Assert.AreSequenceEqual(pinnedGroupOutput, groupOutput);
+        Assert.AreEqual(pinnedGroupError, groupError);
+        Assert.AreEqual(pinnedClassExitCode, classExitCode);
+        Assert.AreSequenceEqual(pinnedClassOutput, classOutput);
+        Assert.AreEqual(pinnedClassError, classError);
+        Assert.AreEqual(pinnedUnboundedExitCode, unboundedExitCode);
+        Assert.AreSequenceEqual(pinnedUnboundedOutput, unboundedOutput);
+        Assert.AreEqual(pinnedUnboundedError, unboundedError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports lazy repetition spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexLazyQuantifiersMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -689,24 +690,24 @@ public sealed class ScoutApplicationTests
         (int countedExitCode, byte[] countedOutput, string countedError) = RunScout("-o", "ab{1,3}?", path);
         (int pinnedCountedExitCode, byte[] pinnedCountedOutput, string pinnedCountedError) = RunPinnedRipgrep("-o", "ab{1,3}?", path);
 
-        Assert.Equal(pinnedOneByteExitCode, oneByteExitCode);
-        Assert.Equal(pinnedOneByteOutput, oneByteOutput);
-        Assert.Equal(pinnedOneByteError, oneByteError);
-        Assert.Equal(pinnedDotExitCode, dotExitCode);
-        Assert.Equal(pinnedDotOutput, dotOutput);
-        Assert.Equal(pinnedDotError, dotError);
-        Assert.Equal(pinnedGroupExitCode, groupExitCode);
-        Assert.Equal(pinnedGroupOutput, groupOutput);
-        Assert.Equal(pinnedGroupError, groupError);
-        Assert.Equal(pinnedCountedExitCode, countedExitCode);
-        Assert.Equal(pinnedCountedOutput, countedOutput);
-        Assert.Equal(pinnedCountedError, countedError);
+        Assert.AreEqual(pinnedOneByteExitCode, oneByteExitCode);
+        Assert.AreSequenceEqual(pinnedOneByteOutput, oneByteOutput);
+        Assert.AreEqual(pinnedOneByteError, oneByteError);
+        Assert.AreEqual(pinnedDotExitCode, dotExitCode);
+        Assert.AreSequenceEqual(pinnedDotOutput, dotOutput);
+        Assert.AreEqual(pinnedDotError, dotError);
+        Assert.AreEqual(pinnedGroupExitCode, groupExitCode);
+        Assert.AreSequenceEqual(pinnedGroupOutput, groupOutput);
+        Assert.AreEqual(pinnedGroupError, groupError);
+        Assert.AreEqual(pinnedCountedExitCode, countedExitCode);
+        Assert.AreSequenceEqual(pinnedCountedOutput, countedOutput);
+        Assert.AreEqual(pinnedCountedError, countedError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports ungreedy inline flags.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexUngreedyFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -724,27 +725,27 @@ public sealed class ScoutApplicationTests
         (int disabledExitCode, byte[] disabledOutput, string disabledError) = RunScout("-o", "(?U)(?-U:ab+)", path);
         (int pinnedDisabledExitCode, byte[] pinnedDisabledOutput, string pinnedDisabledError) = RunPinnedRipgrep("-o", "(?U)(?-U:ab+)", path);
 
-        Assert.Equal(pinnedEnabledExitCode, enabledExitCode);
-        Assert.Equal(pinnedEnabledOutput, enabledOutput);
-        Assert.Equal(pinnedEnabledError, enabledError);
-        Assert.Equal(pinnedLazySuffixExitCode, lazySuffixExitCode);
-        Assert.Equal(pinnedLazySuffixOutput, lazySuffixOutput);
-        Assert.Equal(pinnedLazySuffixError, lazySuffixError);
-        Assert.Equal(pinnedPlusExitCode, plusExitCode);
-        Assert.Equal(pinnedPlusOutput, plusOutput);
-        Assert.Equal(pinnedPlusError, plusError);
-        Assert.Equal(pinnedScopedExitCode, scopedExitCode);
-        Assert.Equal(pinnedScopedOutput, scopedOutput);
-        Assert.Equal(pinnedScopedError, scopedError);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedEnabledExitCode, enabledExitCode);
+        Assert.AreSequenceEqual(pinnedEnabledOutput, enabledOutput);
+        Assert.AreEqual(pinnedEnabledError, enabledError);
+        Assert.AreEqual(pinnedLazySuffixExitCode, lazySuffixExitCode);
+        Assert.AreSequenceEqual(pinnedLazySuffixOutput, lazySuffixOutput);
+        Assert.AreEqual(pinnedLazySuffixError, lazySuffixError);
+        Assert.AreEqual(pinnedPlusExitCode, plusExitCode);
+        Assert.AreSequenceEqual(pinnedPlusOutput, plusOutput);
+        Assert.AreEqual(pinnedPlusError, plusError);
+        Assert.AreEqual(pinnedScopedExitCode, scopedExitCode);
+        Assert.AreSequenceEqual(pinnedScopedOutput, scopedOutput);
+        Assert.AreEqual(pinnedScopedError, scopedError);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports inline case-insensitive flags.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexInlineCaseFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -758,21 +759,21 @@ public sealed class ScoutApplicationTests
         (int forcedSensitiveExitCode, byte[] forcedSensitiveOutput, string forcedSensitiveError) = RunScout("-i", "-n", "(?-i)foo", path);
         (int pinnedForcedSensitiveExitCode, byte[] pinnedForcedSensitiveOutput, string pinnedForcedSensitiveError) = RunPinnedRipgrep("-i", "-n", "(?-i)foo", path);
 
-        Assert.Equal(pinnedEnabledExitCode, enabledExitCode);
-        Assert.Equal(pinnedEnabledOutput, enabledOutput);
-        Assert.Equal(pinnedEnabledError, enabledError);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
-        Assert.Equal(pinnedForcedSensitiveExitCode, forcedSensitiveExitCode);
-        Assert.Equal(pinnedForcedSensitiveOutput, forcedSensitiveOutput);
-        Assert.Equal(pinnedForcedSensitiveError, forcedSensitiveError);
+        Assert.AreEqual(pinnedEnabledExitCode, enabledExitCode);
+        Assert.AreSequenceEqual(pinnedEnabledOutput, enabledOutput);
+        Assert.AreEqual(pinnedEnabledError, enabledError);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedForcedSensitiveExitCode, forcedSensitiveExitCode);
+        Assert.AreSequenceEqual(pinnedForcedSensitiveOutput, forcedSensitiveOutput);
+        Assert.AreEqual(pinnedForcedSensitiveError, forcedSensitiveError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports inline ignore-whitespace flags.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexInlineIgnoreWhitespaceFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -800,42 +801,42 @@ public sealed class ScoutApplicationTests
         (int carriedFlagExitCode, byte[] carriedFlagOutput, string carriedFlagError) = RunScout("-n", "(?x)nomatch|b a r", path);
         (int pinnedCarriedFlagExitCode, byte[] pinnedCarriedFlagOutput, string pinnedCarriedFlagError) = RunPinnedRipgrep("-n", "(?x)nomatch|b a r", path);
 
-        Assert.Equal(pinnedEnabledExitCode, enabledExitCode);
-        Assert.Equal(pinnedEnabledOutput, enabledOutput);
-        Assert.Equal(pinnedEnabledError, enabledError);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
-        Assert.Equal(pinnedEscapedSpaceExitCode, escapedSpaceExitCode);
-        Assert.Equal(pinnedEscapedSpaceOutput, escapedSpaceOutput);
-        Assert.Equal(pinnedEscapedSpaceError, escapedSpaceError);
-        Assert.Equal(pinnedScopedExitCode, scopedExitCode);
-        Assert.Equal(pinnedScopedOutput, scopedOutput);
-        Assert.Equal(pinnedScopedError, scopedError);
-        Assert.Equal(pinnedSignificantExitCode, significantExitCode);
-        Assert.Equal(pinnedSignificantOutput, significantOutput);
-        Assert.Equal(pinnedSignificantError, significantError);
-        Assert.Equal(pinnedCommentExitCode, commentExitCode);
-        Assert.Equal(pinnedCommentOutput, commentOutput);
-        Assert.Equal(pinnedCommentError, commentError);
-        Assert.Equal(pinnedEscapedHashExitCode, escapedHashExitCode);
-        Assert.Equal(pinnedEscapedHashOutput, escapedHashOutput);
-        Assert.Equal(pinnedEscapedHashError, escapedHashError);
-        Assert.Equal(pinnedDisabledHashExitCode, disabledHashExitCode);
-        Assert.Equal(pinnedDisabledHashOutput, disabledHashOutput);
-        Assert.Equal(pinnedDisabledHashError, disabledHashError);
-        Assert.Equal(pinnedCommentAlternationExitCode, commentAlternationExitCode);
-        Assert.Equal(pinnedCommentAlternationOutput, commentAlternationOutput);
-        Assert.Equal(pinnedCommentAlternationError, commentAlternationError);
-        Assert.Equal(pinnedCarriedFlagExitCode, carriedFlagExitCode);
-        Assert.Equal(pinnedCarriedFlagOutput, carriedFlagOutput);
-        Assert.Equal(pinnedCarriedFlagError, carriedFlagError);
+        Assert.AreEqual(pinnedEnabledExitCode, enabledExitCode);
+        Assert.AreSequenceEqual(pinnedEnabledOutput, enabledOutput);
+        Assert.AreEqual(pinnedEnabledError, enabledError);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedEscapedSpaceExitCode, escapedSpaceExitCode);
+        Assert.AreSequenceEqual(pinnedEscapedSpaceOutput, escapedSpaceOutput);
+        Assert.AreEqual(pinnedEscapedSpaceError, escapedSpaceError);
+        Assert.AreEqual(pinnedScopedExitCode, scopedExitCode);
+        Assert.AreSequenceEqual(pinnedScopedOutput, scopedOutput);
+        Assert.AreEqual(pinnedScopedError, scopedError);
+        Assert.AreEqual(pinnedSignificantExitCode, significantExitCode);
+        Assert.AreSequenceEqual(pinnedSignificantOutput, significantOutput);
+        Assert.AreEqual(pinnedSignificantError, significantError);
+        Assert.AreEqual(pinnedCommentExitCode, commentExitCode);
+        Assert.AreSequenceEqual(pinnedCommentOutput, commentOutput);
+        Assert.AreEqual(pinnedCommentError, commentError);
+        Assert.AreEqual(pinnedEscapedHashExitCode, escapedHashExitCode);
+        Assert.AreSequenceEqual(pinnedEscapedHashOutput, escapedHashOutput);
+        Assert.AreEqual(pinnedEscapedHashError, escapedHashError);
+        Assert.AreEqual(pinnedDisabledHashExitCode, disabledHashExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledHashOutput, disabledHashOutput);
+        Assert.AreEqual(pinnedDisabledHashError, disabledHashError);
+        Assert.AreEqual(pinnedCommentAlternationExitCode, commentAlternationExitCode);
+        Assert.AreSequenceEqual(pinnedCommentAlternationOutput, commentAlternationOutput);
+        Assert.AreEqual(pinnedCommentAlternationError, commentAlternationError);
+        Assert.AreEqual(pinnedCarriedFlagExitCode, carriedFlagExitCode);
+        Assert.AreSequenceEqual(pinnedCarriedFlagOutput, carriedFlagOutput);
+        Assert.AreEqual(pinnedCarriedFlagError, carriedFlagError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports scoped inline case-insensitive groups.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexScopedInlineCaseFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -849,21 +850,21 @@ public sealed class ScoutApplicationTests
         (int repeatedExitCode, byte[] repeatedOutput, string repeatedError) = RunScout("-n", "(?i:(foo){1,2})bar", path);
         (int pinnedRepeatedExitCode, byte[] pinnedRepeatedOutput, string pinnedRepeatedError) = RunPinnedRipgrep("-n", "(?i:(foo){1,2})bar", path);
 
-        Assert.Equal(pinnedScopedExitCode, scopedExitCode);
-        Assert.Equal(pinnedScopedOutput, scopedOutput);
-        Assert.Equal(pinnedScopedError, scopedError);
-        Assert.Equal(pinnedRestoredExitCode, restoredExitCode);
-        Assert.Equal(pinnedRestoredOutput, restoredOutput);
-        Assert.Equal(pinnedRestoredError, restoredError);
-        Assert.Equal(pinnedRepeatedExitCode, repeatedExitCode);
-        Assert.Equal(pinnedRepeatedOutput, repeatedOutput);
-        Assert.Equal(pinnedRepeatedError, repeatedError);
+        Assert.AreEqual(pinnedScopedExitCode, scopedExitCode);
+        Assert.AreSequenceEqual(pinnedScopedOutput, scopedOutput);
+        Assert.AreEqual(pinnedScopedError, scopedError);
+        Assert.AreEqual(pinnedRestoredExitCode, restoredExitCode);
+        Assert.AreSequenceEqual(pinnedRestoredOutput, restoredOutput);
+        Assert.AreEqual(pinnedRestoredError, restoredError);
+        Assert.AreEqual(pinnedRepeatedExitCode, repeatedExitCode);
+        Assert.AreSequenceEqual(pinnedRepeatedOutput, repeatedOutput);
+        Assert.AreEqual(pinnedRepeatedError, repeatedError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports line anchors.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexAnchorsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -875,18 +876,18 @@ public sealed class ScoutApplicationTests
         (int endExitCode, byte[] endOutput, string endError) = RunScout("-o", "needle$", path);
         (int pinnedEndExitCode, byte[] pinnedEndOutput, string pinnedEndError) = RunPinnedRipgrep("-o", "needle$", path);
 
-        Assert.Equal(pinnedStartExitCode, startExitCode);
-        Assert.Equal(pinnedStartOutput, startOutput);
-        Assert.Equal(pinnedStartError, startError);
-        Assert.Equal(pinnedEndExitCode, endExitCode);
-        Assert.Equal(pinnedEndOutput, endOutput);
-        Assert.Equal(pinnedEndError, endError);
+        Assert.AreEqual(pinnedStartExitCode, startExitCode);
+        Assert.AreSequenceEqual(pinnedStartOutput, startOutput);
+        Assert.AreEqual(pinnedStartError, startError);
+        Assert.AreEqual(pinnedEndExitCode, endExitCode);
+        Assert.AreSequenceEqual(pinnedEndOutput, endOutput);
+        Assert.AreEqual(pinnedEndError, endError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports top-level alternation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexAlternationMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -896,15 +897,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "cat|dog", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "cat|dog", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies default regex mode supports grouped alternatives and grouped repetition.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexGroupsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -916,18 +917,18 @@ public sealed class ScoutApplicationTests
         (int repeatExitCode, byte[] repeatOutput, string repeatError) = RunScout("-o", "(ab)+c", path);
         (int pinnedRepeatExitCode, byte[] pinnedRepeatOutput, string pinnedRepeatError) = RunPinnedRipgrep("-o", "(ab)+c", path);
 
-        Assert.Equal(pinnedGroupExitCode, groupExitCode);
-        Assert.Equal(pinnedGroupOutput, groupOutput);
-        Assert.Equal(pinnedGroupError, groupError);
-        Assert.Equal(pinnedRepeatExitCode, repeatExitCode);
-        Assert.Equal(pinnedRepeatOutput, repeatOutput);
-        Assert.Equal(pinnedRepeatError, repeatError);
+        Assert.AreEqual(pinnedGroupExitCode, groupExitCode);
+        Assert.AreSequenceEqual(pinnedGroupOutput, groupOutput);
+        Assert.AreEqual(pinnedGroupError, groupError);
+        Assert.AreEqual(pinnedRepeatExitCode, repeatExitCode);
+        Assert.AreSequenceEqual(pinnedRepeatOutput, repeatOutput);
+        Assert.AreEqual(pinnedRepeatError, repeatError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports escaped ASCII character classes and control escapes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -945,27 +946,27 @@ public sealed class ScoutApplicationTests
         (int tabExitCode, byte[] tabOutput, string tabError) = RunScout("-n", @"space\ttab", path);
         (int pinnedTabExitCode, byte[] pinnedTabOutput, string pinnedTabError) = RunPinnedRipgrep("-n", @"space\ttab", path);
 
-        Assert.Equal(pinnedDigitExitCode, digitExitCode);
-        Assert.Equal(pinnedDigitOutput, digitOutput);
-        Assert.Equal(pinnedDigitError, digitError);
-        Assert.Equal(pinnedWordExitCode, wordExitCode);
-        Assert.Equal(pinnedWordOutput, wordOutput);
-        Assert.Equal(pinnedWordError, wordError);
-        Assert.Equal(pinnedNonDigitExitCode, nonDigitExitCode);
-        Assert.Equal(pinnedNonDigitOutput, nonDigitOutput);
-        Assert.Equal(pinnedNonDigitError, nonDigitError);
-        Assert.Equal(pinnedWhitespaceExitCode, whitespaceExitCode);
-        Assert.Equal(pinnedWhitespaceOutput, whitespaceOutput);
-        Assert.Equal(pinnedWhitespaceError, whitespaceError);
-        Assert.Equal(pinnedTabExitCode, tabExitCode);
-        Assert.Equal(pinnedTabOutput, tabOutput);
-        Assert.Equal(pinnedTabError, tabError);
+        Assert.AreEqual(pinnedDigitExitCode, digitExitCode);
+        Assert.AreSequenceEqual(pinnedDigitOutput, digitOutput);
+        Assert.AreEqual(pinnedDigitError, digitError);
+        Assert.AreEqual(pinnedWordExitCode, wordExitCode);
+        Assert.AreSequenceEqual(pinnedWordOutput, wordOutput);
+        Assert.AreEqual(pinnedWordError, wordError);
+        Assert.AreEqual(pinnedNonDigitExitCode, nonDigitExitCode);
+        Assert.AreSequenceEqual(pinnedNonDigitOutput, nonDigitOutput);
+        Assert.AreEqual(pinnedNonDigitError, nonDigitError);
+        Assert.AreEqual(pinnedWhitespaceExitCode, whitespaceExitCode);
+        Assert.AreSequenceEqual(pinnedWhitespaceOutput, whitespaceOutput);
+        Assert.AreEqual(pinnedWhitespaceError, whitespaceError);
+        Assert.AreEqual(pinnedTabExitCode, tabExitCode);
+        Assert.AreSequenceEqual(pinnedTabOutput, tabOutput);
+        Assert.AreEqual(pinnedTabError, tabError);
     }
 
     /// <summary>
     /// Verifies Unicode property escapes use the automaton path even for ASCII haystacks.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexUnicodePropertyEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -977,18 +978,18 @@ public sealed class ScoutApplicationTests
         (int classExitCode, byte[] classOutput, string classError) = RunScout("-o", @"[\pL]+", path);
         (int pinnedClassExitCode, byte[] pinnedClassOutput, string pinnedClassError) = RunPinnedRipgrep("-o", @"[\pL]+", path);
 
-        Assert.Equal(pinnedPropertyExitCode, propertyExitCode);
-        Assert.Equal(pinnedPropertyOutput, propertyOutput);
-        Assert.Equal(pinnedPropertyError, propertyError);
-        Assert.Equal(pinnedClassExitCode, classExitCode);
-        Assert.Equal(pinnedClassOutput, classOutput);
-        Assert.Equal(pinnedClassError, classError);
+        Assert.AreEqual(pinnedPropertyExitCode, propertyExitCode);
+        Assert.AreSequenceEqual(pinnedPropertyOutput, propertyOutput);
+        Assert.AreEqual(pinnedPropertyError, propertyError);
+        Assert.AreEqual(pinnedClassExitCode, classExitCode);
+        Assert.AreSequenceEqual(pinnedClassOutput, classOutput);
+        Assert.AreEqual(pinnedClassError, classError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports ASCII hex and scalar escapes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexHexEscapesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1004,24 +1005,24 @@ public sealed class ScoutApplicationTests
         (int punctuationExitCode, byte[] punctuationOutput, string punctuationError) = RunScout("-n", @"\x2d", path);
         (int pinnedPunctuationExitCode, byte[] pinnedPunctuationOutput, string pinnedPunctuationError) = RunPinnedRipgrep("-n", @"\x2d", path);
 
-        Assert.Equal(pinnedShortHexExitCode, shortHexExitCode);
-        Assert.Equal(pinnedShortHexOutput, shortHexOutput);
-        Assert.Equal(pinnedShortHexError, shortHexError);
-        Assert.Equal(pinnedBracedHexExitCode, bracedHexExitCode);
-        Assert.Equal(pinnedBracedHexOutput, bracedHexOutput);
-        Assert.Equal(pinnedBracedHexError, bracedHexError);
-        Assert.Equal(pinnedScalarExitCode, scalarExitCode);
-        Assert.Equal(pinnedScalarOutput, scalarOutput);
-        Assert.Equal(pinnedScalarError, scalarError);
-        Assert.Equal(pinnedPunctuationExitCode, punctuationExitCode);
-        Assert.Equal(pinnedPunctuationOutput, punctuationOutput);
-        Assert.Equal(pinnedPunctuationError, punctuationError);
+        Assert.AreEqual(pinnedShortHexExitCode, shortHexExitCode);
+        Assert.AreSequenceEqual(pinnedShortHexOutput, shortHexOutput);
+        Assert.AreEqual(pinnedShortHexError, shortHexError);
+        Assert.AreEqual(pinnedBracedHexExitCode, bracedHexExitCode);
+        Assert.AreSequenceEqual(pinnedBracedHexOutput, bracedHexOutput);
+        Assert.AreEqual(pinnedBracedHexError, bracedHexError);
+        Assert.AreEqual(pinnedScalarExitCode, scalarExitCode);
+        Assert.AreSequenceEqual(pinnedScalarOutput, scalarOutput);
+        Assert.AreEqual(pinnedScalarError, scalarError);
+        Assert.AreEqual(pinnedPunctuationExitCode, punctuationExitCode);
+        Assert.AreSequenceEqual(pinnedPunctuationOutput, punctuationOutput);
+        Assert.AreEqual(pinnedPunctuationError, punctuationError);
     }
 
     /// <summary>
     /// Verifies default regex mode supports word-boundary assertions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexWordBoundariesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1043,33 +1044,33 @@ public sealed class ScoutApplicationTests
         (int endHalfExitCode, byte[] endHalfOutput, string endHalfError) = RunScout("-n", @"foo\b{end-half}", path);
         (int pinnedEndHalfExitCode, byte[] pinnedEndHalfOutput, string pinnedEndHalfError) = RunPinnedRipgrep("-n", @"foo\b{end-half}", path);
 
-        Assert.Equal(pinnedWordExitCode, wordExitCode);
-        Assert.Equal(pinnedWordOutput, wordOutput);
-        Assert.Equal(pinnedWordError, wordError);
-        Assert.Equal(pinnedLeftNonBoundaryExitCode, leftNonBoundaryExitCode);
-        Assert.Equal(pinnedLeftNonBoundaryOutput, leftNonBoundaryOutput);
-        Assert.Equal(pinnedLeftNonBoundaryError, leftNonBoundaryError);
-        Assert.Equal(pinnedRightNonBoundaryExitCode, rightNonBoundaryExitCode);
-        Assert.Equal(pinnedRightNonBoundaryOutput, rightNonBoundaryOutput);
-        Assert.Equal(pinnedRightNonBoundaryError, rightNonBoundaryError);
-        Assert.Equal(pinnedStartExitCode, startExitCode);
-        Assert.Equal(pinnedStartOutput, startOutput);
-        Assert.Equal(pinnedStartError, startError);
-        Assert.Equal(pinnedEndExitCode, endExitCode);
-        Assert.Equal(pinnedEndOutput, endOutput);
-        Assert.Equal(pinnedEndError, endError);
-        Assert.Equal(pinnedStartHalfExitCode, startHalfExitCode);
-        Assert.Equal(pinnedStartHalfOutput, startHalfOutput);
-        Assert.Equal(pinnedStartHalfError, startHalfError);
-        Assert.Equal(pinnedEndHalfExitCode, endHalfExitCode);
-        Assert.Equal(pinnedEndHalfOutput, endHalfOutput);
-        Assert.Equal(pinnedEndHalfError, endHalfError);
+        Assert.AreEqual(pinnedWordExitCode, wordExitCode);
+        Assert.AreSequenceEqual(pinnedWordOutput, wordOutput);
+        Assert.AreEqual(pinnedWordError, wordError);
+        Assert.AreEqual(pinnedLeftNonBoundaryExitCode, leftNonBoundaryExitCode);
+        Assert.AreSequenceEqual(pinnedLeftNonBoundaryOutput, leftNonBoundaryOutput);
+        Assert.AreEqual(pinnedLeftNonBoundaryError, leftNonBoundaryError);
+        Assert.AreEqual(pinnedRightNonBoundaryExitCode, rightNonBoundaryExitCode);
+        Assert.AreSequenceEqual(pinnedRightNonBoundaryOutput, rightNonBoundaryOutput);
+        Assert.AreEqual(pinnedRightNonBoundaryError, rightNonBoundaryError);
+        Assert.AreEqual(pinnedStartExitCode, startExitCode);
+        Assert.AreSequenceEqual(pinnedStartOutput, startOutput);
+        Assert.AreEqual(pinnedStartError, startError);
+        Assert.AreEqual(pinnedEndExitCode, endExitCode);
+        Assert.AreSequenceEqual(pinnedEndOutput, endOutput);
+        Assert.AreEqual(pinnedEndError, endError);
+        Assert.AreEqual(pinnedStartHalfExitCode, startHalfExitCode);
+        Assert.AreSequenceEqual(pinnedStartHalfOutput, startHalfOutput);
+        Assert.AreEqual(pinnedStartHalfError, startHalfError);
+        Assert.AreEqual(pinnedEndHalfExitCode, endHalfExitCode);
+        Assert.AreSequenceEqual(pinnedEndHalfOutput, endHalfOutput);
+        Assert.AreEqual(pinnedEndHalfError, endHalfError);
     }
 
     /// <summary>
     /// Verifies default regex mode matches a combined syntax pattern pinned against ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRegexCombinedSyntaxMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1080,15 +1081,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-o", pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-o", pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies literal newlines in patterns require multiline mode like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PatternNewlineRequiresMultilineMode()
     {
         string root = CreateTempDirectory();
@@ -1100,18 +1101,18 @@ public sealed class ScoutApplicationTests
         (int fixedExitCode, byte[] fixedOutput, string fixedError) = RunScout("-F", "foo\nbar", path);
         (int pinnedFixedExitCode, byte[] pinnedFixedOutput, string pinnedFixedError) = RunPinnedRipgrep("-F", "foo\nbar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedFixedExitCode, fixedExitCode);
-        Assert.Equal(pinnedFixedOutput, fixedOutput);
-        Assert.Equal(pinnedFixedError, fixedError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedFixedExitCode, fixedExitCode);
+        Assert.AreSequenceEqual(pinnedFixedOutput, fixedOutput);
+        Assert.AreEqual(pinnedFixedError, fixedError);
     }
 
     /// <summary>
     /// Verifies multiline mode can match across line boundaries for basic file search modes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineSearchMatchesAcrossLineBoundaries()
     {
         string root = CreateTempDirectory();
@@ -1133,33 +1134,33 @@ public sealed class ScoutApplicationTests
         (int vimgrepExitCode, byte[] vimgrepOutput, string vimgrepError) = RunScout("--vimgrep", "-U", "foo\nbar", path);
         (int pinnedVimgrepExitCode, byte[] pinnedVimgrepOutput, string pinnedVimgrepError) = RunPinnedRipgrep("--vimgrep", "-U", "foo\nbar", path);
 
-        Assert.Equal(pinnedStandardExitCode, standardExitCode);
-        Assert.Equal(pinnedStandardOutput, standardOutput);
-        Assert.Equal(pinnedStandardError, standardError);
-        Assert.Equal(pinnedLineExitCode, lineExitCode);
-        Assert.Equal(pinnedLineOutput, lineOutput);
-        Assert.Equal(pinnedLineError, lineError);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
-        Assert.Equal(pinnedOnlyColumnExitCode, onlyColumnExitCode);
-        Assert.Equal(pinnedOnlyColumnOutput, onlyColumnOutput);
-        Assert.Equal(pinnedOnlyColumnError, onlyColumnError);
-        Assert.Equal(pinnedCountExitCode, countExitCode);
-        Assert.Equal(pinnedCountOutput, countOutput);
-        Assert.Equal(pinnedCountError, countError);
-        Assert.Equal(pinnedFilesExitCode, filesExitCode);
-        Assert.Equal(pinnedFilesOutput, filesOutput);
-        Assert.Equal(pinnedFilesError, filesError);
-        Assert.Equal(pinnedVimgrepExitCode, vimgrepExitCode);
-        Assert.Equal(pinnedVimgrepOutput, vimgrepOutput);
-        Assert.Equal(pinnedVimgrepError, vimgrepError);
+        Assert.AreEqual(pinnedStandardExitCode, standardExitCode);
+        Assert.AreSequenceEqual(pinnedStandardOutput, standardOutput);
+        Assert.AreEqual(pinnedStandardError, standardError);
+        Assert.AreEqual(pinnedLineExitCode, lineExitCode);
+        Assert.AreSequenceEqual(pinnedLineOutput, lineOutput);
+        Assert.AreEqual(pinnedLineError, lineError);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedOnlyColumnExitCode, onlyColumnExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyColumnOutput, onlyColumnOutput);
+        Assert.AreEqual(pinnedOnlyColumnError, onlyColumnError);
+        Assert.AreEqual(pinnedCountExitCode, countExitCode);
+        Assert.AreSequenceEqual(pinnedCountOutput, countOutput);
+        Assert.AreEqual(pinnedCountError, countError);
+        Assert.AreEqual(pinnedFilesExitCode, filesExitCode);
+        Assert.AreSequenceEqual(pinnedFilesOutput, filesOutput);
+        Assert.AreEqual(pinnedFilesError, filesError);
+        Assert.AreEqual(pinnedVimgrepExitCode, vimgrepExitCode);
+        Assert.AreSequenceEqual(pinnedVimgrepOutput, vimgrepOutput);
+        Assert.AreEqual(pinnedVimgrepError, vimgrepError);
     }
 
     /// <summary>
     /// Verifies multiline mode keeps ordinary line-search anchor semantics without a literal newline pattern.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineModeWithoutLiteralNewlineUsesLineSearch()
     {
         string root = CreateTempDirectory();
@@ -1169,15 +1170,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-U", "$", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-U", "$", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies multiline absolute EOF anchors use whole-haystack only-matching semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineAbsoluteEndOnlyMatchingMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1191,18 +1192,18 @@ public sealed class ScoutApplicationTests
         (int terminatedExitCode, byte[] terminatedOutput, string terminatedError) = RunScout("-o", "-U", @"\z", terminated);
         (int pinnedTerminatedExitCode, byte[] pinnedTerminatedOutput, string pinnedTerminatedError) = RunPinnedRipgrep("-o", "-U", @"\z", terminated);
 
-        Assert.Equal(pinnedUnterminatedExitCode, unterminatedExitCode);
-        Assert.Equal(pinnedUnterminatedOutput, unterminatedOutput);
-        Assert.Equal(pinnedUnterminatedError, unterminatedError);
-        Assert.Equal(pinnedTerminatedExitCode, terminatedExitCode);
-        Assert.Equal(pinnedTerminatedOutput, terminatedOutput);
-        Assert.Equal(pinnedTerminatedError, terminatedError);
+        Assert.AreEqual(pinnedUnterminatedExitCode, unterminatedExitCode);
+        Assert.AreSequenceEqual(pinnedUnterminatedOutput, unterminatedOutput);
+        Assert.AreEqual(pinnedUnterminatedError, unterminatedError);
+        Assert.AreEqual(pinnedTerminatedExitCode, terminatedExitCode);
+        Assert.AreSequenceEqual(pinnedTerminatedOutput, terminatedOutput);
+        Assert.AreEqual(pinnedTerminatedError, terminatedError);
     }
 
     /// <summary>
     /// Verifies multiline nullable and end-asserted empty matches follow ripgrep's EOF reporting rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineEmptyMatchEofMatrixMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1234,18 +1235,18 @@ public sealed class ScoutApplicationTests
                     (int exitCode, byte[] output, string error) = RunScout(arguments);
                     (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-                    Assert.Equal(pinnedExitCode, exitCode);
-                    Assert.Equal(pinnedOutput, output);
-                    Assert.Equal(pinnedError, error);
+                    Assert.AreEqual(pinnedExitCode, exitCode);
+                    Assert.AreSequenceEqual(pinnedOutput, output);
+                    Assert.AreEqual(pinnedError, error);
                 }
 
                 string[] jsonArguments = ["--json", "-o", "-U", patterns[patternIndex], path];
                 (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout(jsonArguments);
                 (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep(jsonArguments);
 
-                Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-                Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-                Assert.Equal(pinnedJsonError, jsonError);
+                Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+                Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+                Assert.AreEqual(pinnedJsonError, jsonError);
             }
         }
     }
@@ -1253,7 +1254,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies an EOF-only alternative is a fallback only when no earlier match was reported.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineEofSelectionIsGlobalFallback()
     {
         string root = CreateTempDirectory();
@@ -1280,24 +1281,24 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.AreEqual(pinnedExitCode, exitCode);
             if (arguments[0] == "--json")
             {
-                Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+                Assert.AreEqual(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
             }
             else
             {
-                Assert.Equal(pinnedOutput, output);
+                Assert.AreSequenceEqual(pinnedOutput, output);
             }
 
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies an EOF selection has no synthetic match column or replacement span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineEofSelectionFormattingMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1317,16 +1318,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies multiline routing uses actual line-feed reachability instead of flag or class presence.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineExecutionModeAnalysisMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1347,16 +1348,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies multiline CRLF searches select records with carriage-return matches while reporting against record content.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineCrlfCarriageReturnMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1405,28 +1406,28 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.AreEqual(pinnedExitCode, exitCode);
             if (Array.IndexOf(arguments, "--json") >= 0)
             {
-                Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+                Assert.AreEqual(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
             }
             else if (Array.IndexOf(arguments, "--stats") >= 0)
             {
-                Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+                Assert.AreEqual(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
             }
             else
             {
-                Assert.Equal(pinnedOutput, output);
+                Assert.AreSequenceEqual(pinnedOutput, output);
             }
 
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies multiline mode uses multiline regex anchors inside whole-buffer searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineSearchUsesMultilineAnchors()
     {
         string root = CreateTempDirectory();
@@ -1436,15 +1437,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-U", "foo\n^bar", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-U", "foo\n^bar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies repeated multiline patterns retain ripgrep's ordered alternation semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepeatedMultilinePatternsPreserveOrderedAlternation()
     {
         string root = CreateTempDirectory();
@@ -1470,15 +1471,15 @@ public sealed class ScoutApplicationTests
             "foo\nbarbaz",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies unscoped flags in one multiline pattern do not affect a later pattern.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RepeatedMultilinePatternsKeepFlagsScopedToEachPattern()
     {
         string root = CreateTempDirectory();
@@ -1502,15 +1503,15 @@ public sealed class ScoutApplicationTests
             "BAZ\nQUX",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies multiline dot-all mode lets dot span line boundaries and remains overridable.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineDotallMatchesAcrossLineBoundaries()
     {
         string root = CreateTempDirectory();
@@ -1526,24 +1527,24 @@ public sealed class ScoutApplicationTests
         (int disabledExitCode, byte[] disabledOutput, string disabledError) = RunScout("-n", "-U", "--multiline-dotall", "(?-s:foo.*bar)", path);
         (int pinnedDisabledExitCode, byte[] pinnedDisabledOutput, string pinnedDisabledError) = RunPinnedRipgrep("-n", "-U", "--multiline-dotall", "(?-s:foo.*bar)", path);
 
-        Assert.Equal(pinnedNoMultilineExitCode, noMultilineExitCode);
-        Assert.Equal(pinnedNoMultilineOutput, noMultilineOutput);
-        Assert.Equal(pinnedNoMultilineError, noMultilineError);
-        Assert.Equal(pinnedDotallExitCode, dotallExitCode);
-        Assert.Equal(pinnedDotallOutput, dotallOutput);
-        Assert.Equal(pinnedDotallError, dotallError);
-        Assert.Equal(pinnedInlineDotallExitCode, inlineDotallExitCode);
-        Assert.Equal(pinnedInlineDotallOutput, inlineDotallOutput);
-        Assert.Equal(pinnedInlineDotallError, inlineDotallError);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedNoMultilineExitCode, noMultilineExitCode);
+        Assert.AreSequenceEqual(pinnedNoMultilineOutput, noMultilineOutput);
+        Assert.AreEqual(pinnedNoMultilineError, noMultilineError);
+        Assert.AreEqual(pinnedDotallExitCode, dotallExitCode);
+        Assert.AreSequenceEqual(pinnedDotallOutput, dotallOutput);
+        Assert.AreEqual(pinnedDotallError, dotallError);
+        Assert.AreEqual(pinnedInlineDotallExitCode, inlineDotallExitCode);
+        Assert.AreSequenceEqual(pinnedInlineDotallOutput, inlineDotallOutput);
+        Assert.AreEqual(pinnedInlineDotallError, inlineDotallError);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
     }
 
     /// <summary>
     /// Verifies JSON output represents multiline matches with ripgrep-compatible line ranges and submatches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineJsonMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1557,21 +1558,21 @@ public sealed class ScoutApplicationTests
         (int dotallExitCode, byte[] dotallOutput, string dotallError) = RunScout("--json", "-U", "--multiline-dotall", "foo.*bar", path);
         (int pinnedDotallExitCode, byte[] pinnedDotallOutput, string pinnedDotallError) = RunPinnedRipgrep("--json", "-U", "--multiline-dotall", "foo.*bar", path);
 
-        Assert.Equal(pinnedNewlineExitCode, newlineExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedNewlineOutput), NormalizeJsonTimings(newlineOutput));
-        Assert.Equal(pinnedNewlineError, newlineError);
-        Assert.Equal(pinnedAnchorExitCode, anchorExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedAnchorOutput), NormalizeJsonTimings(anchorOutput));
-        Assert.Equal(pinnedAnchorError, anchorError);
-        Assert.Equal(pinnedDotallExitCode, dotallExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedDotallOutput), NormalizeJsonTimings(dotallOutput));
-        Assert.Equal(pinnedDotallError, dotallError);
+        Assert.AreEqual(pinnedNewlineExitCode, newlineExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedNewlineOutput), NormalizeJsonTimings(newlineOutput));
+        Assert.AreEqual(pinnedNewlineError, newlineError);
+        Assert.AreEqual(pinnedAnchorExitCode, anchorExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedAnchorOutput), NormalizeJsonTimings(anchorOutput));
+        Assert.AreEqual(pinnedAnchorError, anchorError);
+        Assert.AreEqual(pinnedDotallExitCode, dotallExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedDotallOutput), NormalizeJsonTimings(dotallOutput));
+        Assert.AreEqual(pinnedDotallError, dotallError);
     }
 
     /// <summary>
     /// Verifies JSON multiline context, passthru, inverted, and replacement records match pinned ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineJsonContextAndReplacementMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1587,24 +1588,24 @@ public sealed class ScoutApplicationTests
         (int replacementExitCode, byte[] replacementOutput, string replacementError) = RunScout("--json", "-U", "-C1", "-r", "X", "foo\nbar|foo", path);
         (int pinnedReplacementExitCode, byte[] pinnedReplacementOutput, string pinnedReplacementError) = RunPinnedRipgrep("--json", "-U", "-C1", "-r", "X", "foo\nbar|foo", path);
 
-        Assert.Equal(pinnedContextExitCode, contextExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedContextOutput), NormalizeJsonTimings(contextOutput));
-        Assert.Equal(pinnedContextError, contextError);
-        Assert.Equal(pinnedPassthruExitCode, passthruExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedPassthruOutput), NormalizeJsonTimings(passthruOutput));
-        Assert.Equal(pinnedPassthruError, passthruError);
-        Assert.Equal(pinnedInvertExitCode, invertExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedInvertOutput), NormalizeJsonTimings(invertOutput));
-        Assert.Equal(pinnedInvertError, invertError);
-        Assert.Equal(pinnedReplacementExitCode, replacementExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedReplacementOutput), NormalizeJsonTimings(replacementOutput));
-        Assert.Equal(pinnedReplacementError, replacementError);
+        Assert.AreEqual(pinnedContextExitCode, contextExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedContextOutput), NormalizeJsonTimings(contextOutput));
+        Assert.AreEqual(pinnedContextError, contextError);
+        Assert.AreEqual(pinnedPassthruExitCode, passthruExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedPassthruOutput), NormalizeJsonTimings(passthruOutput));
+        Assert.AreEqual(pinnedPassthruError, passthruError);
+        Assert.AreEqual(pinnedInvertExitCode, invertExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedInvertOutput), NormalizeJsonTimings(invertOutput));
+        Assert.AreEqual(pinnedInvertError, invertError);
+        Assert.AreEqual(pinnedReplacementExitCode, replacementExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedReplacementOutput), NormalizeJsonTimings(replacementOutput));
+        Assert.AreEqual(pinnedReplacementError, replacementError);
     }
 
     /// <summary>
     /// Verifies multiline regex search honors case-insensitive mode and scoped disabling.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineCaseInsensitiveMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1618,21 +1619,21 @@ public sealed class ScoutApplicationTests
         (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-i", "-U", "foo\nbar", path);
         (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-i", "-U", "foo\nbar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
-        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-        Assert.Equal(pinnedJsonError, jsonError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.AreEqual(pinnedJsonError, jsonError);
     }
 
     /// <summary>
     /// Verifies multiline regex search honors word-regexp boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineWordRegexpMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1646,21 +1647,21 @@ public sealed class ScoutApplicationTests
         (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-w", "-U", "foo\nbar", path);
         (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-w", "-U", "foo\nbar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedInsensitiveExitCode, insensitiveExitCode);
-        Assert.Equal(pinnedInsensitiveOutput, insensitiveOutput);
-        Assert.Equal(pinnedInsensitiveError, insensitiveError);
-        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-        Assert.Equal(pinnedJsonError, jsonError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedInsensitiveExitCode, insensitiveExitCode);
+        Assert.AreSequenceEqual(pinnedInsensitiveOutput, insensitiveOutput);
+        Assert.AreEqual(pinnedInsensitiveError, insensitiveError);
+        Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.AreEqual(pinnedJsonError, jsonError);
     }
 
     /// <summary>
     /// Verifies multiline regex search honors line-regexp boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineLineRegexpMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1678,27 +1679,27 @@ public sealed class ScoutApplicationTests
         (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-x", "-U", "foo\nbar", path);
         (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-x", "-U", "foo\nbar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedInsensitiveExitCode, insensitiveExitCode);
-        Assert.Equal(pinnedInsensitiveOutput, insensitiveOutput);
-        Assert.Equal(pinnedInsensitiveError, insensitiveError);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
-        Assert.Equal(pinnedVimgrepExitCode, vimgrepExitCode);
-        Assert.Equal(pinnedVimgrepOutput, vimgrepOutput);
-        Assert.Equal(pinnedVimgrepError, vimgrepError);
-        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-        Assert.Equal(pinnedJsonError, jsonError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedInsensitiveExitCode, insensitiveExitCode);
+        Assert.AreSequenceEqual(pinnedInsensitiveOutput, insensitiveOutput);
+        Assert.AreEqual(pinnedInsensitiveError, insensitiveError);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedVimgrepExitCode, vimgrepExitCode);
+        Assert.AreSequenceEqual(pinnedVimgrepOutput, vimgrepOutput);
+        Assert.AreEqual(pinnedVimgrepError, vimgrepError);
+        Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.AreEqual(pinnedJsonError, jsonError);
     }
 
     /// <summary>
     /// Verifies multiline regex search honors inverted line selection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineInvertMatchMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1720,33 +1721,33 @@ public sealed class ScoutApplicationTests
         (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-v", "-U", "foo\nbar", path);
         (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-v", "-U", "foo\nbar", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedCountExitCode, countExitCode);
-        Assert.Equal(pinnedCountOutput, countOutput);
-        Assert.Equal(pinnedCountError, countError);
-        Assert.Equal(pinnedCountMatchesExitCode, countMatchesExitCode);
-        Assert.Equal(pinnedCountMatchesOutput, countMatchesOutput);
-        Assert.Equal(pinnedCountMatchesError, countMatchesError);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
-        Assert.Equal(pinnedVimgrepExitCode, vimgrepExitCode);
-        Assert.Equal(pinnedVimgrepOutput, vimgrepOutput);
-        Assert.Equal(pinnedVimgrepError, vimgrepError);
-        Assert.Equal(pinnedLineRegexpExitCode, lineRegexpExitCode);
-        Assert.Equal(pinnedLineRegexpOutput, lineRegexpOutput);
-        Assert.Equal(pinnedLineRegexpError, lineRegexpError);
-        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-        Assert.Equal(pinnedJsonError, jsonError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedCountExitCode, countExitCode);
+        Assert.AreSequenceEqual(pinnedCountOutput, countOutput);
+        Assert.AreEqual(pinnedCountError, countError);
+        Assert.AreEqual(pinnedCountMatchesExitCode, countMatchesExitCode);
+        Assert.AreSequenceEqual(pinnedCountMatchesOutput, countMatchesOutput);
+        Assert.AreEqual(pinnedCountMatchesError, countMatchesError);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedVimgrepExitCode, vimgrepExitCode);
+        Assert.AreSequenceEqual(pinnedVimgrepOutput, vimgrepOutput);
+        Assert.AreEqual(pinnedVimgrepError, vimgrepError);
+        Assert.AreEqual(pinnedLineRegexpExitCode, lineRegexpExitCode);
+        Assert.AreSequenceEqual(pinnedLineRegexpOutput, lineRegexpOutput);
+        Assert.AreEqual(pinnedLineRegexpError, lineRegexpError);
+        Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.AreEqual(pinnedJsonError, jsonError);
     }
 
     /// <summary>
     /// Verifies line-regexp mode applies default regex semantics to full-line matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineRegexpDefaultRegexMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -1760,21 +1761,21 @@ public sealed class ScoutApplicationTests
         (int fixedExitCode, byte[] fixedOutput, string fixedError) = RunScout("-F", "-x", "a.c", path);
         (int pinnedFixedExitCode, byte[] pinnedFixedOutput, string pinnedFixedError) = RunPinnedRipgrep("-F", "-x", "a.c", path);
 
-        Assert.Equal(pinnedDotExitCode, dotExitCode);
-        Assert.Equal(pinnedDotOutput, dotOutput);
-        Assert.Equal(pinnedDotError, dotError);
-        Assert.Equal(pinnedClassExitCode, classExitCode);
-        Assert.Equal(pinnedClassOutput, classOutput);
-        Assert.Equal(pinnedClassError, classError);
-        Assert.Equal(pinnedFixedExitCode, fixedExitCode);
-        Assert.Equal(pinnedFixedOutput, fixedOutput);
-        Assert.Equal(pinnedFixedError, fixedError);
+        Assert.AreEqual(pinnedDotExitCode, dotExitCode);
+        Assert.AreSequenceEqual(pinnedDotOutput, dotOutput);
+        Assert.AreEqual(pinnedDotError, dotError);
+        Assert.AreEqual(pinnedClassExitCode, classExitCode);
+        Assert.AreSequenceEqual(pinnedClassOutput, classOutput);
+        Assert.AreEqual(pinnedClassError, classError);
+        Assert.AreEqual(pinnedFixedExitCode, fixedExitCode);
+        Assert.AreSequenceEqual(pinnedFixedOutput, fixedOutput);
+        Assert.AreEqual(pinnedFixedError, fixedError);
     }
 
     /// <summary>
     /// Verifies quiet mode suppresses matching output and returns success on a match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuietSuppressesMatchingOutput()
     {
         string root = CreateTempDirectory();
@@ -1795,15 +1796,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-q", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies quiet mode returns no-match without output when no line matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuietReturnsNoMatchWithoutOutput()
     {
         string root = CreateTempDirectory();
@@ -1824,15 +1825,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--quiet", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies quiet mode suppresses count output while preserving match status.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuietSuppressesCountOutput()
     {
         string root = CreateTempDirectory();
@@ -1854,15 +1855,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-q", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies invert-match mode prints nonmatching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertMatchPrintsNonMatchingLines()
     {
         string root = CreateTempDirectory();
@@ -1883,15 +1884,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-v", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies invert-match mode treats count-matches as an inverted line count.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertMatchCountMatchesCountsInvertedLines()
     {
         string root = CreateTempDirectory();
@@ -1913,15 +1914,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-v", "--count-matches", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies invert-match file summaries use inverted-line match status.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertMatchFilesWithoutMatchUsesInvertedStatus()
     {
         string root = CreateTempDirectory();
@@ -1943,15 +1944,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-v", "--files-without-match", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies line-regexp mode matches only full-line literals.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineRegexpMatchesOnlyFullLines()
     {
         string root = CreateTempDirectory();
@@ -1972,15 +1973,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-x", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies line-regexp count-matches counts matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineRegexpCountMatchesCountsFullLineMatches()
     {
         string root = CreateTempDirectory();
@@ -2002,15 +2003,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-x", "--count-matches", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies line-regexp works with inverted line matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineRegexpInvertMatchPrintsNonFullLineMatches()
     {
         string root = CreateTempDirectory();
@@ -2032,15 +2033,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-x", "-v", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies word-regexp mode matches literals only at word boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordRegexpMatchesOnlyWholeWords()
     {
         string root = CreateTempDirectory();
@@ -2061,15 +2062,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-w", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies word-regexp count-matches counts whole-word occurrences.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordRegexpCountMatchesCountsWholeWordOccurrences()
     {
         string root = CreateTempDirectory();
@@ -2091,15 +2092,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-w", "--count-matches", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies word-regexp works with inverted line matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordRegexpInvertMatchPrintsNonWholeWordMatches()
     {
         string root = CreateTempDirectory();
@@ -2121,15 +2122,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-w", "-v", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies word-regexp and line-regexp use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WordRegexpAndLineRegexpUseLastWinsBehavior()
     {
         string root = CreateTempDirectory();
@@ -2165,18 +2166,18 @@ public sealed class ScoutApplicationTests
         (int pinnedWordExitCode, byte[] pinnedWordOutput, string pinnedWordError) = RunPinnedRipgrep("-x", "-w", "foo", path);
         (int pinnedLineExitCode, byte[] pinnedLineOutput, string pinnedLineError) = RunPinnedRipgrep("-w", "-x", "foo", path);
 
-        Assert.Equal(pinnedWordExitCode, wordWinsExitCode);
-        Assert.Equal(pinnedWordOutput, wordWinsOutput.ToArray());
-        Assert.Equal(pinnedWordError, Utf8(wordWinsError.ToArray()));
-        Assert.Equal(pinnedLineExitCode, lineWinsExitCode);
-        Assert.Equal(pinnedLineOutput, lineWinsOutput.ToArray());
-        Assert.Equal(pinnedLineError, Utf8(lineWinsError.ToArray()));
+        Assert.AreEqual(pinnedWordExitCode, wordWinsExitCode);
+        Assert.AreSequenceEqual(pinnedWordOutput, wordWinsOutput.ToArray());
+        Assert.AreEqual(pinnedWordError, Utf8(wordWinsError.ToArray()));
+        Assert.AreEqual(pinnedLineExitCode, lineWinsExitCode);
+        Assert.AreSequenceEqual(pinnedLineOutput, lineWinsOutput.ToArray());
+        Assert.AreEqual(pinnedLineError, Utf8(lineWinsError.ToArray()));
     }
 
     /// <summary>
     /// Verifies count mode prints the number of matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCountPrintsMatchingLineCount()
     {
         string root = CreateTempDirectory();
@@ -2196,15 +2197,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("2\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("2\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies large implicit file count uses regex-compatible streaming output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeImplicitRegexCountMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -2220,16 +2221,16 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count", @"\w{5}\s+\w{5}\s+\w{5}", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count", @"\w{5}\s+\w{5}\s+\w{5}", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies large general-regex match counting and uncolored statistics preserve ripgrep's
     /// complete output contract when multiple non-overlapping matches occur on selected lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeGeneralRegexCountMatchesAndStatsMatchRipgrep()
     {
         string root = CreateTempDirectory();
@@ -2250,9 +2251,9 @@ public sealed class ScoutApplicationTests
         (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) =
             RunPinnedRipgrep(countArguments);
 
-        Assert.Equal(pinnedCountExitCode, countExitCode);
-        Assert.Equal(pinnedCountOutput, countOutput);
-        Assert.Equal(pinnedCountError, countError);
+        Assert.AreEqual(pinnedCountExitCode, countExitCode);
+        Assert.AreSequenceEqual(pinnedCountOutput, countOutput);
+        Assert.AreEqual(pinnedCountError, countError);
 
         string[] statsArguments =
             ["--no-mmap", "--color=never", "--stats", "-n", pattern, path];
@@ -2260,15 +2261,15 @@ public sealed class ScoutApplicationTests
         (int pinnedStatsExitCode, byte[] pinnedStatsOutput, string pinnedStatsError) =
             RunPinnedRipgrep(statsArguments);
 
-        Assert.Equal(pinnedStatsExitCode, statsExitCode);
-        Assert.Equal(NormalizeStatsTimings(pinnedStatsOutput), NormalizeStatsTimings(statsOutput));
-        Assert.Equal(pinnedStatsError, statsError);
+        Assert.AreEqual(pinnedStatsExitCode, statsExitCode);
+        Assert.AreEqual(NormalizeStatsTimings(pinnedStatsOutput), NormalizeStatsTimings(statsOutput));
+        Assert.AreEqual(pinnedStatsError, statsError);
     }
 
     /// <summary>
     /// Verifies count mode omits files with no matches and returns no-match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCountOmitsZeroCounts()
     {
         string root = CreateTempDirectory();
@@ -2288,15 +2289,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(1, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(1, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies include-zero prints zero count output while preserving no-match status.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IncludeZeroCountPrintsZeroForUnmatchedFile()
     {
         string root = CreateTempDirectory();
@@ -2318,15 +2319,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--include-zero", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies include-zero applies to count-matches with filename prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IncludeZeroCountMatchesPrintsZeroForUnmatchedFile()
     {
         string root = CreateTempDirectory();
@@ -2349,15 +2350,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--include-zero", "-H", "--count-matches", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-include-zero disables earlier zero count output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoIncludeZeroDisablesEarlierIncludeZero()
     {
         string root = CreateTempDirectory();
@@ -2380,15 +2381,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--include-zero", "--no-include-zero", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies count-matches mode counts non-overlapping literal occurrences.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCountMatchesPrintsMatchCount()
     {
         string root = CreateTempDirectory();
@@ -2408,15 +2409,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("3\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("3\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies ignore-case mode matches ASCII case variants.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchIgnoreCaseMatchesAsciiCaseVariants()
     {
         string root = CreateTempDirectory();
@@ -2436,15 +2437,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("Needle upper\nneedle lower\nNEEDLE all\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("Needle upper\nneedle lower\nNEEDLE all\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies case-sensitive mode overrides earlier ignore-case mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCaseSensitiveOverridesIgnoreCase()
     {
         string root = CreateTempDirectory();
@@ -2465,15 +2466,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("needle lower\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("needle lower\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies smart-case mode uses insensitive matching for lowercase ASCII patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchSmartCaseUsesInsensitiveForLowercasePattern()
     {
         string root = CreateTempDirectory();
@@ -2493,15 +2494,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("Needle upper\nneedle lower\nNEEDLE all\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("Needle upper\nneedle lower\nNEEDLE all\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies smart-case mode uses sensitive matching for uppercase ASCII patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchSmartCaseUsesSensitiveForUppercasePattern()
     {
         string root = CreateTempDirectory();
@@ -2521,15 +2522,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("Needle upper\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("Needle upper\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies ignore-case mode affects count-matches output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchIgnoreCaseAffectsCountMatches()
     {
         string root = CreateTempDirectory();
@@ -2550,15 +2551,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("3\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("3\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies count mode overrides line-number printing.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCountOverridesLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -2579,15 +2580,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("2\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("2\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies a literal search returns the no-match exit code.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchReturnsNoMatchWhenPatternIsAbsent()
     {
         string root = CreateTempDirectory();
@@ -2606,15 +2607,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(1, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(1, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies multiple searched files are printed with path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchPrefixesMultipleFiles()
     {
         string root = CreateTempDirectory();
@@ -2636,15 +2637,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{first}:needle first\n{second}:needle second\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{first}:needle first\n{second}:needle second\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies with-filename forces a path prefix for one searched file.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WithFilenamePrefixesSingleFileMatches()
     {
         string root = CreateTempDirectory();
@@ -2665,15 +2666,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--with-filename", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies heading mode prints a file header instead of repeating the path prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HeadingPrintsSingleFileHeaderWhenFilenameIsEnabled()
     {
         string root = CreateTempDirectory();
@@ -2683,15 +2684,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--heading", "-H", "-n", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--heading", "-H", "-n", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies no-heading disables a preceding heading flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoHeadingDisablesEarlierHeading()
     {
         string root = CreateTempDirectory();
@@ -2701,15 +2702,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--heading", "--no-heading", "-H", "-n", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--heading", "--no-heading", "-H", "-n", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies heading mode groups sorted directory matches by file.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HeadingGroupsDirectoryMatchesByFile()
     {
         string root = CreateTempDirectory();
@@ -2719,15 +2720,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--heading", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--heading", "-n", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies terminal output uses ripgrep's automatic heading mode for directory searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalDirectorySearchUsesAutoHeading()
     {
         string root = CreateTempDirectory();
@@ -2738,15 +2739,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "public.*class", root);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{first}\n1:public class A\n\n{second}\n1:public class B\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{first}\n1:public class A\n\n{second}\n1:public class B\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal output uses automatic heading mode in the parallel directory path.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalParallelDirectorySearchUsesAutoHeading()
     {
         string root = CreateTempDirectory();
@@ -2759,7 +2760,7 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--threads=2", "public.*class", root);
 
-        Assert.Equal(0, exitCode);
+        Assert.AreEqual(0, exitCode);
         var expectedBlocks = new HashSet<string>
         {
             $"{first}\n1:public class A",
@@ -2767,14 +2768,14 @@ public sealed class ScoutApplicationTests
             $"{third}\n1:public class C",
         };
         HashSet<string> actualBlocks = SplitHeadingBlocks(Utf8(output));
-        Assert.True(expectedBlocks.SetEquals(actualBlocks), Utf8(output));
-        Assert.Empty(error);
+        Assert.IsTrue(expectedBlocks.SetEquals(actualBlocks), Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies no-heading disables automatic terminal heading mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalNoHeadingDisablesAutoHeading()
     {
         string root = CreateTempDirectory();
@@ -2785,15 +2786,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "--no-heading", "public.*class", root);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{first}:1:public class A\n{second}:1:public class B\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{first}:1:public class A\n{second}:1:public class B\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal output uses automatic heading mode when a single file is explicitly prefixed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalSingleFileWithFilenameUsesAutoHeading()
     {
         string root = CreateTempDirectory();
@@ -2802,15 +2803,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-H", "public.*class", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{path}\n1:public class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{path}\n1:public class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal output prints automatic line numbers for single-file searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalSingleFileSearchUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -2819,15 +2820,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "public.*class", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("1:public class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("1:public class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies no-line-number suppresses automatic terminal line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalSingleFileNoLineNumberSuppressesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -2836,15 +2837,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--no-line-number", "public.*class", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("public class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("public class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal only-matching output prints automatic line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalOnlyMatchingUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -2853,15 +2854,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-o", "class\\s+\\w+", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("1:class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("1:class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal context output prints automatic line numbers and context separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalContextUsesAutoLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -2870,41 +2871,41 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-C1", "public.*class", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("1-before\n2:public class A\n3-after\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("1-before\n2:public class A\n3-after\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal stdin-only searches do not get automatic line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalStandardInputDoesNotUseAutoLineNumbers()
     {
         (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("public class A\n", "--color=never", "public.*class");
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("public class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("public class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies a single explicit stdin path also skips automatic terminal line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalExplicitStandardInputDoesNotUseAutoLineNumbers()
     {
         (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("public class A\n", "--color=never", "public.*class", "-");
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("public class A\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("public class A\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies heading mode keeps inter-file spacing even when filenames are suppressed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HeadingNoFilenameSeparatesFileOutput()
     {
         string root = CreateTempDirectory();
@@ -2914,15 +2915,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--heading", "--no-filename", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--heading", "--no-filename", "-n", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies null mode terminates heading path headers with NUL bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HeadingUsesNullPathTerminatorForHeaders()
     {
         string root = CreateTempDirectory();
@@ -2932,15 +2933,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--heading", "-0", "-H", "-n", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--heading", "-0", "-H", "-n", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies no-filename suppresses automatic path prefixes for multiple searched files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoFilenameSuppressesMultipleFileMatchPrefixes()
     {
         string root = CreateTempDirectory();
@@ -2964,15 +2965,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-I", "needle", first, second);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies filename flags control count prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilenameFlagsControlCountPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3011,18 +3012,18 @@ public sealed class ScoutApplicationTests
         (int pinnedWithExitCode, byte[] pinnedWithOutput, string pinnedWithError) = RunPinnedRipgrep("-H", "-c", "needle", first);
         (int pinnedWithoutExitCode, byte[] pinnedWithoutOutput, string pinnedWithoutError) = RunPinnedRipgrep("--no-filename", "-c", "needle", first, second);
 
-        Assert.Equal(pinnedWithExitCode, withExitCode);
-        Assert.Equal(pinnedWithOutput, withOutput.ToArray());
-        Assert.Equal(pinnedWithError, Utf8(withError.ToArray()));
-        Assert.Equal(pinnedWithoutExitCode, withoutExitCode);
-        Assert.Equal(pinnedWithoutOutput, withoutOutput.ToArray());
-        Assert.Equal(pinnedWithoutError, Utf8(withoutError.ToArray()));
+        Assert.AreEqual(pinnedWithExitCode, withExitCode);
+        Assert.AreSequenceEqual(pinnedWithOutput, withOutput.ToArray());
+        Assert.AreEqual(pinnedWithError, Utf8(withError.ToArray()));
+        Assert.AreEqual(pinnedWithoutExitCode, withoutExitCode);
+        Assert.AreSequenceEqual(pinnedWithoutOutput, withoutOutput.ToArray());
+        Assert.AreEqual(pinnedWithoutError, Utf8(withoutError.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-filename does not suppress file-list summary output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoFilenameDoesNotSuppressFilesWithMatchesOutput()
     {
         string root = CreateTempDirectory();
@@ -3047,15 +3048,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-filename", "-l", "needle", first, second);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies path separator rewrites standard output path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PathSeparatorRewritesStandardPathPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3067,15 +3068,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "-H", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--path-separator", "Z", "-H", "-n", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies path separator rewrites summary mode path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PathSeparatorRewritesCountPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3087,15 +3088,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--path-separator=Z", "-H", "-c", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--path-separator=Z", "-H", "-c", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies path separator rewrites files mode output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PathSeparatorRewritesFilesOutput()
     {
         string root = CreateTempDirectory();
@@ -3107,15 +3108,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "--files", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--path-separator", "Z", "--files", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies empty path separator resets path printing to platform defaults.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyPathSeparatorResetsPathPrinting()
     {
         string root = CreateTempDirectory();
@@ -3127,15 +3128,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--path-separator", "Z", "--path-separator", string.Empty, "-H", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--path-separator", "Z", "--path-separator", string.Empty, "-H", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies no-filename suppresses automatic directory-search prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoFilenameSuppressesDirectorySearchPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3156,15 +3157,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-filename", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies byte-offset mode prints line-start offsets for matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteOffsetPrintsLineStartOffsets()
     {
         string root = CreateTempDirectory();
@@ -3185,15 +3186,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies byte-offset mode combines with line numbers and explicit filenames.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteOffsetCombinesWithLineNumbersAndFilenamePrefixes()
     {
         string root = CreateTempDirectory();
@@ -3216,15 +3217,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-H", "-n", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-byte-offset disables an earlier byte-offset flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoByteOffsetDisablesEarlierByteOffset()
     {
         string root = CreateTempDirectory();
@@ -3246,15 +3247,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--byte-offset", "--no-byte-offset", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies byte-offset mode does not affect summary count output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteOffsetDoesNotAffectCountOutput()
     {
         string root = CreateTempDirectory();
@@ -3276,15 +3277,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-b", "--count-matches", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies column mode prints one-based byte columns and implied line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColumnPrintsFirstMatchColumnAndImpliesLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -3305,15 +3306,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--column", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies column output combines with filename and byte-offset fields in ripgrep order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColumnCombinesWithFilenameAndByteOffsetFields()
     {
         string root = CreateTempDirectory();
@@ -3337,15 +3338,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-H", "-n", "--column", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-line-number suppresses column's implied line-number field.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoLineNumberSuppressesColumnImpliedLineNumber()
     {
         string root = CreateTempDirectory();
@@ -3367,15 +3368,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-N", "--column", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies inverted column mode prints line numbers without a column field.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColumnInvertMatchOmitsColumnField()
     {
         string root = CreateTempDirectory();
@@ -3397,15 +3398,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-v", "--column", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-column disables an earlier column flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoColumnDisablesEarlierColumn()
     {
         string root = CreateTempDirectory();
@@ -3427,15 +3428,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--column", "--no-column", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies column mode does not affect summary count output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColumnDoesNotAffectCountOutput()
     {
         string root = CreateTempDirectory();
@@ -3457,15 +3458,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--column", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies trim mode removes leading ASCII whitespace from printed matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TrimRemovesLeadingWhitespaceFromMatchingLines()
     {
         string root = CreateTempDirectory();
@@ -3486,15 +3487,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--trim", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies trim mode preserves prefix fields and original match positions.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TrimPreservesPrefixFieldsAndOffsets()
     {
         string root = CreateTempDirectory();
@@ -3519,15 +3520,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--trim", "-H", "-n", "--column", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies trim mode also trims only-matching output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TrimRemovesLeadingWhitespaceFromOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
@@ -3549,15 +3550,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--trim", "-o", " needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies no-trim disables an earlier trim flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoTrimDisablesEarlierTrim()
     {
         string root = CreateTempDirectory();
@@ -3579,15 +3580,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--trim", "--no-trim", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies context mode prints surrounding lines with ripgrep field separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextPrintsSurroundingLinesWithStandardFields()
     {
         string root = CreateTempDirectory();
@@ -3612,15 +3613,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-H", "-n", "--column", "-b", "-C1", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies non-heading directory context output separates file groups.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryContextSeparatesFileGroups()
     {
         string root = CreateTempDirectory();
@@ -3632,15 +3633,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--no-heading", "-H", "-C1", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--no-heading", "-H", "-C1", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies custom match field separators apply to standard match prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CustomFieldMatchSeparatorAppliesToStandardFields()
     {
         string root = CreateTempDirectory();
@@ -3666,15 +3667,15 @@ public sealed class ScoutApplicationTests
             "needle",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies custom context field and group separators match pinned ripgrep output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CustomContextSeparatorsApplyToContextOutput()
     {
         string root = CreateTempDirectory();
@@ -3702,15 +3703,15 @@ public sealed class ScoutApplicationTests
             "needle",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies context group separators can be empty or disabled.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextSeparatorCanBeEmptyOrDisabled()
     {
         string root = CreateTempDirectory();
@@ -3724,21 +3725,21 @@ public sealed class ScoutApplicationTests
         (int reenabledExitCode, byte[] reenabledOutput, string reenabledError) = RunScout("-H", "-n", "-C1", "--no-context-separator", "--context-separator", "XX", "needle", path);
         (int pinnedReenabledExitCode, byte[] pinnedReenabledOutput, string pinnedReenabledError) = RunPinnedRipgrep("-H", "-n", "-C1", "--no-context-separator", "--context-separator", "XX", "needle", path);
 
-        Assert.Equal(pinnedEmptyExitCode, emptyExitCode);
-        Assert.Equal(pinnedEmptyOutput, emptyOutput);
-        Assert.Equal(pinnedEmptyError, emptyError);
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput);
-        Assert.Equal(pinnedDisabledError, disabledError);
-        Assert.Equal(pinnedReenabledExitCode, reenabledExitCode);
-        Assert.Equal(pinnedReenabledOutput, reenabledOutput);
-        Assert.Equal(pinnedReenabledError, reenabledError);
+        Assert.AreEqual(pinnedEmptyExitCode, emptyExitCode);
+        Assert.AreSequenceEqual(pinnedEmptyOutput, emptyOutput);
+        Assert.AreEqual(pinnedEmptyError, emptyError);
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput);
+        Assert.AreEqual(pinnedDisabledError, disabledError);
+        Assert.AreEqual(pinnedReenabledExitCode, reenabledExitCode);
+        Assert.AreSequenceEqual(pinnedReenabledOutput, reenabledOutput);
+        Assert.AreEqual(pinnedReenabledError, reenabledError);
     }
 
     /// <summary>
     /// Verifies passthrough mode prints every searched line while preserving match fields.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PassthruPrintsEveryLine()
     {
         string root = CreateTempDirectory();
@@ -3760,15 +3761,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--passthru", "-n", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies only-matching output works with contextual lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingContextPrintsFullContextLines()
     {
         string root = CreateTempDirectory();
@@ -3791,15 +3792,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", "--column", "-C1", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies only-matching context output honors custom match and context field separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingContextUsesCustomFieldSeparators()
     {
         string root = CreateTempDirectory();
@@ -3827,15 +3828,15 @@ public sealed class ScoutApplicationTests
             "needle",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies inverted only-matching context lines use contextual field separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertOnlyMatchingContextPrintsOriginalMatchesAsContext()
     {
         string root = CreateTempDirectory();
@@ -3859,15 +3860,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-v", "-o", "--column", "-C1", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies inverted only-matching context output honors custom contextual field separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertOnlyMatchingContextUsesCustomFieldContextSeparator()
     {
         string root = CreateTempDirectory();
@@ -3897,15 +3898,15 @@ public sealed class ScoutApplicationTests
             "needle",
             path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-count limits primary matches while still printing matching context lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextMaxCountStillPrintsMatchingContextLines()
     {
         string root = CreateTempDirectory();
@@ -3928,15 +3929,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m1", "-o", "-A3", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies null mode terminates path prefixes with NUL bytes in standard output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullTerminatesMatchPathPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3961,15 +3962,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--null", "-H", "-n", "--column", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies null mode terminates path prefixes with NUL bytes in contextual output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullTerminatesContextPathPrefixes()
     {
         string root = CreateTempDirectory();
@@ -3993,15 +3994,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-0", "-H", "-n", "-C1", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies null mode terminates count path prefixes with NUL bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullTerminatesCountPathPrefixes()
     {
         string root = CreateTempDirectory();
@@ -4024,15 +4025,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--null", "-H", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies null mode terminates file-list paths with NUL bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullTerminatesFilesWithMatchesPaths()
     {
         string root = CreateTempDirectory();
@@ -4054,15 +4055,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--null", "-l", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies null mode terminates files-mode paths with NUL bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullTerminatesFilesModePaths()
     {
         string root = CreateTempDirectory();
@@ -4083,15 +4084,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", "--null", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies vimgrep mode prints one full line per match with implied path, line and column fields.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepPrintsOneLinePerMatch()
     {
         string root = CreateTempDirectory();
@@ -4101,15 +4102,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies vimgrep mode combines only-matching output with byte offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepOnlyMatchingCombinesWithByteOffsets()
     {
         string root = CreateTempDirectory();
@@ -4119,15 +4120,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-o", "-b", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "-o", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies vimgrep mode respects disabled line and column fields.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepRespectsDisabledLineAndColumnFields()
     {
         string root = CreateTempDirectory();
@@ -4139,18 +4140,18 @@ public sealed class ScoutApplicationTests
         (int noColumnExitCode, byte[] noColumnOutput, string noColumnError) = RunScout("--vimgrep", "--no-column", "needle", path);
         (int pinnedNoColumnExitCode, byte[] pinnedNoColumnOutput, string pinnedNoColumnError) = RunPinnedRipgrep("--vimgrep", "--no-column", "needle", path);
 
-        Assert.Equal(pinnedNoLineExitCode, noLineExitCode);
-        Assert.Equal(pinnedNoLineOutput, noLineOutput);
-        Assert.Equal(pinnedNoLineError, noLineError);
-        Assert.Equal(pinnedNoColumnExitCode, noColumnExitCode);
-        Assert.Equal(pinnedNoColumnOutput, noColumnOutput);
-        Assert.Equal(pinnedNoColumnError, noColumnError);
+        Assert.AreEqual(pinnedNoLineExitCode, noLineExitCode);
+        Assert.AreSequenceEqual(pinnedNoLineOutput, noLineOutput);
+        Assert.AreEqual(pinnedNoLineError, noLineError);
+        Assert.AreEqual(pinnedNoColumnExitCode, noColumnExitCode);
+        Assert.AreSequenceEqual(pinnedNoColumnOutput, noColumnOutput);
+        Assert.AreEqual(pinnedNoColumnError, noColumnError);
     }
 
     /// <summary>
     /// Verifies vimgrep mode respects filename and custom field separator flags.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepRespectsFilenameAndSeparatorFlags()
     {
         string root = CreateTempDirectory();
@@ -4162,15 +4163,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--vimgrep", "--no-filename", "--field-match-separator", "|", "needle", first, second);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--vimgrep", "--no-filename", "--field-match-separator", "|", "needle", first, second);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies vimgrep mode implies filename prefixes for count summaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepCountPrefixesSingleFile()
     {
         string root = CreateTempDirectory();
@@ -4180,15 +4181,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-c", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-columns omits long matching lines and keeps boundary-length lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsOmitsLongMatchingLines()
     {
         string root = CreateTempDirectory();
@@ -4198,15 +4199,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "12", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-M", "12", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-columns preview writes the leading bytes of long matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsPreviewPrintsLongLinePrefixes()
     {
         string root = CreateTempDirectory();
@@ -4216,15 +4217,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "12", "--max-columns-preview", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-M", "12", "--max-columns-preview", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-columns applies to context and passthrough lines with context separators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsAppliesToContextLines()
     {
         string root = CreateTempDirectory();
@@ -4234,15 +4235,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-B1", "-M", "12", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-B1", "-M", "12", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-columns is evaluated after trimming leading whitespace.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsRespectsTrimmedOutput()
     {
         string root = CreateTempDirectory();
@@ -4252,15 +4253,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "--trim", "-M", "12", "--max-columns-preview", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "--trim", "-M", "12", "--max-columns-preview", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies only-matching output ignores max-columns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsDoesNotAffectOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
@@ -4270,15 +4271,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-o", "-M", "6", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-o", "-M", "6", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies max-columns zero disables the line-length limit.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxColumnsZeroDisablesLimit()
     {
         string root = CreateTempDirectory();
@@ -4288,15 +4289,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-M", "0", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-M", "0", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies vimgrep max-columns uses ripgrep's omitted-line summaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepMaxColumnsOmitsLongLinesWithMatchCounts()
     {
         string root = CreateTempDirectory();
@@ -4306,15 +4307,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-M", "12", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "-M", "12", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies vimgrep max-columns preview includes the remaining-match suffix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepMaxColumnsPreviewPrintsRemainingMatchCounts()
     {
         string root = CreateTempDirectory();
@@ -4324,15 +4325,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-M", "12", "--max-columns-preview", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "-M", "12", "--max-columns-preview", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replace mode rewrites matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceRewritesMatchingLines()
     {
         string root = CreateTempDirectory();
@@ -4342,15 +4343,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "X", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "X", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies terminal replace output follows ripgrep's automatic line-number behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalReplacePrintsLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -4359,15 +4360,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-r", "X", "needle", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("1:X X\n3:xx X yy\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("1:X X\n3:xx X yy\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies no-line-number still suppresses terminal replace line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalReplaceNoLineNumberSuppressesLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -4376,15 +4377,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "--no-line-number", "-r", "X", "needle", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("X X\nxx X yy\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("X X\nxx X yy\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal only-matching replace output includes line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalReplaceOnlyMatchingPrintsLineNumbers()
     {
         string root = CreateTempDirectory();
@@ -4393,28 +4394,28 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-o", "-r", "X", "needle", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("1:X\n1:X\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("1:X\n1:X\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies terminal stdin-only replacement does not get automatic line numbers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TerminalStandardInputReplaceDoesNotUseAutoLineNumbers()
     {
         (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("needle needle\n", "--color=never", "-r", "X", "needle");
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("X X\n", Utf8(output));
-        Assert.Empty(error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual("X X\n", Utf8(output));
+        Assert.IsEmpty(error);
     }
 
     /// <summary>
     /// Verifies replace mode combines with only-matching fields and adjusted offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceOnlyMatchingUsesAdjustedOffsets()
     {
         string root = CreateTempDirectory();
@@ -4424,15 +4425,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "--column", "-b", "-o", "-r", "XX", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "--column", "-b", "-o", "-r", "XX", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replace mode rewrites matching context lines and leaves context-only lines unchanged.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceAppliesToContextOutput()
     {
         string root = CreateTempDirectory();
@@ -4442,15 +4443,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-C1", "-r", "X", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-C1", "-r", "X", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replacement capture expansion follows ripgrep's whole-match and missing-capture behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsWholeMatchAndMissingCaptures()
     {
         string root = CreateTempDirectory();
@@ -4461,15 +4462,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", replacement, "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", replacement, "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replacement expansion uses numeric captures from regex groups.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsNumericCaptures()
     {
         string root = CreateTempDirectory();
@@ -4483,21 +4484,21 @@ public sealed class ScoutApplicationTests
         (int heldoutExitCode, byte[] heldoutOutput, string heldoutError) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
         (int pinnedHeldoutExitCode, byte[] pinnedHeldoutOutput, string pinnedHeldoutError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
-        Assert.Equal(pinnedHeldoutExitCode, heldoutExitCode);
-        Assert.Equal(pinnedHeldoutOutput, heldoutOutput);
-        Assert.Equal(pinnedHeldoutError, heldoutError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedHeldoutExitCode, heldoutExitCode);
+        Assert.AreSequenceEqual(pinnedHeldoutOutput, heldoutOutput);
+        Assert.AreEqual(pinnedHeldoutError, heldoutError);
     }
 
     /// <summary>
     /// Verifies native replacement and JSON metadata replay numbered, named, and unmatched captures.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceAndJsonReplayNumberedNamedAndUnmatchedCaptures()
     {
         string root = CreateTempDirectory();
@@ -4515,21 +4516,21 @@ public sealed class ScoutApplicationTests
         (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep(
             "--json", "-r", replacement, pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(
             "1:foo|foo||foo||\n2:foobar|foo|bar|foo|bar|\n"u8.ToArray(),
             output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
-        Assert.Equal(pinnedJsonError, jsonError);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedJsonExitCode, jsonExitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.AreEqual(pinnedJsonError, jsonError);
     }
 
     /// <summary>
     /// Verifies recursive replacement uses candidate-verified capture output without changing rg behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryReplacementExpandsCandidateVerifiedCaptures()
     {
         string root = CreateTempDirectory();
@@ -4539,15 +4540,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies recursive replacement preserves binary-file handling when candidate streaming is available.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryReplacementCandidateStreamingFallsBackForBinaryFiles()
     {
         string root = CreateTempDirectory();
@@ -4559,15 +4560,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies streaming replacement stops at a later binary block without printing unsafe suffix bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryReplacementCandidateStreamingStopsAtLaterBinaryBlock()
     {
         string root = CreateTempDirectory();
@@ -4584,15 +4585,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replacement capture extraction handles held-out structural captures with the authoritative matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanCollectsHeldoutStructuralCaptures()
     {
         byte[][] patterns = [@"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
@@ -4600,17 +4601,17 @@ public sealed class ScoutApplicationTests
         int[] captureStarts = new int[3];
         int[] captureLengths = new int[3];
 
-        Assert.NotNull(plan);
-        Assert.Equal(2, plan.CaptureCount);
-        Assert.True(plan.TryCollectCaptures("struct Foo"u8, captureStarts, captureLengths, captureNames: null));
-        Assert.Equal([0, 0, 7], captureStarts);
-        Assert.Equal([10, 6, 3], captureLengths);
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(2, plan.CaptureCount);
+        Assert.IsTrue(plan.TryCollectCaptures("struct Foo"u8, captureStarts, captureLengths, captureNames: null));
+        Assert.AreSequenceEqual<int>([0, 0, 7], captureStarts);
+        Assert.AreSequenceEqual<int>([10, 6, 3], captureLengths);
     }
 
     /// <summary>
     /// Verifies absolute capture slots remain relative to the original record when CRLF is trimmed for replay.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanPreservesAbsoluteSlotsWhenReplayTrimsCrlf()
     {
         byte[][] patterns = [@"(foo)\z"u8.ToArray()];
@@ -4619,21 +4620,21 @@ public sealed class ScoutApplicationTests
             crlf: true);
         var searchPlan = RegexSearchPlan.Create(patterns, options);
 
-        Assert.NotNull(searchPlan);
+        Assert.IsNotNull(searchPlan);
         int[] captureSlots = new int[searchPlan.CaptureSlotCount];
 
-        Assert.True(searchPlan.TryCollectCaptureSlots(
+        Assert.IsTrue(searchPlan.TryCollectCaptureSlots(
             "xxfoo\r\n"u8,
             matchStart: 2,
             matchLength: 3,
             captureSlots));
-        Assert.Equal([2, 5, 2, 5], captureSlots);
+        Assert.AreSequenceEqual<int>([2, 5, 2, 5], captureSlots);
     }
 
     /// <summary>
     /// Verifies replacement capture extraction recognizes Scout's prepared no-Unicode wrapper.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanCollectsHeldoutStructuralCapturesFromPreparedPattern()
     {
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
@@ -4643,14 +4644,14 @@ public sealed class ScoutApplicationTests
             "struct Foo"u8,
             plan);
 
-        Assert.NotNull(plan);
-        Assert.Equal("struct Foo"u8.ToArray(), replacement);
+        Assert.IsNotNull(plan);
+        Assert.AreSequenceEqual("struct Foo"u8.ToArray(), replacement);
     }
 
     /// <summary>
     /// Verifies whole-match replacement uses authoritative bounds without initializing subcapture replay.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplacementFormatterSkipsCaptureReplayForWholeMatchReferences()
     {
         byte[][] patterns =
@@ -4659,9 +4660,9 @@ public sealed class ScoutApplicationTests
         ];
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
-        Assert.False(plan.Matcher.IsExactCaptureReplayInitialized);
-        Assert.Equal(
+        Assert.IsNotNull(plan);
+        Assert.IsFalse(plan.Matcher.IsExactCaptureReplayInitialized);
+        Assert.AreSequenceEqual(
             "struct Foo|struct Foo"u8.ToArray(),
             ReplacementFormatter.Expand(
                 "$0|${0}"u8,
@@ -4669,9 +4670,9 @@ public sealed class ScoutApplicationTests
                 matchStart: 3,
                 matchLength: 10,
                 plan));
-        Assert.False(plan.Matcher.IsExactCaptureReplayInitialized);
+        Assert.IsFalse(plan.Matcher.IsExactCaptureReplayInitialized);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "struct Foo"u8.ToArray(),
             ReplacementFormatter.Expand(
                 "$1 $2"u8,
@@ -4679,13 +4680,13 @@ public sealed class ScoutApplicationTests
                 matchStart: 3,
                 matchLength: 10,
                 plan));
-        Assert.True(plan.Matcher.IsExactCaptureReplayInitialized);
+        Assert.IsTrue(plan.Matcher.IsExactCaptureReplayInitialized);
     }
 
     /// <summary>
     /// Verifies operation-scoped replacement replay retains predicates outside an output slice.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexReplacementSessionUsesCompleteCaptureHaystack()
     {
         byte[][] patterns = [@"\B(foo)"u8.ToArray()];
@@ -4694,7 +4695,7 @@ public sealed class ScoutApplicationTests
         List<long> replacementColumns = [];
         List<int> replacementLengths = [];
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         using var session = new RegexReplacementSession("$1"u8.ToArray(), plan);
         byte[] replaced = session.ReplaceLine(
             haystack.AsSpan(1),
@@ -4705,15 +4706,15 @@ public sealed class ScoutApplicationTests
             replacementColumns,
             replacementLengths);
 
-        Assert.Equal("foo"u8.ToArray(), replaced);
-        Assert.Equal([1L], replacementColumns);
-        Assert.Equal([3], replacementLengths);
+        Assert.AreSequenceEqual("foo"u8.ToArray(), replaced);
+        Assert.AreSequenceEqual<long>([1L], replacementColumns);
+        Assert.AreSequenceEqual<int>([3], replacementLengths);
     }
 
     /// <summary>
     /// Verifies warmed capture replay expands named and optional captures directly without per-match allocations.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplacementFormatterWritesCaptureTemplateWithoutAllocating()
     {
         byte[][] patterns =
@@ -4721,7 +4722,7 @@ public sealed class ScoutApplicationTests
             @"\b(?P<kind>struct|enum|union)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\.(?P<suffix>h))?"u8.ToArray(),
         ];
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         var template = ReplacementTemplate.Create("$kind:$name:$suffix:$9"u8);
         int[] captureSlots = new int[Math.Max(
             plan.CaptureSlotCount,
@@ -4739,7 +4740,7 @@ public sealed class ScoutApplicationTests
             plan,
             template,
             captureSlots);
-        Assert.Equal("struct:Foo::"u8.ToArray(), verificationStream.ToArray());
+        Assert.AreSequenceEqual("struct:Foo::"u8.ToArray(), verificationStream.ToArray());
 
         var output = new RawByteWriter(Stream.Null, RawByteWriterBufferMode.Block);
         for (int index = 0; index < 32; index++)
@@ -4771,13 +4772,13 @@ public sealed class ScoutApplicationTests
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0, allocated);
+        Assert.AreEqual(0, allocated);
     }
 
     /// <summary>
     /// Verifies direct replacement preserves optional named captures, surrounding boundaries, and CRLF records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplacePreservesOptionalNamedCapturesInCrlfContext()
     {
         string root = CreateTempDirectory();
@@ -4790,16 +4791,16 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
             "--crlf", "-r", "${word}|${suffix}", pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal("xfoo|y\r\nxfoo|bary\r\n"u8.ToArray(), output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual("xfoo|y\r\nxfoo|bary\r\n"u8.ToArray(), output);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies text-mode replacement writes invalid UTF-8 capture bytes without decoding or transcoding them.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplacePreservesInvalidUtf8CaptureBytesInTextMode()
     {
         string root = CreateTempDirectory();
@@ -4811,16 +4812,16 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
             "--text", "-r", "$2$1", @"(?-u:(.))(A)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal([(byte)'A', 0xFF, (byte)'\n'], output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual<byte>([(byte)'A', 0xFF, (byte)'\n'], output);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies repeated patterns share ripgrep's global numeric capture numbering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
     {
         string root = CreateTempDirectory();
@@ -4832,16 +4833,16 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
             "-o", "-r", "$0|$1|$2", "-e", "(a)", "-e", "(b)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal("a|a|\nb||b\n"u8.ToArray(), output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual("a|a|\nb||b\n"u8.ToArray(), output);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replacement captures retain boundary context for full-line and only-matching output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceReplaysCapturesInOriginalLineContext()
     {
         string root = CreateTempDirectory();
@@ -4857,18 +4858,18 @@ public sealed class ScoutApplicationTests
         (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep(
             "-o", "-r", "<$1>", @"\B(foo)\B", path);
 
-        Assert.Equal(pinnedLineExitCode, lineExitCode);
-        Assert.Equal(pinnedLineOutput, lineOutput);
-        Assert.Equal(pinnedLineError, lineError);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedLineExitCode, lineExitCode);
+        Assert.AreSequenceEqual(pinnedLineOutput, lineOutput);
+        Assert.AreEqual(pinnedLineError, lineError);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
     }
 
     /// <summary>
     /// Verifies capture replay uses the same terminator-free record seen by haystack anchors.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceReplaysCapturesAgainstAuthoritativeRecordContent()
     {
         string root = CreateTempDirectory();
@@ -4880,16 +4881,16 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
             "-r", "$1|$2", @"(?:(foo\z)|(foo))", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal("foo|\n"u8.ToArray(), output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual("foo|\n"u8.ToArray(), output);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies multiline replacement reuses the combined matcher's global capture numbering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
     {
         string root = CreateTempDirectory();
@@ -4905,19 +4906,19 @@ public sealed class ScoutApplicationTests
         (int pinnedContextExitCode, byte[] pinnedContextOutput, string pinnedContextError) = RunPinnedRipgrep(
             "-n", "-U", "-C1", "-r", "$1|$2", "-e", "a\n(x)", "-e", "b\n(y)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal("x|\n|y\n"u8.ToArray(), output);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedContextExitCode, contextExitCode);
-        Assert.Equal(pinnedContextOutput, contextOutput);
-        Assert.Equal(pinnedContextError, contextError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual("x|\n|y\n"u8.ToArray(), output);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedContextExitCode, contextExitCode);
+        Assert.AreSequenceEqual(pinnedContextOutput, contextOutput);
+        Assert.AreEqual(pinnedContextError, contextError);
     }
 
     /// <summary>
     /// Verifies named captures retain their global indexes across repeated patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanExpandsGlobalNamedCaptures()
     {
         byte[][] patterns =
@@ -4927,11 +4928,11 @@ public sealed class ScoutApplicationTests
         ];
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
 
-        Assert.NotNull(plan);
-        Assert.Equal(
+        Assert.IsNotNull(plan);
+        Assert.AreSequenceEqual(
             "a|a|"u8.ToArray(),
             ReplacementFormatter.Expand("$0|$left|$right"u8, "a"u8, plan));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "b||b"u8.ToArray(),
             ReplacementFormatter.Expand("$0|$left|$right"u8, "b"u8, plan));
     }
@@ -4939,7 +4940,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies captures are accepted only when the authoritative matcher associates the complete reported span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanRequiresFullSpanAssociation()
     {
         byte[][] patterns = ["(a)"u8.ToArray(), "(b)"u8.ToArray()];
@@ -4947,16 +4948,16 @@ public sealed class ScoutApplicationTests
         int[] captureStarts = new int[3];
         int[] captureLengths = new int[3];
 
-        Assert.NotNull(plan);
-        Assert.False(plan.TryCollectCaptures("ab"u8, captureStarts, captureLengths, captureNames: null));
-        Assert.Equal([0, -1, -1], captureStarts);
-        Assert.Equal([2, -1, -1], captureLengths);
+        Assert.IsNotNull(plan);
+        Assert.IsFalse(plan.TryCollectCaptures("ab"u8, captureStarts, captureLengths, captureNames: null));
+        Assert.AreSequenceEqual<int>([0, -1, -1], captureStarts);
+        Assert.AreSequenceEqual<int>([2, -1, -1], captureLengths);
     }
 
     /// <summary>
     /// Verifies duplicate names across repeated patterns are rejected by the combined syntax parser.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSearchPlanRejectsDuplicateNamesAcrossPatterns()
     {
         byte[][] patterns =
@@ -4965,7 +4966,7 @@ public sealed class ScoutApplicationTests
             "(?P<value>b)"u8.ToArray(),
         ];
 
-        FormatException exception = Assert.Throws<FormatException>(
+        FormatException exception = Assert.ThrowsExactly<FormatException>(
             () => RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false));
 
         Assert.Contains("duplicate capture group name", exception.Message, StringComparison.Ordinal);
@@ -4974,7 +4975,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies replacement expansion uses named captures from regex groups.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsNamedCaptures()
     {
         string root = CreateTempDirectory();
@@ -4986,18 +4987,18 @@ public sealed class ScoutApplicationTests
         (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout("-o", "-r", "${digits}-${word}", "(?<word>[a-z]+)(?<digits>[0-9]+)", path);
         (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep("-o", "-r", "${digits}-${word}", "(?<word>[a-z]+)(?<digits>[0-9]+)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
-        Assert.Equal(pinnedOnlyOutput, onlyOutput);
-        Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedOnlyExitCode, onlyExitCode);
+        Assert.AreSequenceEqual(pinnedOnlyOutput, onlyOutput);
+        Assert.AreEqual(pinnedOnlyError, onlyError);
     }
 
     /// <summary>
     /// Verifies replacement expansion preserves ripgrep capture numbering across alternation branches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsAlternationCaptures()
     {
         string root = CreateTempDirectory();
@@ -5009,18 +5010,18 @@ public sealed class ScoutApplicationTests
         (int nestedExitCode, byte[] nestedOutput, string nestedError) = RunScout("-o", "-r", "${1}:${2}:${3}:${4}", "(a(b)|a(c))(d)", path);
         (int pinnedNestedExitCode, byte[] pinnedNestedOutput, string pinnedNestedError) = RunPinnedRipgrep("-o", "-r", "${1}:${2}:${3}:${4}", "(a(b)|a(c))(d)", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedNestedExitCode, nestedExitCode);
-        Assert.Equal(pinnedNestedOutput, nestedOutput);
-        Assert.Equal(pinnedNestedError, nestedError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedNestedExitCode, nestedExitCode);
+        Assert.AreSequenceEqual(pinnedNestedOutput, nestedOutput);
+        Assert.AreEqual(pinnedNestedError, nestedError);
     }
 
     /// <summary>
     /// Verifies replacement expansion collects captures from patterns that use inline regex flags.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsInlineFlagCaptures()
     {
         string root = CreateTempDirectory();
@@ -5036,24 +5037,24 @@ public sealed class ScoutApplicationTests
         (int scopedVerboseExitCode, byte[] scopedVerboseOutput, string scopedVerboseError) = RunScout("-n", "-r", "$1:$2", "(?x:(f o o))(?-x:(bar))", path);
         (int pinnedScopedVerboseExitCode, byte[] pinnedScopedVerboseOutput, string pinnedScopedVerboseError) = RunPinnedRipgrep("-n", "-r", "$1:$2", "(?x:(f o o))(?-x:(bar))", path);
 
-        Assert.Equal(pinnedCaseExitCode, caseExitCode);
-        Assert.Equal(pinnedCaseOutput, caseOutput);
-        Assert.Equal(pinnedCaseError, caseError);
-        Assert.Equal(pinnedScopedCaseExitCode, scopedCaseExitCode);
-        Assert.Equal(pinnedScopedCaseOutput, scopedCaseOutput);
-        Assert.Equal(pinnedScopedCaseError, scopedCaseError);
-        Assert.Equal(pinnedVerboseExitCode, verboseExitCode);
-        Assert.Equal(pinnedVerboseOutput, verboseOutput);
-        Assert.Equal(pinnedVerboseError, verboseError);
-        Assert.Equal(pinnedScopedVerboseExitCode, scopedVerboseExitCode);
-        Assert.Equal(pinnedScopedVerboseOutput, scopedVerboseOutput);
-        Assert.Equal(pinnedScopedVerboseError, scopedVerboseError);
+        Assert.AreEqual(pinnedCaseExitCode, caseExitCode);
+        Assert.AreSequenceEqual(pinnedCaseOutput, caseOutput);
+        Assert.AreEqual(pinnedCaseError, caseError);
+        Assert.AreEqual(pinnedScopedCaseExitCode, scopedCaseExitCode);
+        Assert.AreSequenceEqual(pinnedScopedCaseOutput, scopedCaseOutput);
+        Assert.AreEqual(pinnedScopedCaseError, scopedCaseError);
+        Assert.AreEqual(pinnedVerboseExitCode, verboseExitCode);
+        Assert.AreSequenceEqual(pinnedVerboseOutput, verboseOutput);
+        Assert.AreEqual(pinnedVerboseError, verboseError);
+        Assert.AreEqual(pinnedScopedVerboseExitCode, scopedVerboseExitCode);
+        Assert.AreSequenceEqual(pinnedScopedVerboseOutput, scopedVerboseOutput);
+        Assert.AreEqual(pinnedScopedVerboseError, scopedVerboseError);
     }
 
     /// <summary>
     /// Verifies replacement expansion backtracks quantified captures to match ripgrep's chosen spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsBacktrackedQuantifiedCaptures()
     {
         string root = CreateTempDirectory();
@@ -5067,21 +5068,21 @@ public sealed class ScoutApplicationTests
         (int boundedExitCode, byte[] boundedOutput, string boundedError) = RunScout("-n", "-r", "$1:$2:$0", "(a{1,3})(a)", path);
         (int pinnedBoundedExitCode, byte[] pinnedBoundedOutput, string pinnedBoundedError) = RunPinnedRipgrep("-n", "-r", "$1:$2:$0", "(a{1,3})(a)", path);
 
-        Assert.Equal(pinnedGreedyExitCode, greedyExitCode);
-        Assert.Equal(pinnedGreedyOutput, greedyOutput);
-        Assert.Equal(pinnedGreedyError, greedyError);
-        Assert.Equal(pinnedLazyExitCode, lazyExitCode);
-        Assert.Equal(pinnedLazyOutput, lazyOutput);
-        Assert.Equal(pinnedLazyError, lazyError);
-        Assert.Equal(pinnedBoundedExitCode, boundedExitCode);
-        Assert.Equal(pinnedBoundedOutput, boundedOutput);
-        Assert.Equal(pinnedBoundedError, boundedError);
+        Assert.AreEqual(pinnedGreedyExitCode, greedyExitCode);
+        Assert.AreSequenceEqual(pinnedGreedyOutput, greedyOutput);
+        Assert.AreEqual(pinnedGreedyError, greedyError);
+        Assert.AreEqual(pinnedLazyExitCode, lazyExitCode);
+        Assert.AreSequenceEqual(pinnedLazyOutput, lazyOutput);
+        Assert.AreEqual(pinnedLazyError, lazyError);
+        Assert.AreEqual(pinnedBoundedExitCode, boundedExitCode);
+        Assert.AreSequenceEqual(pinnedBoundedOutput, boundedOutput);
+        Assert.AreEqual(pinnedBoundedError, boundedError);
     }
 
     /// <summary>
     /// Verifies replacement expansion captures shorthand and POSIX regex classes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceExpandsRegexClassCaptures()
     {
         string root = CreateTempDirectory();
@@ -5097,24 +5098,24 @@ public sealed class ScoutApplicationTests
         (int posixExitCode, byte[] posixOutput, string posixError) = RunScout("-n", "-r", "$1:$2:$0", "([[:alpha:]]+)([[:digit:]]+)", path);
         (int pinnedPosixExitCode, byte[] pinnedPosixOutput, string pinnedPosixError) = RunPinnedRipgrep("-n", "-r", "$1:$2:$0", "([[:alpha:]]+)([[:digit:]]+)", path);
 
-        Assert.Equal(pinnedAlternationExitCode, alternationExitCode);
-        Assert.Equal(pinnedAlternationOutput, alternationOutput);
-        Assert.Equal(pinnedAlternationError, alternationError);
-        Assert.Equal(pinnedWhitespaceExitCode, whitespaceExitCode);
-        Assert.Equal(pinnedWhitespaceOutput, whitespaceOutput);
-        Assert.Equal(pinnedWhitespaceError, whitespaceError);
-        Assert.Equal(pinnedNotDigitExitCode, notDigitExitCode);
-        Assert.Equal(pinnedNotDigitOutput, notDigitOutput);
-        Assert.Equal(pinnedNotDigitError, notDigitError);
-        Assert.Equal(pinnedPosixExitCode, posixExitCode);
-        Assert.Equal(pinnedPosixOutput, posixOutput);
-        Assert.Equal(pinnedPosixError, posixError);
+        Assert.AreEqual(pinnedAlternationExitCode, alternationExitCode);
+        Assert.AreSequenceEqual(pinnedAlternationOutput, alternationOutput);
+        Assert.AreEqual(pinnedAlternationError, alternationError);
+        Assert.AreEqual(pinnedWhitespaceExitCode, whitespaceExitCode);
+        Assert.AreSequenceEqual(pinnedWhitespaceOutput, whitespaceOutput);
+        Assert.AreEqual(pinnedWhitespaceError, whitespaceError);
+        Assert.AreEqual(pinnedNotDigitExitCode, notDigitExitCode);
+        Assert.AreSequenceEqual(pinnedNotDigitOutput, notDigitOutput);
+        Assert.AreEqual(pinnedNotDigitError, notDigitError);
+        Assert.AreEqual(pinnedPosixExitCode, posixExitCode);
+        Assert.AreSequenceEqual(pinnedPosixOutput, posixOutput);
+        Assert.AreEqual(pinnedPosixError, posixError);
     }
 
     /// <summary>
     /// Verifies replace mode combines with vimgrep fields and adjusted offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceVimgrepUsesAdjustedColumnsAndOffsets()
     {
         string root = CreateTempDirectory();
@@ -5124,15 +5125,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--vimgrep", "-b", "-r", "XX", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--vimgrep", "-b", "-r", "XX", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies replace mode uses max-column match-count summaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaceMaxColumnsUsesMatchCountSummaries()
     {
         string root = CreateTempDirectory();
@@ -5144,18 +5145,18 @@ public sealed class ScoutApplicationTests
         (int previewExitCode, byte[] previewOutput, string previewError) = RunScout("-n", "-M", "4", "--max-columns-preview", "-r", "ABCDE", "needle", path);
         (int pinnedPreviewExitCode, byte[] pinnedPreviewOutput, string pinnedPreviewError) = RunPinnedRipgrep("-n", "-M", "4", "--max-columns-preview", "-r", "ABCDE", "needle", path);
 
-        Assert.Equal(pinnedOmittedExitCode, omittedExitCode);
-        Assert.Equal(pinnedOmittedOutput, omittedOutput);
-        Assert.Equal(pinnedOmittedError, omittedError);
-        Assert.Equal(pinnedPreviewExitCode, previewExitCode);
-        Assert.Equal(pinnedPreviewOutput, previewOutput);
-        Assert.Equal(pinnedPreviewError, previewError);
+        Assert.AreEqual(pinnedOmittedExitCode, omittedExitCode);
+        Assert.AreSequenceEqual(pinnedOmittedOutput, omittedOutput);
+        Assert.AreEqual(pinnedOmittedError, omittedError);
+        Assert.AreEqual(pinnedPreviewExitCode, previewExitCode);
+        Assert.AreSequenceEqual(pinnedPreviewOutput, previewOutput);
+        Assert.AreEqual(pinnedPreviewError, previewError);
     }
 
     /// <summary>
     /// Verifies color always highlights matches and standard fields.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsStandardOutput()
     {
         string root = CreateTempDirectory();
@@ -5165,15 +5166,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-H", "-n", "--column", "-b", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-H", "-n", "--column", "-b", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights literal regex matches at their true offsets late in a line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsLiteralRegexMatchOffsets()
     {
         string root = CreateTempDirectory();
@@ -5186,15 +5187,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "class", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-n", "class", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies colored context output preserves line numbers and byte offsets for sliced match lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysContextOutputPreservesSlicedLineCoordinates()
     {
         string root = CreateTempDirectory();
@@ -5225,16 +5226,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies inverted colored context output highlights original matches printed as context lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsInvertedContextOriginalMatches()
     {
         string root = CreateTempDirectory();
@@ -5258,16 +5259,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies color always highlights optimized multiline signature matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsMultilineSignatureArityOutput()
     {
         string root = CreateTempDirectory();
@@ -5290,15 +5291,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", Pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", Pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights optimized multiline signature matches in context output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsMultilineSignatureArityContextOutput()
     {
         string root = CreateTempDirectory();
@@ -5323,15 +5324,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "-C1", Pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "-C1", Pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights generic multiline matches in standard and context output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsGenericMultilineOutput()
     {
         string root = CreateTempDirectory();
@@ -5368,16 +5369,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies color always highlights only-matching output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsOnlyMatchingOutput()
     {
         string root = CreateTempDirectory();
@@ -5387,15 +5388,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "--column", "-b", "-o", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-n", "--column", "-b", "-o", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights vimgrep output one match at a time.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsVimgrepOutput()
     {
         string root = CreateTempDirectory();
@@ -5405,15 +5406,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "--vimgrep", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights each vimgrep context record independently.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsVimgrepContextOutput()
     {
         string root = CreateTempDirectory();
@@ -5423,15 +5424,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-C1", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "--vimgrep", "-C1", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights the current vimgrep replacement record.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsVimgrepReplacementOutput()
     {
         string root = CreateTempDirectory();
@@ -5441,15 +5442,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-r", "X", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "--vimgrep", "-r", "X", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights multiline vimgrep records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsMultilineVimgrepOutput()
     {
         string root = CreateTempDirectory();
@@ -5472,15 +5473,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", Pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", Pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights multiline vimgrep context records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsMultilineVimgrepContextOutput()
     {
         string root = CreateTempDirectory();
@@ -5503,15 +5504,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", "-C1", Pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", "-C1", Pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights multiline vimgrep replacement output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsMultilineVimgrepReplacementOutput()
     {
         string root = CreateTempDirectory();
@@ -5534,15 +5535,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", "-r", "X", Pattern, path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", "-r", "X", Pattern, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color always highlights replacement output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorAlwaysHighlightsReplacementOutput()
     {
         string root = CreateTempDirectory();
@@ -5552,15 +5553,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "-r", "X", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-n", "-r", "X", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies color never suppresses ANSI output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorNeverSuppressesAnsiOutput()
     {
         string root = CreateTempDirectory();
@@ -5570,15 +5571,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--color=never", "-n", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=never", "-n", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies <c>--colors</c> customizes ANSI color output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ColorSpecsCustomizeOutputLikeRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5603,16 +5604,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies <c>--hyperlink-format</c> emits OSC-8 hyperlinks around path preludes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HyperlinkFormatEmitsPathPreludesLikeRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5633,16 +5634,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies pretty output aliases color, heading and line-number behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PrettyOutputMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5654,18 +5655,18 @@ public sealed class ScoutApplicationTests
         (int overriddenExitCode, byte[] overriddenOutput, string overriddenError) = RunScout("--pretty", "--color=never", "--no-heading", "-N", "needle", path);
         (int pinnedOverriddenExitCode, byte[] pinnedOverriddenOutput, string pinnedOverriddenError) = RunPinnedRipgrep("--pretty", "--color=never", "--no-heading", "-N", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedOverriddenExitCode, overriddenExitCode);
-        Assert.Equal(pinnedOverriddenOutput, overriddenOutput);
-        Assert.Equal(pinnedOverriddenError, overriddenError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedOverriddenExitCode, overriddenExitCode);
+        Assert.AreSequenceEqual(pinnedOverriddenOutput, overriddenOutput);
+        Assert.AreEqual(pinnedOverriddenError, overriddenError);
     }
 
     /// <summary>
     /// Verifies unrestricted filtering levels match ripgrep for ignored and hidden files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnrestrictedFlagsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5678,18 +5679,18 @@ public sealed class ScoutApplicationTests
         (int twoExitCode, byte[] twoOutput, string twoError) = RunScout("--sort=path", "-uu", "needle", root);
         (int pinnedTwoExitCode, byte[] pinnedTwoOutput, string pinnedTwoError) = RunPinnedRipgrep("--sort=path", "-uu", "needle", root);
 
-        Assert.Equal(pinnedOneExitCode, oneExitCode);
-        Assert.Equal(pinnedOneOutput, oneOutput);
-        Assert.Equal(pinnedOneError, oneError);
-        Assert.Equal(pinnedTwoExitCode, twoExitCode);
-        Assert.Equal(pinnedTwoOutput, twoOutput);
-        Assert.Equal(pinnedTwoError, twoError);
+        Assert.AreEqual(pinnedOneExitCode, oneExitCode);
+        Assert.AreSequenceEqual(pinnedOneOutput, oneOutput);
+        Assert.AreEqual(pinnedOneError, oneError);
+        Assert.AreEqual(pinnedTwoExitCode, twoExitCode);
+        Assert.AreSequenceEqual(pinnedTwoOutput, twoOutput);
+        Assert.AreEqual(pinnedTwoError, twoError);
     }
 
     /// <summary>
     /// Verifies only-matching mode prints each match on its own line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingPrintsEachMatch()
     {
         string root = CreateTempDirectory();
@@ -5710,15 +5711,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies only-matching mode combines with filename, line, column and byte-offset fields.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingCombinesWithStandardFields()
     {
         string root = CreateTempDirectory();
@@ -5743,15 +5744,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-H", "-n", "--column", "-b", "-o", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies only-matching mode respects word-regexp matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingRespectsWordRegexp()
     {
         string root = CreateTempDirectory();
@@ -5773,15 +5774,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-w", "-o", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies only-matching mode respects line-regexp matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingRespectsLineRegexp()
     {
         string root = CreateTempDirectory();
@@ -5803,15 +5804,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-x", "-o", "foo", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies count mode with only-matching counts matches instead of matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingCountCountsMatches()
     {
         string root = CreateTempDirectory();
@@ -5833,15 +5834,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", "-c", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies inverted matching ignores only-matching output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingInvertMatchPrintsInvertedLines()
     {
         string root = CreateTempDirectory();
@@ -5863,15 +5864,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", "-v", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies empty-pattern only-matching output and counts match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingEmptyPatternMatchesEachByte()
     {
         string root = CreateTempDirectory();
@@ -5906,18 +5907,18 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-o", string.Empty, path);
         (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) = RunPinnedRipgrep("-o", "--count-matches", string.Empty, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
-        Assert.Equal(pinnedCountExitCode, countExitCode);
-        Assert.Equal(pinnedCountOutput, countOutput.ToArray());
-        Assert.Equal(pinnedCountError, Utf8(countError.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedCountExitCode, countExitCode);
+        Assert.AreSequenceEqual(pinnedCountOutput, countOutput.ToArray());
+        Assert.AreEqual(pinnedCountError, Utf8(countError.ToArray()));
     }
 
     /// <summary>
     /// Verifies regexes that can match empty iterate only the ripgrep-reported offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OnlyMatchingRegexEmptyIterationMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5931,21 +5932,21 @@ public sealed class ScoutApplicationTests
         (int countExitCode, byte[] countOutput, string countError) = RunScout("--count-matches", "(?:)+", path);
         (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) = RunPinnedRipgrep("--count-matches", "(?:)+", path);
 
-        Assert.Equal(pinnedAlternationExitCode, alternationExitCode);
-        Assert.Equal(pinnedAlternationOutput, alternationOutput);
-        Assert.Equal(pinnedAlternationError, alternationError);
-        Assert.Equal(pinnedEmptyRepeatExitCode, emptyRepeatExitCode);
-        Assert.Equal(pinnedEmptyRepeatOutput, emptyRepeatOutput);
-        Assert.Equal(pinnedEmptyRepeatError, emptyRepeatError);
-        Assert.Equal(pinnedCountExitCode, countExitCode);
-        Assert.Equal(pinnedCountOutput, countOutput);
-        Assert.Equal(pinnedCountError, countError);
+        Assert.AreEqual(pinnedAlternationExitCode, alternationExitCode);
+        Assert.AreSequenceEqual(pinnedAlternationOutput, alternationOutput);
+        Assert.AreEqual(pinnedAlternationError, alternationError);
+        Assert.AreEqual(pinnedEmptyRepeatExitCode, emptyRepeatExitCode);
+        Assert.AreSequenceEqual(pinnedEmptyRepeatOutput, emptyRepeatOutput);
+        Assert.AreEqual(pinnedEmptyRepeatError, emptyRepeatError);
+        Assert.AreEqual(pinnedCountExitCode, countExitCode);
+        Assert.AreSequenceEqual(pinnedCountOutput, countOutput);
+        Assert.AreEqual(pinnedCountError, countError);
     }
 
     /// <summary>
     /// Verifies JSON only-matching emits empty regex submatches at ripgrep-compatible offsets.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void JsonOnlyMatchingRegexEmptyIterationMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5955,15 +5956,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", "(?:)+", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", "(?:)+", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies JSON multiline EOF empty matches select the final line without emitting a submatch.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void JsonMultilineEofEmptyMatchMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -5973,9 +5974,9 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", @"\z", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", @"\z", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreEqual(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
@@ -5984,10 +5985,10 @@ public sealed class ScoutApplicationTests
     /// </summary>
     /// <param name="contents">The exact file contents.</param>
     /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
-    [Theory]
-    [InlineData("abc\n\nx\n", false)]
-    [InlineData("abc\r\n\r\nx\r\n", false)]
-    [InlineData("abc\r\n\r\nx\r\n", true)]
+    [TestMethod]
+    [DataRow("abc\n\nx\n", false)]
+    [DataRow("abc\r\n\r\nx\r\n", false)]
+    [DataRow("abc\r\n\r\nx\r\n", true)]
     public void EmptyLineAnchorsMatchRipgrepAcrossLineConsumers(
         string contents,
         bool crlf)
@@ -6022,19 +6023,19 @@ public sealed class ScoutApplicationTests
                 (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
                     RunPinnedRipgrep([.. arguments]);
 
-                Assert.Equal(pinnedExitCode, exitCode);
+                Assert.AreEqual(pinnedExitCode, exitCode);
                 if (mode.Contains("--json", StringComparer.Ordinal))
                 {
-                    Assert.Equal(
+                    Assert.AreEqual(
                         NormalizeJsonTimings(pinnedOutput),
                         NormalizeJsonTimings(output));
                 }
                 else
                 {
-                    Assert.Equal(pinnedOutput, output);
+                    Assert.AreSequenceEqual(pinnedOutput, output);
                 }
 
-                Assert.Equal(pinnedError, error);
+                Assert.AreEqual(pinnedError, error);
             }
         }
     }
@@ -6042,7 +6043,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies max-count limits matching lines in standard output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountLimitsStandardMatches()
     {
         string root = CreateTempDirectory();
@@ -6064,15 +6065,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m", "2", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies inline max-count forms match ripgrep parsing.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountSupportsInlineForms()
     {
         string root = CreateTempDirectory();
@@ -6106,18 +6107,18 @@ public sealed class ScoutApplicationTests
         (int pinnedShortExitCode, byte[] pinnedShortOutput, string pinnedShortError) = RunPinnedRipgrep("-m2", "needle", path);
         (int pinnedLongExitCode, byte[] pinnedLongOutput, string pinnedLongError) = RunPinnedRipgrep("--max-count=2", "needle", path);
 
-        Assert.Equal(pinnedShortExitCode, shortExitCode);
-        Assert.Equal(pinnedShortOutput, shortOutput.ToArray());
-        Assert.Equal(pinnedShortError, Utf8(shortError.ToArray()));
-        Assert.Equal(pinnedLongExitCode, longExitCode);
-        Assert.Equal(pinnedLongOutput, longOutput.ToArray());
-        Assert.Equal(pinnedLongError, Utf8(longError.ToArray()));
+        Assert.AreEqual(pinnedShortExitCode, shortExitCode);
+        Assert.AreSequenceEqual(pinnedShortOutput, shortOutput.ToArray());
+        Assert.AreEqual(pinnedShortError, Utf8(shortError.ToArray()));
+        Assert.AreEqual(pinnedLongExitCode, longExitCode);
+        Assert.AreSequenceEqual(pinnedLongOutput, longOutput.ToArray());
+        Assert.AreEqual(pinnedLongError, Utf8(longError.ToArray()));
     }
 
     /// <summary>
     /// Verifies max-count limits count-matches by matching line, not occurrence count.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountLimitsCountMatchesByMatchingLine()
     {
         string root = CreateTempDirectory();
@@ -6140,15 +6141,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m", "1", "--count-matches", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies max-count with only-matching prints all matches from each retained matching line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountOnlyMatchingPrintsAllMatchesInLimitedLines()
     {
         string root = CreateTempDirectory();
@@ -6171,15 +6172,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m", "1", "-o", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies max-count limits inverted matching lines.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountInvertMatchLimitsInvertedLines()
     {
         string root = CreateTempDirectory();
@@ -6202,15 +6203,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m", "1", "-v", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies max-count zero disables searches, including files-without-match summaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountZeroDisablesSearchSummaries()
     {
         string root = CreateTempDirectory();
@@ -6233,15 +6234,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-m", "0", "--files-without-match", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies max-count parser diagnostics match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxCountParserDiagnosticsMatchRipgrep()
     {
         using MemoryStream missingOutput = new();
@@ -6269,18 +6270,18 @@ public sealed class ScoutApplicationTests
         (int pinnedMissingExitCode, byte[] pinnedMissingOutput, string pinnedMissingError) = RunPinnedRipgrep("-m");
         (int pinnedInvalidExitCode, byte[] pinnedInvalidOutput, string pinnedInvalidError) = RunPinnedRipgrep("--max-count=x", "needle");
 
-        Assert.Equal(pinnedMissingExitCode, missingExitCode);
-        Assert.Equal(pinnedMissingOutput, missingOutput.ToArray());
-        Assert.Equal(pinnedMissingError, Utf8(missingError.ToArray()));
-        Assert.Equal(pinnedInvalidExitCode, invalidExitCode);
-        Assert.Equal(pinnedInvalidOutput, invalidOutput.ToArray());
-        Assert.Equal(pinnedInvalidError, Utf8(invalidError.ToArray()));
+        Assert.AreEqual(pinnedMissingExitCode, missingExitCode);
+        Assert.AreSequenceEqual(pinnedMissingOutput, missingOutput.ToArray());
+        Assert.AreEqual(pinnedMissingError, Utf8(missingError.ToArray()));
+        Assert.AreEqual(pinnedInvalidExitCode, invalidExitCode);
+        Assert.AreSequenceEqual(pinnedInvalidOutput, invalidOutput.ToArray());
+        Assert.AreEqual(pinnedInvalidError, Utf8(invalidError.ToArray()));
     }
 
     /// <summary>
     /// Verifies count mode prefixes file paths when multiple paths are searched.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchCountPrefixesMultipleFiles()
     {
         string root = CreateTempDirectory();
@@ -6303,15 +6304,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{first}:2\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{first}:2\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files-with-matches mode prints matching paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchFilesWithMatchesPrintsMatchingPaths()
     {
         string root = CreateTempDirectory();
@@ -6334,15 +6335,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{first}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{first}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files-with-matches mode returns no-match when no paths match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchFilesWithMatchesReturnsNoMatchForUnmatchedPaths()
     {
         string root = CreateTempDirectory();
@@ -6362,15 +6363,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(1, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(1, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files-without-match mode prints paths with no matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchFilesWithoutMatchPrintsUnmatchedPaths()
     {
         string root = CreateTempDirectory();
@@ -6393,15 +6394,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{second}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{second}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files-without-match mode returns no-match when every path matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchFilesWithoutMatchReturnsNoMatchForMatchedPaths()
     {
         string root = CreateTempDirectory();
@@ -6421,15 +6422,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(1, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(1, exitCode);
+        Assert.IsEmpty(output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files mode lists searchable files without requiring a pattern.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeListsSearchableFiles()
     {
         string root = CreateTempDirectory();
@@ -6451,15 +6452,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{keep}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{keep}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files mode applies path color, custom path color and path hyperlinks like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModePathColorAndHyperlinksMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -6483,16 +6484,16 @@ public sealed class ScoutApplicationTests
             (int exitCode, byte[] output, string error) = RunScout(arguments);
             (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-            Assert.Equal(pinnedExitCode, exitCode);
-            Assert.Equal(pinnedOutput, output);
-            Assert.Equal(pinnedError, error);
+            Assert.AreEqual(pinnedExitCode, exitCode);
+            Assert.AreSequenceEqual(pinnedOutput, output);
+            Assert.AreEqual(pinnedError, error);
         }
     }
 
     /// <summary>
     /// Verifies explicit multi-threaded files mode lists the same searchable files as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeExplicitThreadsListsRipgrepFileSet()
     {
         string root = CreateTempDirectory();
@@ -6507,15 +6508,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--files", "--threads", "2", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", "--threads", "2", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(SortedUtf8Lines(pinnedOutput), SortedUtf8Lines(output));
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(SortedUtf8Lines(pinnedOutput), SortedUtf8Lines(output));
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies default files mode lists the same searchable file set as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeDefaultThreadsListsRipgrepFileSet()
     {
         string root = CreateTempDirectory();
@@ -6529,15 +6530,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--files", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(SortedUtf8Lines(pinnedOutput), SortedUtf8Lines(output));
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(SortedUtf8Lines(pinnedOutput), SortedUtf8Lines(output));
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies quiet files mode suppresses file output while preserving found status.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuietFilesModeSuppressesFileOutput()
     {
         string root = CreateTempDirectory();
@@ -6557,15 +6558,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-q", "--files", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies files mode lists direct file path arguments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeListsDirectFilePath()
     {
         string root = CreateTempDirectory();
@@ -6584,15 +6585,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{path}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{path}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files mode prints the stdin label for standard input.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeListsStandardInputLabel()
     {
         using MemoryStream output = new();
@@ -6608,15 +6609,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("<stdin>\n"u8.ToArray(), output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("<stdin>\n"u8.ToArray(), output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies quiet files-without-match uses unmatched files for success status.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void QuietFilesWithoutMatchUsesUnmatchedStatus()
     {
         string root = CreateTempDirectory();
@@ -6638,15 +6639,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-q", "--files-without-match", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies directory searches recurse through the ignore-aware walker and print path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchRecursesDirectories()
     {
         string root = CreateTempDirectory();
@@ -6666,15 +6667,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{Path.Join(root, "child", "keep.txt")}:needle child\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{Path.Join(root, "child", "keep.txt")}:needle child\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies recursive literal search output matches ripgrep after filtering many no-match files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchRecursesDirectoriesWithManyNoMatchFiles()
     {
         string root = CreateTempDirectory();
@@ -6690,15 +6691,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout("--threads=2", "--path-separator", "/", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--threads=2", "--path-separator", "/", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies directory searches print line numbers after path prefixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchPrintsDirectoryLineNumbersAfterPathPrefixes()
     {
         string root = CreateTempDirectory();
@@ -6718,15 +6719,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{Path.Join(root, "child", "keep.txt")}:2:needle child\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{Path.Join(root, "child", "keep.txt")}:2:needle child\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies hidden search includes hidden files while respecting ignore files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchHiddenFlagIncludesHiddenFiles()
     {
         string root = CreateTempDirectory();
@@ -6747,15 +6748,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{hidden}:needle hidden\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{hidden}:needle hidden\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies no-ignore search includes ignored files without including hidden files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchNoIgnoreIncludesIgnoredFilesButNotHiddenFiles()
     {
         string root = CreateTempDirectory();
@@ -6777,15 +6778,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{ignored}:needle ignored\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{ignored}:needle ignored\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies max-depth limits recursive directory searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchMaxDepthLimitsRecursion()
     {
         string root = CreateTempDirectory();
@@ -6808,21 +6809,21 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--max-depth", "2", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies follow mode recurses through directory symbolic links.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchFollowTraversesDirectorySymlinks()
     {
         string root = CreateTempDirectory();
         string target = CreateTempDirectory();
         File.WriteAllText(Path.Join(target, "linked.txt"), "needle linked\n");
-        Assert.True(TryCreateDirectorySymlink(target, Path.Join(root, "link")), "Required directory symlink could not be created.");
+        Assert.IsTrue(TryCreateDirectorySymlink(target, Path.Join(root, "link")), "Required directory symlink could not be created.");
 
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -6839,15 +6840,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-L", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies glob whitelist mode filters searched files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchGlobWhitelistFiltersFiles()
     {
         string root = CreateTempDirectory();
@@ -6869,15 +6870,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-g", "*.cs", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies negated globs exclude matching files without enabling whitelist mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchNegatedGlobExcludesFiles()
     {
         string root = CreateTempDirectory();
@@ -6898,15 +6899,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--glob=!*.log", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies glob whitelists override hidden filtering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchGlobWhitelistOverridesHiddenFilter()
     {
         string root = CreateTempDirectory();
@@ -6926,15 +6927,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-g.hidden", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies case-insensitive glob overrides match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CaseInsensitiveGlobOverridesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -6956,7 +6957,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies path sorting orders directory search output like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchSortPathOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
@@ -6981,15 +6982,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort", "path", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies reverse path sorting orders directory search output like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchSortReversePathOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
@@ -7013,15 +7014,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sortr=path", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies modified-time sorting orders directory search output like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchSortModifiedOrdersDirectoryMatches()
     {
         string root = CreateTempDirectory();
@@ -7046,15 +7047,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=modified", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies type-list output matches pinned ripgrep's default type table.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TypeListWritesPinnedTypeDefinitions()
     {
         using MemoryStream output = new();
@@ -7070,15 +7071,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--type-list");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies type-add and type-clear affect type-list output like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TypeListHonorsTypeAddAndClear()
     {
         using MemoryStream output = new();
@@ -7098,15 +7099,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--type-clear=foo", "--type-add", "foo:include:cs,txt", "--type-add=foo:*.foo", "--type-list");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies type selection filters directory searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchTypeSelectionFiltersFiles()
     {
         string root = CreateTempDirectory();
@@ -7127,15 +7128,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-tcs", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies type negation excludes matching file types.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchTypeNotExcludesFiles()
     {
         string root = CreateTempDirectory();
@@ -7156,15 +7157,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-Ttxt", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies custom file type definitions can be selected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSearchTypeAddDefinesSelectableType()
     {
         string root = CreateTempDirectory();
@@ -7187,15 +7188,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--type-add", "foo:*.foo", "-tfoo", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies type filtering applies to files mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeTypeSelectionFiltersFiles()
     {
         string root = CreateTempDirectory();
@@ -7216,15 +7217,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files", "--type=cs", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies unknown type diagnostics match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnknownTypeDiagnosticMatchesRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7244,15 +7245,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--type=bogus", "needle", root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies invalid type-add diagnostics match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvalidTypeAddDiagnosticMatchesRipgrep()
     {
         using MemoryStream output = new();
@@ -7270,15 +7271,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--type-add", "bad", "--type-list");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies files mode honors hidden traversal.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeHiddenFlagIncludesHiddenFiles()
     {
         string root = CreateTempDirectory();
@@ -7298,15 +7299,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{hidden}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{hidden}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies files mode honors disabled ignore files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FilesModeNoIgnoreIncludesIgnoredFiles()
     {
         string root = CreateTempDirectory();
@@ -7327,15 +7328,15 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal($"{ignored}\n", Utf8(output.ToArray()));
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.AreEqual($"{ignored}\n", Utf8(output.ToArray()));
+        Assert.IsEmpty(error.ToArray());
     }
 
     /// <summary>
     /// Verifies explicit ignore files match ripgrep when searching directories.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitIgnoreFileSearchMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7368,15 +7369,15 @@ public sealed class ScoutApplicationTests
             "needle",
             root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output.ToArray());
-        Assert.Equal(pinnedError, Utf8(error.ToArray()));
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output.ToArray());
+        Assert.AreEqual(pinnedError, Utf8(error.ToArray()));
     }
 
     /// <summary>
     /// Verifies explicit ignore-file toggles match ripgrep in files mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesToggleMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7435,18 +7436,18 @@ public sealed class ScoutApplicationTests
             "--ignore-files",
             root);
 
-        Assert.Equal(pinnedDisabledExitCode, disabledExitCode);
-        Assert.Equal(pinnedDisabledOutput, disabledOutput.ToArray());
-        Assert.Equal(pinnedDisabledError, Utf8(disabledError.ToArray()));
-        Assert.Equal(pinnedEnabledExitCode, enabledExitCode);
-        Assert.Equal(pinnedEnabledOutput, enabledOutput.ToArray());
-        Assert.Equal(pinnedEnabledError, Utf8(enabledError.ToArray()));
+        Assert.AreEqual(pinnedDisabledExitCode, disabledExitCode);
+        Assert.AreSequenceEqual(pinnedDisabledOutput, disabledOutput.ToArray());
+        Assert.AreEqual(pinnedDisabledError, Utf8(disabledError.ToArray()));
+        Assert.AreEqual(pinnedEnabledExitCode, enabledExitCode);
+        Assert.AreSequenceEqual(pinnedEnabledOutput, enabledOutput.ToArray());
+        Assert.AreEqual(pinnedEnabledError, Utf8(enabledError.ToArray()));
     }
 
     /// <summary>
     /// Verifies standard ignore source toggles match ripgrep in files mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreSourceTogglesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7470,7 +7471,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies parent-ignore, repository-gating and case-insensitive ignore flags match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreTraversalModifiersMatchPinnedRipgrep()
     {
         string parent = CreateTempDirectory();
@@ -7508,7 +7509,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies max-filesize filtering matches ripgrep in files and search modes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxFileSizeMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7526,15 +7527,15 @@ public sealed class ScoutApplicationTests
             "abc",
             root);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies explicit regexp flags treat positionals as paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitRegexpTreatsPositionalsAsPaths()
     {
         string root = CreateTempDirectory();
@@ -7546,18 +7547,18 @@ public sealed class ScoutApplicationTests
         (int inlineExitCode, byte[] inlineOutput, string inlineError) = RunScout("--regexp=needle", path);
         (int pinnedInlineExitCode, byte[] pinnedInlineOutput, string pinnedInlineError) = RunPinnedRipgrep("--regexp=needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedInlineExitCode, inlineExitCode);
-        Assert.Equal(pinnedInlineOutput, inlineOutput);
-        Assert.Equal(pinnedInlineError, inlineError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedInlineExitCode, inlineExitCode);
+        Assert.AreSequenceEqual(pinnedInlineOutput, inlineOutput);
+        Assert.AreEqual(pinnedInlineError, inlineError);
     }
 
     /// <summary>
     /// Verifies multiple explicit regexp flags use ordered leftmost matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultipleExplicitRegexpsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7569,18 +7570,18 @@ public sealed class ScoutApplicationTests
         (int leftmostExitCode, byte[] leftmostOutput, string leftmostError) = RunScout("-o", "-e", "ab", "-e", "a", path);
         (int pinnedLeftmostExitCode, byte[] pinnedLeftmostOutput, string pinnedLeftmostError) = RunPinnedRipgrep("-o", "-e", "ab", "-e", "a", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedLeftmostExitCode, leftmostExitCode);
-        Assert.Equal(pinnedLeftmostOutput, leftmostOutput);
-        Assert.Equal(pinnedLeftmostError, leftmostError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedLeftmostExitCode, leftmostExitCode);
+        Assert.AreSequenceEqual(pinnedLeftmostOutput, leftmostOutput);
+        Assert.AreEqual(pinnedLeftmostError, leftmostError);
     }
 
     /// <summary>
     /// Verifies explicit regexp parser diagnostics match ripgrep at the application boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitRegexpMissingValueDiagnosticMatchesRipgrep()
     {
         (int exitCode, byte[] output, string error) = RunScout("-e");
@@ -7588,18 +7589,18 @@ public sealed class ScoutApplicationTests
         (int longExitCode, byte[] longOutput, string longError) = RunScout("--regexp");
         (int pinnedLongExitCode, byte[] pinnedLongOutput, string pinnedLongError) = RunPinnedRipgrep("--regexp");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedLongExitCode, longExitCode);
-        Assert.Equal(pinnedLongOutput, longOutput);
-        Assert.Equal(pinnedLongError, longError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedLongExitCode, longExitCode);
+        Assert.AreSequenceEqual(pinnedLongOutput, longOutput);
+        Assert.AreEqual(pinnedLongError, longError);
     }
 
     /// <summary>
     /// Verifies pattern files provide search patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PatternFileSearchMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7615,18 +7616,18 @@ public sealed class ScoutApplicationTests
         (int inlineExitCode, byte[] inlineOutput, string inlineError) = RunScout("--file=" + crlfPatterns, path);
         (int pinnedInlineExitCode, byte[] pinnedInlineOutput, string pinnedInlineError) = RunPinnedRipgrep("--file=" + crlfPatterns, path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedInlineExitCode, inlineExitCode);
-        Assert.Equal(pinnedInlineOutput, inlineOutput);
-        Assert.Equal(pinnedInlineError, inlineError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedInlineExitCode, inlineExitCode);
+        Assert.AreSequenceEqual(pinnedInlineOutput, inlineOutput);
+        Assert.AreEqual(pinnedInlineError, inlineError);
     }
 
     /// <summary>
     /// Verifies empty and blank pattern files match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyAndBlankPatternFilesMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7642,18 +7643,18 @@ public sealed class ScoutApplicationTests
         (int blankExitCode, byte[] blankOutput, string blankError) = RunScout("-f", blank, path);
         (int pinnedBlankExitCode, byte[] pinnedBlankOutput, string pinnedBlankError) = RunPinnedRipgrep("-f", blank, path);
 
-        Assert.Equal(pinnedEmptyExitCode, emptyExitCode);
-        Assert.Equal(pinnedEmptyOutput, emptyOutput);
-        Assert.Equal(pinnedEmptyError, emptyError);
-        Assert.Equal(pinnedBlankExitCode, blankExitCode);
-        Assert.Equal(pinnedBlankOutput, blankOutput);
-        Assert.Equal(pinnedBlankError, blankError);
+        Assert.AreEqual(pinnedEmptyExitCode, emptyExitCode);
+        Assert.AreSequenceEqual(pinnedEmptyOutput, emptyOutput);
+        Assert.AreEqual(pinnedEmptyError, emptyError);
+        Assert.AreEqual(pinnedBlankExitCode, blankExitCode);
+        Assert.AreSequenceEqual(pinnedBlankOutput, blankOutput);
+        Assert.AreEqual(pinnedBlankError, blankError);
     }
 
     /// <summary>
     /// Verifies pattern-file and inline regexp ordering match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PatternFileOrderMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7667,18 +7668,18 @@ public sealed class ScoutApplicationTests
         (int regexpFirstExitCode, byte[] regexpFirstOutput, string regexpFirstError) = RunScout("-o", "-e", "ab", "-f", patternFile, path);
         (int pinnedRegexpFirstExitCode, byte[] pinnedRegexpFirstOutput, string pinnedRegexpFirstError) = RunPinnedRipgrep("-o", "-e", "ab", "-f", patternFile, path);
 
-        Assert.Equal(pinnedFileFirstExitCode, fileFirstExitCode);
-        Assert.Equal(pinnedFileFirstOutput, fileFirstOutput);
-        Assert.Equal(pinnedFileFirstError, fileFirstError);
-        Assert.Equal(pinnedRegexpFirstExitCode, regexpFirstExitCode);
-        Assert.Equal(pinnedRegexpFirstOutput, regexpFirstOutput);
-        Assert.Equal(pinnedRegexpFirstError, regexpFirstError);
+        Assert.AreEqual(pinnedFileFirstExitCode, fileFirstExitCode);
+        Assert.AreSequenceEqual(pinnedFileFirstOutput, fileFirstOutput);
+        Assert.AreEqual(pinnedFileFirstError, fileFirstError);
+        Assert.AreEqual(pinnedRegexpFirstExitCode, regexpFirstExitCode);
+        Assert.AreSequenceEqual(pinnedRegexpFirstOutput, regexpFirstOutput);
+        Assert.AreEqual(pinnedRegexpFirstError, regexpFirstError);
     }
 
     /// <summary>
     /// Verifies pattern-file diagnostics match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PatternFileDiagnosticsMatchPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7693,18 +7694,18 @@ public sealed class ScoutApplicationTests
         (int invalidExitCode, byte[] invalidOutput, string invalidError) = RunScout("-f", invalid, path);
         (int pinnedInvalidExitCode, byte[] pinnedInvalidOutput, string pinnedInvalidError) = RunPinnedRipgrep("-f", invalid, path);
 
-        Assert.Equal(pinnedMissingExitCode, missingExitCode);
-        Assert.Equal(pinnedMissingOutput, missingOutput);
-        Assert.Equal(pinnedMissingError, missingError);
-        Assert.Equal(pinnedInvalidExitCode, invalidExitCode);
-        Assert.Equal(pinnedInvalidOutput, invalidOutput);
-        Assert.Equal(pinnedInvalidError, invalidError);
+        Assert.AreEqual(pinnedMissingExitCode, missingExitCode);
+        Assert.AreSequenceEqual(pinnedMissingOutput, missingOutput);
+        Assert.AreEqual(pinnedMissingError, missingError);
+        Assert.AreEqual(pinnedInvalidExitCode, invalidExitCode);
+        Assert.AreSequenceEqual(pinnedInvalidOutput, invalidOutput);
+        Assert.AreEqual(pinnedInvalidError, invalidError);
     }
 
     /// <summary>
     /// Verifies explicit pattern-file parser diagnostics match ripgrep at the application boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PatternFileMissingValueDiagnosticMatchesRipgrep()
     {
         (int exitCode, byte[] output, string error) = RunScout("-f");
@@ -7712,18 +7713,18 @@ public sealed class ScoutApplicationTests
         (int longExitCode, byte[] longOutput, string longError) = RunScout("--file");
         (int pinnedLongExitCode, byte[] pinnedLongOutput, string pinnedLongError) = RunPinnedRipgrep("--file");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedLongExitCode, longExitCode);
-        Assert.Equal(pinnedLongOutput, longOutput);
-        Assert.Equal(pinnedLongError, longError);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
+        Assert.AreEqual(pinnedLongExitCode, longExitCode);
+        Assert.AreSequenceEqual(pinnedLongOutput, longOutput);
+        Assert.AreEqual(pinnedLongError, longError);
     }
 
     /// <summary>
     /// Verifies Scout config path arguments are applied before command-line arguments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoutConfigPathArgumentsMatchPinnedRipgrepBehavior()
     {
         string root = CreateTempDirectory();
@@ -7735,15 +7736,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies command-line arguments override earlier config-file arguments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ConfigPathPrecedenceMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7755,15 +7756,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "--case-sensitive");
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config, "--case-sensitive");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies config comments, blank lines and argument trimming match ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ConfigPathLineParsingMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7775,15 +7776,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies Scout's native config path wins when the ripgrep compatibility fallback is also set.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoutConfigPathTakesPrecedenceOverRipgrepConfigPath()
     {
         string root = CreateTempDirectory();
@@ -7796,15 +7797,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(scoutConfig, ripgrepConfig);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("2:needle\n"u8.ToArray(), output);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("2:needle\n"u8.ToArray(), output);
+        Assert.AreEqual(string.Empty, error);
     }
 
     /// <summary>
     /// Verifies ripgrep's config path remains a compatibility fallback when Scout's native path is absent.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RipgrepConfigPathIsCompatibilityFallback()
     {
         string root = CreateTempDirectory();
@@ -7815,15 +7816,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(null, ripgrepConfig);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("2:needle\n"u8.ToArray(), output);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("2:needle\n"u8.ToArray(), output);
+        Assert.AreEqual(string.Empty, error);
     }
 
     /// <summary>
     /// Verifies the internal regex specialization switch rejects unsupported values before searching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RegexSpecializationModeEnvironmentRejectsInvalidValue()
     {
         string? oldValue = Environment.GetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName);
@@ -7834,8 +7835,8 @@ public sealed class ScoutApplicationTests
 
             (int exitCode, byte[] output, string error) = RunScoutFromEnvironment("needle");
 
-            Assert.Equal(2, exitCode);
-            Assert.Empty(output);
+            Assert.AreEqual(2, exitCode);
+            Assert.IsEmpty(output);
             Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE must be one of: default, general, fallback", error, StringComparison.Ordinal);
         }
         finally
@@ -7848,7 +7849,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies Scout does not fall back to ripgrep's config path after Scout's native config path is selected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoutConfigPathReadErrorDoesNotFallBackToRipgrepConfigPath()
     {
         string root = CreateTempDirectory();
@@ -7860,8 +7861,8 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(scoutConfig, ripgrepConfig, "needle", path);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal("needle\n"u8.ToArray(), output);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual("needle\n"u8.ToArray(), output);
         Assert.Contains("failed to read the file specified in SCOUT_CONFIG_PATH", error, StringComparison.Ordinal);
         Assert.DoesNotContain("RIPGREP_CONFIG_PATH", error, StringComparison.Ordinal);
     }
@@ -7869,7 +7870,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies raw Unix SCOUT_CONFIG_PATH bytes are not discarded when they are not valid UTF-8.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public unsafe void RawUnixConfigPathEnvironmentPreservesInvalidBytes()
     {
         string root = CreateTempDirectory();
@@ -7891,8 +7892,8 @@ public sealed class ScoutApplicationTests
 
             (int exitCode, byte[] output, string error) = RunScoutFromEnvironment("needle", path);
 
-            Assert.Equal(0, exitCode);
-            Assert.Equal("needle\n"u8.ToArray(), output);
+            Assert.AreEqual(0, exitCode);
+            Assert.AreSequenceEqual("needle\n"u8.ToArray(), output);
             Assert.Contains("failed to read the file specified in SCOUT_CONFIG_PATH", error, StringComparison.Ordinal);
         }
         finally
@@ -7904,7 +7905,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies <c>--no-config</c> disables config loading.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NoConfigSkipsConfigPath()
     {
         string root = CreateTempDirectory();
@@ -7916,15 +7917,15 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "--no-config", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config, "--no-config", "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies <c>--generate</c> outputs Scout's byte-identical man and completion artifacts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GenerateOutputsMatchScoutArtifacts()
     {
         AssertGenerateMatchesScoutArtifact("man", CliGenerateMode.Man);
@@ -7937,7 +7938,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies generated artifact payload classes feed the <c>--generate</c> dispatcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GenerateOutputsUseSourceGeneratedArtifacts()
     {
         AssertGeneratedArtifact(CliGenerateMode.Man, GeneratedManPageArtifact.CompressedBase64);
@@ -7950,7 +7951,7 @@ public sealed class ScoutApplicationTests
     /// <summary>
     /// Verifies config files can select <c>--generate</c>.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GenerateFromConfigWritesScoutArtifact()
     {
         string root = CreateTempDirectory();
@@ -7959,15 +7960,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(GenerateOutput.Get(CliGenerateMode.CompleteFish).ToArray(), output);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(GenerateOutput.Get(CliGenerateMode.CompleteFish).ToArray(), output);
+        Assert.AreEqual(string.Empty, error);
     }
 
     /// <summary>
     /// Verifies special command-line modes skip config loading.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SpecialModesSkipConfigPath()
     {
         string root = CreateTempDirectory();
@@ -7976,15 +7977,15 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "-V");
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(VersionOutput.Short.ToArray(), output);
-        Assert.Equal(string.Empty, error);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(VersionOutput.Short.ToArray(), output);
+        Assert.AreEqual(string.Empty, error);
     }
 
     /// <summary>
     /// Verifies unreadable config path diagnostics are non-fatal.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MissingConfigPathDiagnosticMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();
@@ -7995,20 +7996,20 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config, "needle", path);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     /// <summary>
     /// Verifies parsed record-terminator syntax retains the command-line diagnostic for line-oriented searches.
     /// </summary>
     /// <param name="arguments">The command-line arguments containing the incompatible expression.</param>
-    [Theory]
-    [InlineData("\\n")]
-    [InlineData("[\\n]")]
-    [InlineData("--null-data \\x00")]
-    [InlineData("--null-data [\\x00]")]
+    [TestMethod]
+    [DataRow("\\n")]
+    [DataRow("[\\n]")]
+    [DataRow("--null-data \\x00")]
+    [DataRow("--null-data [\\x00]")]
     public void ParsedRecordTerminatorUsesLineOrientedDiagnostic(string arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -8017,8 +8018,8 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout(splitArguments);
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output);
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output);
         Assert.Contains(PatternPreparation.BuildLineTerminatorPatternError(nullData), error, StringComparison.Ordinal);
     }
 
@@ -8026,17 +8027,17 @@ public sealed class ScoutApplicationTests
     /// Verifies parsed NUL-only atoms retain the binary-detection diagnostic.
     /// </summary>
     /// <param name="pattern">The expression containing an explicit NUL atom.</param>
-    [Theory]
-    [InlineData("\\x00")]
-    [InlineData("[\\x00]")]
+    [TestMethod]
+    [DataRow("\\x00")]
+    [DataRow("[\\x00]")]
     public void ParsedExplicitNulUsesBinaryDetectionDiagnostic(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
 
         (int exitCode, byte[] output, string error) = RunScout(pattern);
 
-        Assert.Equal(ExitCode.Error, exitCode);
-        Assert.Empty(output);
+        Assert.AreEqual(ExitCode.Error, exitCode);
+        Assert.IsEmpty(output);
         Assert.Contains("pattern contains \"\\0\" but it is impossible to match", error, StringComparison.Ordinal);
     }
 
@@ -8045,9 +8046,9 @@ public sealed class ScoutApplicationTests
         (int exitCode, byte[] output, string error) = RunScout(arguments);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.AreEqual(pinnedExitCode, exitCode);
+        Assert.AreSequenceEqual(pinnedOutput, output);
+        Assert.AreEqual(pinnedError, error);
     }
 
     private static void AssertGenerateMatchesScoutArtifact(string kind, CliGenerateMode mode)
@@ -8056,12 +8057,12 @@ public sealed class ScoutApplicationTests
         (int inlineExitCode, byte[] inlineOutput, string inlineError) = RunScout("--generate=" + kind);
         byte[] expectedOutput = GenerateOutput.Get(mode).ToArray();
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(expectedOutput, output);
-        Assert.Equal(string.Empty, error);
-        Assert.Equal(0, inlineExitCode);
-        Assert.Equal(expectedOutput, inlineOutput);
-        Assert.Equal(string.Empty, inlineError);
+        Assert.AreEqual(0, exitCode);
+        Assert.AreSequenceEqual(expectedOutput, output);
+        Assert.AreEqual(string.Empty, error);
+        Assert.AreEqual(0, inlineExitCode);
+        Assert.AreSequenceEqual(expectedOutput, inlineOutput);
+        Assert.AreEqual(string.Empty, inlineError);
     }
 
     private static void AssertGeneratedArtifact(CliGenerateMode mode, string compressedBase64)
@@ -8071,8 +8072,8 @@ public sealed class ScoutApplicationTests
 
     private static void AssertGeneratedArtifact(byte[] expectedOutput, string compressedBase64)
     {
-        Assert.False(string.IsNullOrWhiteSpace(compressedBase64));
-        Assert.Equal(expectedOutput, GeneratedTextOutput.ForCurrentPlatform(InflateGeneratedArtifact(compressedBase64)));
+        Assert.IsFalse(string.IsNullOrWhiteSpace(compressedBase64));
+        Assert.AreSequenceEqual(expectedOutput, GeneratedTextOutput.ForCurrentPlatform(InflateGeneratedArtifact(compressedBase64)));
     }
 
     private static byte[] InflateGeneratedArtifact(string compressedBase64)
@@ -8240,14 +8241,14 @@ public sealed class ScoutApplicationTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         process.StandardInput.BaseStream.Write(contents);
         process.StandardInput.Close();
         using MemoryStream output = new();
         process.StandardOutput.BaseStream.CopyTo(output);
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, error);
+        Assert.AreEqual(0, process.ExitCode, error);
         File.WriteAllBytes(path, output.ToArray());
     }
 
@@ -8269,10 +8270,10 @@ public sealed class ScoutApplicationTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, error);
+        Assert.AreEqual(0, process.ExitCode, error);
         return path;
     }
 
@@ -8412,7 +8413,7 @@ public sealed class ScoutApplicationTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         using MemoryStream output = new();
         process.StandardOutput.BaseStream.CopyTo(output);
         string error = process.StandardError.ReadToEnd();
@@ -8435,7 +8436,7 @@ public sealed class ScoutApplicationTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         using MemoryStream output = new();
         process.StandardOutput.BaseStream.CopyTo(output);
         string error = process.StandardError.ReadToEnd();

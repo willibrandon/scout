@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies search path display formatting.
 /// </summary>
+[TestClass]
 public sealed class SearchPathArgumentTests
 {
     /// <summary>
     /// Verifies directory search display bytes preserve the root argument prefix.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryDisplayPathBytesPreserveRootArgument()
     {
         string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
@@ -23,13 +24,13 @@ public sealed class SearchPathArgumentTests
             defaultRoot: false,
             pathSeparator: (byte)'/');
 
-        Assert.Equal("root/src/file.txt"u8.ToArray(), displayPath);
+        Assert.AreSequenceEqual("root/src/file.txt"u8.ToArray(), displayPath);
     }
 
     /// <summary>
     /// Verifies default-root directory searches display paths relative to the root.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultRootDirectoryDisplayPathBytesAreRelative()
     {
         string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
@@ -43,13 +44,13 @@ public sealed class SearchPathArgumentTests
             defaultRoot: true,
             pathSeparator: (byte)'/');
 
-        Assert.Equal("src/file.txt"u8.ToArray(), displayPath);
+        Assert.AreSequenceEqual("src/file.txt"u8.ToArray(), displayPath);
     }
 
     /// <summary>
     /// Verifies explicit current-directory roots keep ripgrep's leading dot slash.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitCurrentDirectoryDisplayPathBytesKeepDotSlash()
     {
         string fullRoot = Path.Join(Path.GetTempPath(), "scout-root");
@@ -63,6 +64,6 @@ public sealed class SearchPathArgumentTests
             defaultRoot: false,
             pathSeparator: (byte)'/');
 
-        Assert.Equal("./src/file.txt"u8.ToArray(), displayPath);
+        Assert.AreSequenceEqual("./src/file.txt"u8.ToArray(), displayPath);
     }
 }

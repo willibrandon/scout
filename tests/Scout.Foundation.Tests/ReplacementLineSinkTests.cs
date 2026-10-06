@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies replacement-line buffering behavior.
 /// </summary>
+[TestClass]
 public sealed class ReplacementLineSinkTests
 {
     /// <summary>
     /// Verifies direct replacement streaming does not initialize buffered-line accumulators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectStreamingDoesNotInitializeBufferedLineAccumulator()
     {
         using MemoryStream output = new();
@@ -40,8 +41,8 @@ public sealed class ReplacementLineSinkTests
                 searchStart: 1);
             sink.FinishLine(1, 0, "afoo\n"u8);
 
-            Assert.False(sink.IsAccumulatorInitialized);
-            Assert.Equal("aX\n"u8.ToArray(), output.ToArray());
+            Assert.IsFalse(sink.IsAccumulatorInitialized);
+            Assert.AreSequenceEqual("aX\n"u8.ToArray(), output.ToArray());
         }
     }
 }

@@ -37,7 +37,7 @@ internal static class DifferentialRunner
             testCase.Arguments,
             DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, comparisonMode),
             DifferentialOutputNormalizer.NormalizeStdout(scout.Output, comparisonMode));
-        Assert.Equal(
+        Assert.AreEqual(
             DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, comparisonMode),
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, comparisonMode));
     }
@@ -65,7 +65,7 @@ internal static class DifferentialRunner
             scoutArguments,
             DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, comparisonMode),
             DifferentialOutputNormalizer.NormalizeStdout(scout.Output, comparisonMode));
-        Assert.Equal(
+        Assert.AreEqual(
             DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, comparisonMode),
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, comparisonMode));
     }
@@ -178,7 +178,7 @@ internal static class DifferentialRunner
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         if (standardInput is not null)
         {
             process.StandardInput.BaseStream.Write(standardInput);

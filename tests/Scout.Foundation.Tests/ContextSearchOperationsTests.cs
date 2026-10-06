@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies context-search matching and planning behavior.
 /// </summary>
+[TestClass]
 public sealed class ContextSearchOperationsTests
 {
     /// <summary>
     /// Verifies discontiguous selected lines do not receive context separators when no context was requested.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SearchBytesOmitsSeparatorsBetweenMatchesWithoutContext()
     {
         byte[] bytes = "needle\nother\nneedle\n"u8.ToArray();
@@ -52,8 +53,8 @@ public sealed class ContextSearchOperationsTests
             regexPlan: CreateRegexPlan(patterns));
         writer.Flush();
 
-        Assert.True(matched);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(
             "1:needle\n3:needle\n",
             Encoding.UTF8.GetString(output.ToArray()));
     }
@@ -65,13 +66,13 @@ public sealed class ContextSearchOperationsTests
     /// <param name="onlyMatching">Whether only matching spans are requested.</param>
     /// <param name="replace">Whether captures are expanded into replacements.</param>
     /// <param name="color">Whether retained spans are highlighted.</param>
-    [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(false, true, false, false)]
-    [InlineData(false, false, true, false)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, false, true, true)]
-    [InlineData(false, false, false, true)]
+    [TestMethod]
+    [DataRow(false, false, false, false)]
+    [DataRow(false, true, false, false)]
+    [DataRow(false, false, true, false)]
+    [DataRow(true, false, false, false)]
+    [DataRow(true, false, true, true)]
+    [DataRow(false, false, false, true)]
     public void SearchBytesReplaysAuthoritativeSpansAcrossRenderingModes(
         bool vimgrep,
         bool onlyMatching,
@@ -121,8 +122,8 @@ public sealed class ContextSearchOperationsTests
             regexPlan: CreateRegexPlan(patterns));
         writer.Flush();
 
-        Assert.True(matched);
-        Assert.NotEmpty(output.ToArray());
+        Assert.IsTrue(matched);
+        Assert.IsNotEmpty(output.ToArray());
     }
 
     /// <summary>
@@ -130,10 +131,10 @@ public sealed class ContextSearchOperationsTests
     /// </summary>
     /// <param name="vimgrep">Whether vimgrep records are requested.</param>
     /// <param name="color">Whether replacement output is colored.</param>
-    [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
     public void SearchBytesReplacesOriginalMatchContextDuringInvertedSearch(
         bool vimgrep,
         bool color)
@@ -178,7 +179,7 @@ public sealed class ContextSearchOperationsTests
         writer.Flush();
 
         string text = Encoding.UTF8.GetString(output.ToArray());
-        Assert.True(matched);
+        Assert.IsTrue(matched);
         Assert.Contains("prefix", text, StringComparison.Ordinal);
         Assert.Contains("X", text, StringComparison.Ordinal);
         Assert.Contains("suffix", text, StringComparison.Ordinal);
@@ -189,7 +190,7 @@ public sealed class ContextSearchOperationsTests
     /// <summary>
     /// Verifies context output has one authoritative matcher entry point and no rendering-time search.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextOutputHasOneAuthoritativeMatcherEntryPoint()
     {
         string root = FindRepositoryRoot();
@@ -199,18 +200,18 @@ public sealed class ContextSearchOperationsTests
             "Scout.App",
             "ContextSearchOperations.cs"));
 
-        Assert.Equal(
+        Assert.AreEqual(
             1,
             CountOccurrences(source, "SearchMatchLinesWithRegexPlan("));
         int writerStart = source.IndexOf(
             "internal static bool WriteSearchResult(",
             StringComparison.Ordinal);
-        Assert.True(writerStart >= 0);
+        Assert.IsGreaterThanOrEqualTo(0, writerStart);
         int writerEnd = source.IndexOf(
             "internal static ContextSearchResult BuildSearchResult(",
             writerStart,
             StringComparison.Ordinal);
-        Assert.True(writerEnd > writerStart);
+        Assert.IsGreaterThan(writerStart, writerEnd);
         Assert.DoesNotContain(
             "LiteralLineSearcher.",
             source[writerStart..writerEnd],
@@ -220,7 +221,7 @@ public sealed class ContextSearchOperationsTests
     /// <summary>
     /// Verifies the context result retains every authoritative span in report order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultRetainsOrderedAuthoritativeSpans()
     {
         byte[] bytes = "ab12 ab34\n"u8.ToArray();
@@ -237,18 +238,18 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: false,
             regexPlan: CreateRegexPlan(patterns));
 
-        ContextLineInfo line = Assert.Single(result.Lines);
+        ContextLineInfo line = Assert.ContainsSingle(result.Lines);
         ContextLineMatch[] matches = result.GetMatches(line).ToArray();
-        Assert.Equal(4, matches.Length);
-        Assert.Equal([0, 2, 5, 7], matches.Select(match => match.Start));
-        Assert.Equal([1L, 3L, 6L, 8L], matches.Select(match => match.Column));
-        Assert.Equal([2, 2, 2, 2], matches.Select(match => match.Length));
+        Assert.HasCount(4, matches);
+        Assert.AreSequenceEqual([0, 2, 5, 7], matches.Select(match => match.Start));
+        Assert.AreSequenceEqual([1L, 3L, 6L, 8L], matches.Select(match => match.Column));
+        Assert.AreSequenceEqual([2, 2, 2, 2], matches.Select(match => match.Length));
     }
 
     /// <summary>
     /// Verifies whole-buffer context matching does not treat the line terminator as match content.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultExcludesLineTerminatorFromRegexMatching()
     {
         byte[][] patterns = ["foo[^x]"u8.ToArray()];
@@ -264,16 +265,16 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: false,
             regexPlan: CreateRegexPlan(patterns));
 
-        ContextLineInfo line = Assert.Single(result.Lines);
-        Assert.False(line.SelectedMatch);
-        Assert.False(line.OriginalMatch);
+        ContextLineInfo line = Assert.ContainsSingle(result.Lines);
+        Assert.IsFalse(line.SelectedMatch);
+        Assert.IsFalse(line.OriginalMatch);
     }
 
     /// <summary>
     /// Verifies whole-buffer context matching selects a zero-width physical-end match without a
     /// synthetic column on the unterminated final line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultPreservesZeroWidthMatchOnUnterminatedFinalLine()
     {
         byte[][] patterns = ["$"u8.ToArray()];
@@ -289,18 +290,18 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: false,
             regexPlan: CreateRegexPlan(patterns));
 
-        ContextLineInfo line = Assert.Single(result.Lines);
-        Assert.True(line.SelectedMatch);
-        Assert.True(line.OriginalMatch);
-        Assert.Equal(0, line.MatchColumn);
-        Assert.Equal(0, line.ContextColumn);
+        ContextLineInfo line = Assert.ContainsSingle(result.Lines);
+        Assert.IsTrue(line.SelectedMatch);
+        Assert.IsTrue(line.OriginalMatch);
+        Assert.AreEqual(0, line.MatchColumn);
+        Assert.AreEqual(0, line.ContextColumn);
     }
 
     /// <summary>
     /// Verifies stop-on-nonmatch does not retain an authoritative anchored-match tail or consult
     /// the raw pattern list after plan construction.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultStopsAuthoritativeCandidatesBeforeLargeTail()
     {
         const int TailLineCount = 50_000;
@@ -330,17 +331,17 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan);
 
-        Assert.Equal(0, patterns.AccessCount);
-        Assert.Equal(2, result.Lines.Count);
-        Assert.True(result.Lines[0].SelectedMatch);
-        Assert.False(result.Lines[1].SelectedMatch);
-        Assert.Single(result.GetMatches(result.Lines[0]).ToArray());
+        Assert.AreEqual(0, patterns.AccessCount);
+        Assert.HasCount(2, result.Lines);
+        Assert.IsTrue(result.Lines[0].SelectedMatch);
+        Assert.IsFalse(result.Lines[1].SelectedMatch);
+        Assert.ContainsSingle(result.GetMatches(result.Lines[0]).ToArray());
     }
 
     /// <summary>
     /// Verifies an inverted stop includes the first unselected record and its original spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultRetainsInvertedStopRecordMatches()
     {
         byte[][] patterns = ["foo"u8.ToArray()];
@@ -356,21 +357,21 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan: CreateRegexPlan(patterns));
 
-        Assert.Equal(2, result.Lines.Count);
-        Assert.True(result.Lines[0].SelectedMatch);
-        Assert.False(result.Lines[0].OriginalMatch);
-        Assert.False(result.Lines[1].SelectedMatch);
-        Assert.True(result.Lines[1].OriginalMatch);
-        ContextLineMatch match = Assert.Single(
+        Assert.HasCount(2, result.Lines);
+        Assert.IsTrue(result.Lines[0].SelectedMatch);
+        Assert.IsFalse(result.Lines[0].OriginalMatch);
+        Assert.IsFalse(result.Lines[1].SelectedMatch);
+        Assert.IsTrue(result.Lines[1].OriginalMatch);
+        ContextLineMatch match = Assert.ContainsSingle(
             result.GetMatches(result.Lines[1]).ToArray());
-        Assert.Equal(0, match.Start);
-        Assert.Equal(3, match.Length);
+        Assert.AreEqual(0, match.Start);
+        Assert.AreEqual(3, match.Length);
     }
 
     /// <summary>
     /// Verifies record-relative absolute-anchor selection retains only prefix-valid spans.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultPreservesAbsoluteAnchorSelectionSpans()
     {
         byte[][] patterns = [@"\A"u8.ToArray()];
@@ -386,16 +387,16 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan: CreateRegexPlan(patterns));
 
-        Assert.Equal(2, result.Lines.Count);
-        Assert.All(result.Lines, line => Assert.True(line.OriginalMatch));
-        Assert.Single(result.GetMatches(result.Lines[0]).ToArray());
-        Assert.Empty(result.GetMatches(result.Lines[1]).ToArray());
+        Assert.HasCount(2, result.Lines);
+        TestAssert.All(result.Lines, line => Assert.IsTrue(line.OriginalMatch));
+        Assert.ContainsSingle(result.GetMatches(result.Lines[0]).ToArray());
+        Assert.IsEmpty(result.GetMatches(result.Lines[1]).ToArray());
     }
 
     /// <summary>
     /// Verifies a zero-width selected record stops after retaining its following non-match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultStopsAfterEmptySelectedRecord()
     {
         byte[][] patterns = ["^$"u8.ToArray()];
@@ -411,19 +412,19 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan: CreateRegexPlan(patterns));
 
-        Assert.Equal(2, result.Lines.Count);
-        Assert.True(result.Lines[0].SelectedMatch);
-        Assert.False(result.Lines[1].SelectedMatch);
-        ContextLineMatch match = Assert.Single(
+        Assert.HasCount(2, result.Lines);
+        Assert.IsTrue(result.Lines[0].SelectedMatch);
+        Assert.IsFalse(result.Lines[1].SelectedMatch);
+        ContextLineMatch match = Assert.ContainsSingle(
             result.GetMatches(result.Lines[0]).ToArray());
-        Assert.Equal(0, match.Start);
-        Assert.Equal(0, match.Length);
+        Assert.AreEqual(0, match.Start);
+        Assert.AreEqual(0, match.Length);
     }
 
     /// <summary>
     /// Verifies an unterminated end-empty selection is retained without a synthetic span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultRetainsStoppedSelectionOnlyEndEmptyMatch()
     {
         byte[][] patterns = ["$"u8.ToArray()];
@@ -439,16 +440,16 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan: CreateRegexPlan(patterns));
 
-        ContextLineInfo line = Assert.Single(result.Lines);
-        Assert.True(line.SelectedMatch);
-        Assert.True(line.OriginalMatch);
-        Assert.Empty(result.GetMatches(line).ToArray());
+        ContextLineInfo line = Assert.ContainsSingle(result.Lines);
+        Assert.IsTrue(line.SelectedMatch);
+        Assert.IsTrue(line.OriginalMatch);
+        Assert.IsEmpty(result.GetMatches(line).ToArray());
     }
 
     /// <summary>
     /// Verifies CRLF-preserving selection stops without manufacturing a reportable carriage-return span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultPreservesCrlfSelectionOnlyStop()
     {
         byte[][] patterns = ["foo\\r"u8.ToArray()];
@@ -469,16 +470,16 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan);
 
-        Assert.Equal(2, result.Lines.Count);
-        Assert.True(result.Lines[0].SelectedMatch);
-        Assert.False(result.Lines[1].SelectedMatch);
-        Assert.Empty(result.GetMatches(result.Lines[0]).ToArray());
+        Assert.HasCount(2, result.Lines);
+        Assert.IsTrue(result.Lines[0].SelectedMatch);
+        Assert.IsFalse(result.Lines[1].SelectedMatch);
+        Assert.IsEmpty(result.GetMatches(result.Lines[0]).ToArray());
     }
 
     /// <summary>
     /// Verifies NUL-delimited stopping includes one non-match and excludes the remaining records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BuildSearchResultStopsAtNulRecordBoundary()
     {
         byte[][] patterns = ["foo"u8.ToArray()];
@@ -498,15 +499,15 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan);
 
-        Assert.Equal(2, result.Lines.Count);
-        Assert.Equal(4, result.Lines[0].Length);
-        Assert.Equal(5, result.Lines[1].Length);
-        Assert.True(result.Lines[0].SelectedMatch);
-        Assert.False(result.Lines[1].SelectedMatch);
-        ContextLineMatch match = Assert.Single(
+        Assert.HasCount(2, result.Lines);
+        Assert.AreEqual(4, result.Lines[0].Length);
+        Assert.AreEqual(5, result.Lines[1].Length);
+        Assert.IsTrue(result.Lines[0].SelectedMatch);
+        Assert.IsFalse(result.Lines[1].SelectedMatch);
+        ContextLineMatch match = Assert.ContainsSingle(
             result.GetMatches(result.Lines[0]).ToArray());
-        Assert.Equal(0, match.Start);
-        Assert.Equal(3, match.Length);
+        Assert.AreEqual(0, match.Start);
+        Assert.AreEqual(3, match.Length);
     }
 
     private static int CountOccurrences(string value, string text)

@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies ripgrep-compatible decompression command matching.
 /// </summary>
+[TestClass]
 public sealed class CliDecompressionMatcherTests
 {
     /// <summary>
     /// Verifies the default decompression command table matches the pinned upstream table.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultCommandsMatchPinnedRipgrepTable()
     {
         (string Glob, string Program, string[] Arguments)[] expected =
@@ -27,53 +28,53 @@ public sealed class CliDecompressionMatcherTests
             ("*.Z", "uncompress", ["-c"]),
         ];
 
-        Assert.Equal(expected.Length, CliDecompressionMatcher.DefaultCommands.Count);
+        Assert.HasCount(expected.Length, CliDecompressionMatcher.DefaultCommands);
         for (int index = 0; index < expected.Length; index++)
         {
             CliDecompressionCommand command = CliDecompressionMatcher.DefaultCommands[index];
 
-            Assert.Equal(expected[index].Glob, command.Glob);
-            Assert.Equal(expected[index].Program, command.Program);
-            Assert.Equal(expected[index].Arguments, command.Arguments);
+            Assert.AreEqual(expected[index].Glob, command.Glob);
+            Assert.AreEqual(expected[index].Program, command.Program);
+            Assert.AreSequenceEqual(expected[index].Arguments, command.Arguments);
         }
     }
 
     /// <summary>
     /// Verifies default command matching uses ripgrep's case-sensitive glob suffixes.
     /// </summary>
-    [Theory]
-    [InlineData("archive.gz", "gzip")]
-    [InlineData("archive.tar.gz", "gzip")]
-    [InlineData("archive.lzma", "xz")]
-    [InlineData("archive.Z", "uncompress")]
+    [TestMethod]
+    [DataRow("archive.gz", "gzip")]
+    [DataRow("archive.tar.gz", "gzip")]
+    [DataRow("archive.lzma", "xz")]
+    [DataRow("archive.Z", "uncompress")]
     public void TryGetDefaultCommandMatchesKnownSuffixes(string path, string expectedProgram)
     {
         bool matched = CliDecompressionMatcher.TryGetDefaultCommand(path, out CliDecompressionCommand? command);
 
-        Assert.True(matched);
-        Assert.NotNull(command);
-        Assert.Equal(expectedProgram, command.Program);
+        Assert.IsTrue(matched);
+        Assert.IsNotNull(command);
+        Assert.AreEqual(expectedProgram, command.Program);
     }
 
     /// <summary>
     /// Verifies default command matching rejects unknown or differently cased suffixes.
     /// </summary>
-    [Theory]
-    [InlineData("archive.zip")]
-    [InlineData("archive.GZ")]
-    [InlineData("archive.z")]
+    [TestMethod]
+    [DataRow("archive.zip")]
+    [DataRow("archive.GZ")]
+    [DataRow("archive.z")]
     public void TryGetDefaultCommandRejectsUnknownSuffixes(string path)
     {
         bool matched = CliDecompressionMatcher.TryGetDefaultCommand(path, out CliDecompressionCommand? command);
 
-        Assert.False(matched);
-        Assert.Null(command);
+        Assert.IsFalse(matched);
+        Assert.IsNull(command);
     }
 
     /// <summary>
     /// Verifies command argument creation appends the searched path without mutating fixed arguments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CreateArgumentsAppendsPath()
     {
         CliDecompressionCommand command = new("*.test", "program", "-d", "-c");
@@ -81,14 +82,14 @@ public sealed class CliDecompressionMatcherTests
         string[] arguments = command.CreateArguments("input.test");
         arguments[0] = "--changed";
 
-        Assert.Equal(["-d", "-c", "input.test"], command.CreateArguments("input.test"));
-        Assert.Equal(["-d", "-c"], command.Arguments);
+        Assert.AreSequenceEqual<string>(["-d", "-c", "input.test"], command.CreateArguments("input.test"));
+        Assert.AreSequenceEqual<string>(["-d", "-c"], command.Arguments);
     }
 
     /// <summary>
     /// Verifies non-Windows decompression binary resolution follows ripgrep's no-op behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryResolveBinaryDoesNotSearchPathOnNonWindows()
     {
         bool resolved = CliDecompressionMatcher.TryResolveBinary(
@@ -99,14 +100,14 @@ public sealed class CliDecompressionMatcherTests
             _ => false,
             out string program);
 
-        Assert.True(resolved);
-        Assert.Equal("gzip", program);
+        Assert.IsTrue(resolved);
+        Assert.AreEqual("gzip", program);
     }
 
     /// <summary>
     /// Verifies Windows decompression binary resolution finds bare and suffixed executables in <c>PATH</c>.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryResolveBinarySearchesWindowsPathWithExecutableSuffixes()
     {
         bool resolvedCom = CliDecompressionMatcher.TryResolveBinary(
@@ -131,18 +132,18 @@ public sealed class CliDecompressionMatcherTests
             path => path == Path.Join("/tools", "brotli.exe"),
             out string exactProgram);
 
-        Assert.True(resolvedCom);
-        Assert.Equal(Path.Join("/tools", "gzip.com"), comProgram);
-        Assert.True(resolvedExe);
-        Assert.Equal(Path.Join("/tools", "xz.exe"), exeProgram);
-        Assert.True(resolvedExact);
-        Assert.Equal(Path.Join("/tools", "brotli.exe"), exactProgram);
+        Assert.IsTrue(resolvedCom);
+        Assert.AreEqual(Path.Join("/tools", "gzip.com"), comProgram);
+        Assert.IsTrue(resolvedExe);
+        Assert.AreEqual(Path.Join("/tools", "xz.exe"), exeProgram);
+        Assert.IsTrue(resolvedExact);
+        Assert.AreEqual(Path.Join("/tools", "brotli.exe"), exactProgram);
     }
 
     /// <summary>
     /// Verifies Windows decompression binary resolution reports unresolved commands instead of falling back to the current directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryResolveBinaryRejectsMissingWindowsPathExecutables()
     {
         bool resolved = CliDecompressionMatcher.TryResolveBinary(
@@ -153,7 +154,7 @@ public sealed class CliDecompressionMatcherTests
             _ => false,
             out string program);
 
-        Assert.False(resolved);
-        Assert.Empty(program);
+        Assert.IsFalse(resolved);
+        Assert.IsEmpty(program);
     }
 }

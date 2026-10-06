@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="../Directory.Build.props" />
+
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <MSTestAnalysisMode>All</MSTestAnalysisMode>
+  </PropertyGroup>
+
+</Project>

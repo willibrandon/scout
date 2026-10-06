@@ -8,12 +8,13 @@ namespace Scout;
 /// <summary>
 /// Verifies Scout's no-skipped-tests analyzer behavior.
 /// </summary>
+[TestClass]
 public sealed class NoSkippedTestsAnalyzerTests
 {
     /// <summary>
     /// Verifies a normal test attribute is accepted.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task AcceptsNormalTestsAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -22,46 +23,47 @@ public sealed class NoSkippedTestsAnalyzerTests
 
             public sealed class SampleTests
             {
-                [Fact]
+                [TestMethod]
                 public void Passes()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        Assert.Empty(diagnostics);
+        Assert.IsEmpty(diagnostics);
     }
 
     /// <summary>
-    /// Verifies xUnit skip attributes are rejected.
+    /// Verifies ignored test attributes are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsXunitSkipAttributesAsync()
+    [TestMethod]
+    public async Task ReportsIgnoredTestAttributesAsync()
     {
-        string skip = "Sk" + "ip";
+        string ignore = "Ig" + "nore";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
             namespace Scout;
 
             public sealed class SampleTests
             {
-                [Fact({{skip}} = "reason")]
+                [TestMethod]
+                [{{ignore}}("reason")]
                 public void Waived()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, "Fact." + skip);
+        AssertForbiddenWaiver(diagnostics, ignore);
     }
 
     /// <summary>
     /// Verifies generated test sources are rejected even when their hint path is outside the tests folder.
     /// </summary>
-    [Fact]
-    public async Task ReportsGeneratedXunitSkipAttributesInTestProjectsAsync()
+    [TestMethod]
+    public async Task ReportsGeneratedIgnoredTestAttributesInTestProjectsAsync()
     {
-        string skip = "Sk" + "ip";
+        string ignore = "Ig" + "nore";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAtPathAsync(
             "PortedRgGeneratedCase.g.cs",
             $$"""
@@ -69,69 +71,71 @@ public sealed class NoSkippedTestsAnalyzerTests
 
             public sealed class PortedRgGeneratedCase
             {
-                [Fact({{skip}} = "reason")]
+                [TestMethod]
+                [{{ignore}}("reason")]
                 public void Waived()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, "Fact." + skip);
+        AssertForbiddenWaiver(diagnostics, ignore);
     }
 
     /// <summary>
-    /// Verifies xUnit explicit attributes are rejected.
+    /// Verifies ignored data rows are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsXunitExplicitAttributesAsync()
+    [TestMethod]
+    public async Task ReportsIgnoredDataRowsAsync()
     {
-        string explicitArgument = "Exp" + "licit";
+        string ignoreMessage = "Ignore" + "Message";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
             namespace Scout;
 
             public sealed class SampleTests
             {
-                [Theory({{explicitArgument}} = true)]
+                [TestMethod]
+                [DataRow("case", {{ignoreMessage}} = "reason")]
                 public void Waived()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, "Theory." + explicitArgument);
+        AssertForbiddenWaiver(diagnostics, "DataRow." + ignoreMessage);
     }
 
     /// <summary>
-    /// Verifies explicit or ignored test attributes are rejected.
+    /// Verifies ignored test classes are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsExplicitOrIgnoredAttributesAsync()
+    [TestMethod]
+    public async Task ReportsIgnoredTestClassesAsync()
     {
-        string explicitAttribute = "Exp" + "licit";
+        string ignore = "Ig" + "nore";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
             namespace Scout;
 
+            [{{ignore}}]
             public sealed class SampleTests
             {
-                [{{explicitAttribute}}]
                 public void Waived()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, explicitAttribute);
+        AssertForbiddenWaiver(diagnostics, ignore);
     }
 
     /// <summary>
-    /// Verifies quarantine-like traits are rejected.
+    /// Verifies quarantine-like categories are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsQuarantineTraitsAsync()
+    [TestMethod]
+    public async Task ReportsQuarantineCategoriesAsync()
     {
-        string trait = "Tra" + "it";
+        string category = "Test" + "Category";
         string quarantine = "Quaran" + "tine";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
@@ -139,54 +143,54 @@ public sealed class NoSkippedTestsAnalyzerTests
 
             public sealed class SampleTests
             {
-                [{{trait}}("Status", "{{quarantine}}")]
+                [{{category}}("{{quarantine}}") ]
                 public void Waived()
                 {
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, trait);
+        AssertForbiddenWaiver(diagnostics, category);
     }
 
     /// <summary>
-    /// Verifies runtime skip calls are rejected.
+    /// Verifies runtime inconclusive calls are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsRuntimeSkipCallsAsync()
+    [TestMethod]
+    public async Task ReportsRuntimeInconclusiveCallsAsync()
     {
-        string skip = "Sk" + "ip";
+        string inconclusive = "Incon" + "clusive";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
             namespace Scout;
 
             public sealed class SampleTests
             {
-                [Fact]
+                [TestMethod]
                 public void Waived()
                 {
-                    Assert.{{skip}}("reason");
+                    Assert.{{inconclusive}}("reason");
                 }
             }
             """).ConfigureAwait(true);
 
-        AssertForbiddenWaiver(diagnostics, "Assert." + skip);
+        AssertForbiddenWaiver(diagnostics, "Assert." + inconclusive);
     }
 
     /// <summary>
-    /// Verifies skip exceptions are rejected.
+    /// Verifies inconclusive exceptions are rejected.
     /// </summary>
-    [Fact]
-    public async Task ReportsSkipExceptionsAsync()
+    [TestMethod]
+    public async Task ReportsInconclusiveExceptionsAsync()
     {
-        string exception = "Sk" + "ipException";
+        string exception = "AssertInconclusive" + "Exception";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             $$"""
             namespace Scout;
 
             public sealed class SampleTests
             {
-                [Fact]
+                [TestMethod]
                 public void Waived()
                 {
                     throw new {{exception}}();
@@ -200,7 +204,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// <summary>
     /// Verifies fixture capability returns are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsFixtureCapabilityReturnsAsync()
     {
         string probe = "TryCreate" + "DirectorySymlink";
@@ -210,7 +214,7 @@ public sealed class NoSkippedTestsAnalyzerTests
 
             public sealed class SampleTests
             {
-                [Fact]
+                [TestMethod]
                 public void Waived()
                 {
                     if ({{probe}}())
@@ -227,7 +231,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// <summary>
     /// Verifies platform guard returns are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsPlatformGuardReturnsAsync()
     {
         string platform = "Operating" + "System";
@@ -237,7 +241,7 @@ public sealed class NoSkippedTestsAnalyzerTests
 
             public sealed class SampleTests
             {
-                [Fact]
+                [TestMethod]
                 public void Waived()
                 {
                     if ({{platform}}.IsWindows())
@@ -249,6 +253,33 @@ public sealed class NoSkippedTestsAnalyzerTests
             """).ConfigureAwait(true);
 
         AssertForbiddenWaiver(diagnostics, "platform guard return");
+    }
+
+    /// <summary>
+    /// Verifies ignored dynamic test data cannot bypass the no-skip policy.
+    /// </summary>
+    /// <param name="implicitCreation">Whether the data row uses target-typed construction.</param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task ReportsIgnoredDynamicDataRowsAsync(bool implicitCreation)
+    {
+        string property = "Ignore" + "Message";
+        string creation = implicitCreation ? "new(1)" : "new TestDataRow<int>(1)";
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
+            $$"""
+            namespace Scout;
+
+            public sealed class SampleTests
+            {
+                public static TestDataRow<int> Data()
+                {
+                    return {{creation}} { {{property}} = "reason" };
+                }
+            }
+            """).ConfigureAwait(true);
+
+        AssertForbiddenWaiver(diagnostics, "test data " + property);
     }
 
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeSourceAsync(string source)
@@ -281,9 +312,9 @@ public sealed class NoSkippedTestsAnalyzerTests
 
     private static void AssertForbiddenWaiver(ImmutableArray<Diagnostic> diagnostics, string waiver)
     {
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0004", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("Test waiver '" + waiver + "' is forbidden by Scout's no-skip policy", diagnostic.GetMessage());
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0004", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual("Test waiver '" + waiver + "' is forbidden by Scout's no-skip policy", diagnostic.GetMessage());
     }
 }

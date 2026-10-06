@@ -8,42 +8,44 @@ namespace Scout;
 /// <summary>
 /// Verifies Scout namespace/folder analyzer behavior.
 /// </summary>
-public sealed class NamespaceFolderAnalyzerTests
+/// <param name="testContext">The context for the current test.</param>
+[TestClass]
+public sealed class NamespaceFolderAnalyzerTests(TestContext testContext)
 {
     private static readonly string[] SourceRootNames = ["src", "tests"];
 
     /// <summary>
     /// Verifies project-name namespaces are rejected at the project root.
     /// </summary>
-    [Theory]
-    [InlineData("Scout.App")]
-    [InlineData("Scout.Automata")]
-    [InlineData("Scout.Automata.AhoCorasick")]
-    [InlineData("Scout.Automata.Memmem")]
-    [InlineData("Scout.Automata.Syntax")]
-    [InlineData("Scout.Bytes")]
-    [InlineData("Scout.Cli")]
-    [InlineData("Scout.Diagnostics")]
-    [InlineData("Scout.Encoding")]
-    [InlineData("Scout.Encoding.Io")]
-    [InlineData("Scout.Errors")]
-    [InlineData("Scout.Globbing")]
-    [InlineData("Scout.Ignore")]
-    [InlineData("Scout.Matching")]
-    [InlineData("Scout.Os")]
-    [InlineData("Scout.Pcre2")]
-    [InlineData("Scout.Printing")]
-    [InlineData("Scout.Regex")]
-    [InlineData("Scout.Searching")]
-    [InlineData("Scout.SourceGen")]
+    [TestMethod]
+    [DataRow("Scout.App")]
+    [DataRow("Scout.Automata")]
+    [DataRow("Scout.Automata.AhoCorasick")]
+    [DataRow("Scout.Automata.Memmem")]
+    [DataRow("Scout.Automata.Syntax")]
+    [DataRow("Scout.Bytes")]
+    [DataRow("Scout.Cli")]
+    [DataRow("Scout.Diagnostics")]
+    [DataRow("Scout.Encoding")]
+    [DataRow("Scout.Encoding.Io")]
+    [DataRow("Scout.Errors")]
+    [DataRow("Scout.Globbing")]
+    [DataRow("Scout.Ignore")]
+    [DataRow("Scout.Matching")]
+    [DataRow("Scout.Os")]
+    [DataRow("Scout.Pcre2")]
+    [DataRow("Scout.Printing")]
+    [DataRow("Scout.Regex")]
+    [DataRow("Scout.Searching")]
+    [DataRow("Scout.SourceGen")]
     public async Task ReportsProjectNameNamespaceAtProjectRootAsync(string @namespace)
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeNamespaceAsync(@namespace).ConfigureAwait(true);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0003", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal(
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0003", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual(
             $"Namespace \"{@namespace}\" does not match folder structure, expected \"Scout\"",
             diagnostic.GetMessage());
     }
@@ -51,31 +53,32 @@ public sealed class NamespaceFolderAnalyzerTests
     /// <summary>
     /// Verifies the repository root namespace is accepted at the project root.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task AcceptsRootNamespaceAtProjectRootAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeNamespaceAsync("Scout").ConfigureAwait(true);
 
-        Assert.Empty(diagnostics);
+        Assert.IsEmpty(diagnostics);
     }
 
     /// <summary>
     /// Verifies checked-in sources use namespaces that match their project folder structure.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task RepositorySourcesUseExpectedNamespacesAsync()
     {
+        CancellationToken cancellationToken = testContext.CancellationToken;
         string root = FindRepositoryRoot();
         var mismatches = new List<string>();
 
         foreach (string filePath in EnumerateRepositorySources(root))
         {
             string projectDirectory = FindProjectDirectory(filePath, root);
-            string source = await File.ReadAllTextAsync(filePath, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            string source = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(true);
             SyntaxTree tree = CSharpSyntaxTree.ParseText(
                 source,
                 path: filePath,
-                cancellationToken: TestContext.Current.CancellationToken);
+                cancellationToken: cancellationToken);
             ImmutableArray<Diagnostic> diagnostics = await AnalyzeTreeAsync(tree, projectDirectory).ConfigureAwait(true);
 
             foreach (Diagnostic diagnostic in diagnostics.Where(diagnostic => string.Equals(diagnostic.Id, "SCOUT0003", StringComparison.Ordinal)))
@@ -84,7 +87,7 @@ public sealed class NamespaceFolderAnalyzerTests
             }
         }
 
-        Assert.Empty(mismatches);
+        Assert.IsEmpty(mismatches);
     }
 
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeNamespaceAsync(string @namespace)

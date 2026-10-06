@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies adaptive recursive literal precheck cutoff behavior.
 /// </summary>
+[TestClass]
 public sealed class DirectoryLiteralPrecheckStateTests
 {
     /// <summary>
     /// Verifies the precheck is disabled after a high-hit sample.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DisablesAfterHighHitSample()
     {
         var state = new DirectoryLiteralPrecheckState();
@@ -17,19 +18,19 @@ public sealed class DirectoryLiteralPrecheckStateTests
             state.Record(hit: true);
         }
 
-        Assert.True(state.Enabled);
+        Assert.IsTrue(state.Enabled);
         for (int index = 0; index < 48; index++)
         {
             state.Record(hit: false);
         }
 
-        Assert.False(state.Enabled);
+        Assert.IsFalse(state.Enabled);
     }
 
     /// <summary>
     /// Verifies miss-heavy samples keep the precheck active.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void KeepsEnabledForMissHeavySample()
     {
         var state = new DirectoryLiteralPrecheckState();
@@ -38,13 +39,13 @@ public sealed class DirectoryLiteralPrecheckStateTests
             state.Record(hit: false);
         }
 
-        Assert.True(state.Enabled);
+        Assert.IsTrue(state.Enabled);
     }
 
     /// <summary>
     /// Verifies sparse later hits do not disable the precheck below the hit-rate threshold.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void KeepsEnabledWhenSparseHitsEventuallyReachThreshold()
     {
         var state = new DirectoryLiteralPrecheckState();
@@ -59,6 +60,6 @@ public sealed class DirectoryLiteralPrecheckStateTests
         }
 
         state.Record(hit: true);
-        Assert.True(state.Enabled);
+        Assert.IsTrue(state.Enabled);
     }
 }

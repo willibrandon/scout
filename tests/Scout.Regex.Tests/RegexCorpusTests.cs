@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Runs Scout's regex engine against the pinned regex crate corpus.
 /// </summary>
+[TestClass]
 public sealed class RegexCorpusTests
 {
     internal static readonly (string RelativePath, string[] Names)[] CorpusGroups =
@@ -924,8 +925,8 @@ public sealed class RegexCorpusTests
     /// </summary>
     /// <param name="relativePath">The corpus TOML file.</param>
     /// <param name="name">The corpus case name.</param>
-    [Theory]
-    [MemberData(nameof(CorpusCases))]
+    [TestMethod]
+    [DynamicData(nameof(CorpusCases))]
     public void CorpusCaseMatchesExpectedSpans(string relativePath, string name)
     {
         RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, name);
@@ -947,28 +948,25 @@ public sealed class RegexCorpusTests
             testCase.Overlapping,
             testCase.MatchKindAll);
 
-        Assert.True(
+        Assert.IsTrue(
             MatchesEqual(testCase.ExpectedMatches, actual),
             relativePath + "::" + testCase.Name + " expected [" + FormatMatches(testCase.ExpectedMatches) + "] actual [" + FormatMatches(actual) + "]");
     }
 
     /// <summary>
-    /// Gets every supported regex corpus case as xUnit data.
+    /// Gets every supported regex corpus case as typed test data.
     /// </summary>
     /// <returns>The corpus case parameters.</returns>
-    public static TheoryData<string, string> CorpusCases()
+    public static IEnumerable<(string RelativePath, string Name)> CorpusCases()
     {
-        var data = new TheoryData<string, string>();
         for (int groupIndex = 0; groupIndex < CorpusGroups.Length; groupIndex++)
         {
             (string relativePath, string[] names) = CorpusGroups[groupIndex];
             for (int index = 0; index < names.Length; index++)
             {
-                data.Add(relativePath, names[index]);
+                yield return (relativePath, names[index]);
             }
         }
-
-        return data;
     }
 
     internal static string[] CorpusCaseKeys()
@@ -1001,7 +999,7 @@ public sealed class RegexCorpusTests
     {
         for (int index = 0; index < patterns.Count; index++)
         {
-            Assert.Throws<FormatException>(() => RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator, utf8, unicodeClasses));
+            Assert.ThrowsExactly<FormatException>(() => RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator, utf8, unicodeClasses));
         }
     }
 

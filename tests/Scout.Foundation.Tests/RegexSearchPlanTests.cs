@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies authoritative combined-pattern regex search plans.
 /// </summary>
+[TestClass]
 public sealed class RegexSearchPlanTests
 {
     /// <summary>
     /// Verifies an empty pattern set produces a non-null authoritative plan that can never match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void EmptyPatternSetCreatesAnExplicitEmptyLanguagePlan()
     {
         var options = new RegexSearchPlanOptions(
@@ -21,14 +22,14 @@ public sealed class RegexSearchPlanTests
 
         var plan = RegexSearchPlan.Create([], options);
 
-        Assert.True(plan.IsEmptyLanguage);
-        Assert.Equal(0, plan.PatternCount);
-        Assert.True(plan.Pattern.IsEmpty);
-        Assert.Equal(0, plan.CaptureCount);
-        Assert.Empty(plan.CaptureNames);
-        Assert.False(plan.CanMatchEmpty);
-        Assert.False(plan.EmptyMatchRequiresEndAssertion);
-        Assert.True(plan.IsCompatible(
+        Assert.IsTrue(plan.IsEmptyLanguage);
+        Assert.AreEqual(0, plan.PatternCount);
+        Assert.IsTrue(plan.Pattern.IsEmpty);
+        Assert.AreEqual(0, plan.CaptureCount);
+        Assert.IsEmpty(plan.CaptureNames);
+        Assert.IsFalse(plan.CanMatchEmpty);
+        Assert.IsFalse(plan.EmptyMatchRequiresEndAssertion);
+        Assert.IsTrue(plan.IsCompatible(
             asciiCaseInsensitive: true,
             lineRegexp: false,
             wordRegexp: false,
@@ -36,15 +37,15 @@ public sealed class RegexSearchPlanTests
             nullData: false,
             multiline: true,
             multilineDotall: true));
-        Assert.Null(plan.Matcher.Find(ReadOnlySpan<byte>.Empty));
-        Assert.Null(plan.Matcher.Find("anything"u8));
-        Assert.Equal(0, plan.Matcher.CountMatches("anything"u8));
+        Assert.IsNull(plan.Matcher.Find(ReadOnlySpan<byte>.Empty));
+        Assert.IsNull(plan.Matcher.Find("anything"u8));
+        Assert.AreEqual(0, plan.Matcher.CountMatches("anything"u8));
     }
 
     /// <summary>
     /// Verifies parsed ordinary line-search plans select the exact literal-set engine for one or many patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesLiteralSetForOrdinaryLiteralPatterns()
     {
         var single = RegexSearchPlan.Create(
@@ -54,16 +55,16 @@ public sealed class RegexSearchPlanTests
             ["needle"u8.ToArray(), "other"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(single);
-        Assert.Equal(RegexEngineKind.LiteralSet, single.Matcher.EngineKind);
-        Assert.NotNull(multiple);
-        Assert.Equal(RegexEngineKind.LiteralSet, multiple.Matcher.EngineKind);
+        Assert.IsNotNull(single);
+        Assert.AreEqual(RegexEngineKind.LiteralSet, single.Matcher.EngineKind);
+        Assert.IsNotNull(multiple);
+        Assert.AreEqual(RegexEngineKind.LiteralSet, multiple.Matcher.EngineKind);
     }
 
     /// <summary>
     /// Verifies a combined literal set preserves source order at equal starts and advances non-overlapping matches by the selected branch.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LiteralSetPreservesSourceOrderAndNonOverlappingCounts()
     {
         var longerFirst = RegexSearchPlan.Create(
@@ -73,33 +74,33 @@ public sealed class RegexSearchPlanTests
             ["a"u8.ToArray(), "aa"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(longerFirst);
-        Assert.Equal(new RegexMatch(0, 2), longerFirst.Matcher.Find("aaa"u8));
-        Assert.Equal(2, longerFirst.Matcher.CountMatches("aaa"u8));
-        Assert.NotNull(shorterFirst);
-        Assert.Equal(new RegexMatch(0, 1), shorterFirst.Matcher.Find("aaa"u8));
-        Assert.Equal(3, shorterFirst.Matcher.CountMatches("aaa"u8));
+        Assert.IsNotNull(longerFirst);
+        Assert.AreEqual(new RegexMatch(0, 2), longerFirst.Matcher.Find("aaa"u8));
+        Assert.AreEqual(2, longerFirst.Matcher.CountMatches("aaa"u8));
+        Assert.IsNotNull(shorterFirst);
+        Assert.AreEqual(new RegexMatch(0, 1), shorterFirst.Matcher.Find("aaa"u8));
+        Assert.AreEqual(3, shorterFirst.Matcher.CountMatches("aaa"u8));
     }
 
     /// <summary>
     /// Verifies ASCII case-insensitive ordinary plans retain exact literal-set matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UsesLiteralSetForAsciiCaseInsensitivePatterns()
     {
         var plan = RegexSearchPlan.Create(
             ["Needle"u8.ToArray(), "OTHER"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: true));
 
-        Assert.NotNull(plan);
-        Assert.Equal(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
-        Assert.Equal(new RegexMatch(1, 6), plan.Matcher.Find(" needle "u8));
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.AreEqual(new RegexMatch(1, 6), plan.Matcher.Find(" needle "u8));
     }
 
     /// <summary>
     /// Verifies mixed syntax and line or word policy remain on the authoritative general matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void KeepsNonLiteralPoliciesOnTheGeneralMatcher()
     {
         var mixed = RegexSearchPlan.Create(
@@ -112,18 +113,18 @@ public sealed class RegexSearchPlanTests
             ["literal"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false, wordRegexp: true));
 
-        Assert.NotNull(mixed);
-        Assert.NotEqual(RegexEngineKind.LiteralSet, mixed.Matcher.EngineKind);
-        Assert.NotNull(line);
-        Assert.NotEqual(RegexEngineKind.LiteralSet, line.Matcher.EngineKind);
-        Assert.NotNull(word);
-        Assert.NotEqual(RegexEngineKind.LiteralSet, word.Matcher.EngineKind);
+        Assert.IsNotNull(mixed);
+        Assert.AreNotEqual(RegexEngineKind.LiteralSet, mixed.Matcher.EngineKind);
+        Assert.IsNotNull(line);
+        Assert.AreNotEqual(RegexEngineKind.LiteralSet, line.Matcher.EngineKind);
+        Assert.IsNotNull(word);
+        Assert.AreNotEqual(RegexEngineKind.LiteralSet, word.Matcher.EngineKind);
     }
 
     /// <summary>
     /// Verifies fallback mode continues to bypass the literal-set specialization.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FallbackModeBypassesLiteralSet()
     {
         using RegexSpecializationModeScope scope =
@@ -132,15 +133,15 @@ public sealed class RegexSearchPlanTests
             ["needle"u8.ToArray(), "other"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(plan);
-        Assert.NotEqual(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
-        Assert.Equal(new RegexMatch(1, 6), plan.Matcher.Find(" needle "u8));
+        Assert.IsNotNull(plan);
+        Assert.AreNotEqual(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.AreEqual(new RegexMatch(1, 6), plan.Matcher.Find(" needle "u8));
     }
 
     /// <summary>
     /// Verifies one ordered expression and one matcher represent every source pattern.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CompilesOneOrderedMatcher()
     {
         var plan = RegexSearchPlan.Create(
@@ -150,11 +151,11 @@ public sealed class RegexSearchPlanTests
         ],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(plan);
-        Assert.False(plan.IsEmptyLanguage);
-        Assert.Equal("(?:ab)|(?:a)", Encoding.UTF8.GetString(plan.Pattern.Span));
-        Assert.Equal(2, plan.PatternCount);
-        Assert.Equal(new RegexMatch(0, 2), plan.Matcher.Find("ab"u8));
+        Assert.IsNotNull(plan);
+        Assert.IsFalse(plan.IsEmptyLanguage);
+        Assert.AreEqual("(?:ab)|(?:a)", Encoding.UTF8.GetString(plan.Pattern.Span));
+        Assert.AreEqual(2, plan.PatternCount);
+        Assert.AreEqual(new RegexMatch(0, 2), plan.Matcher.Find("ab"u8));
     }
 
     /// <summary>
@@ -162,14 +163,14 @@ public sealed class RegexSearchPlanTests
     /// without selecting the raw alternation-set engine.
     /// </summary>
     /// <param name="patternCount">The number of ordered source patterns.</param>
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(4)]
-    [InlineData(8)]
-    [InlineData(16)]
-    [InlineData(32)]
-    [InlineData(64)]
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(4)]
+    [DataRow(8)]
+    [DataRow(16)]
+    [DataRow(32)]
+    [DataRow(64)]
     public void AuthoritativePatternSetsPreserveOrderingOverlapsAndGlobalCaptures(int patternCount)
     {
         byte[][] patterns = new byte[patternCount][];
@@ -190,26 +191,26 @@ public sealed class RegexSearchPlanTests
         byte[] lastToken = Encoding.ASCII.GetBytes($"token_{lastPattern:D2}");
         RegexCaptures? last = plan.Matcher.FindCaptures(lastToken);
 
-        Assert.False(plan.IsEmptyLanguage);
-        Assert.Equal(patternCount, plan.PatternCount);
-        Assert.Equal(patternCount, plan.CaptureCount);
-        Assert.NotEqual(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
-        Assert.False(plan.Matcher.UsesSyntheticCaptureAlternationSet);
-        Assert.NotNull(first);
-        Assert.Equal(new RegexMatch(0, 2), first.Match);
-        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(1));
-        Assert.Equal(2, plan.Matcher.CountMatches("aba"u8));
-        Assert.NotNull(last);
-        Assert.Equal(new RegexMatch(0, lastToken.Length), last.Match);
-        Assert.Equal(new RegexMatch(0, lastToken.Length), last.GetGroup(patternCount));
-        Assert.Equal(patternCount, plan.CaptureNames[$"capture{lastPattern}"]);
+        Assert.IsFalse(plan.IsEmptyLanguage);
+        Assert.AreEqual(patternCount, plan.PatternCount);
+        Assert.AreEqual(patternCount, plan.CaptureCount);
+        Assert.AreNotEqual(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
+        Assert.IsFalse(plan.Matcher.UsesSyntheticCaptureAlternationSet);
+        Assert.IsNotNull(first);
+        Assert.AreEqual(new RegexMatch(0, 2), first.Match);
+        Assert.AreEqual(new RegexMatch(0, 2), first.GetGroup(1));
+        Assert.AreEqual(2, plan.Matcher.CountMatches("aba"u8));
+        Assert.IsNotNull(last);
+        Assert.AreEqual(new RegexMatch(0, lastToken.Length), last.Match);
+        Assert.AreEqual(new RegexMatch(0, lastToken.Length), last.GetGroup(patternCount));
+        Assert.AreEqual(patternCount, plan.CaptureNames[$"capture{lastPattern}"]);
     }
 
     /// <summary>
     /// Verifies a large exact-literal plan retains the literal-set engine and searches the complete
     /// haystack through its syntax-derived common-prefix scanner.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeExactLiteralPlanUsesCommonPrefixLiteralSetWholeHaystackRoute()
     {
         byte[][] patterns = Enumerable.Range(0, 64)
@@ -226,20 +227,20 @@ public sealed class RegexSearchPlanTests
             plan,
             asciiCaseInsensitive: false);
 
-        Assert.Equal(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
-        Assert.False(plan.Matcher.UsesParsedPatternSet);
-        Assert.True(plan.Matcher.CanSearchWholeHaystackWithFullMatches);
-        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
-        Assert.False(plan.Matcher.UsesSyntheticCaptureAlternationSet);
-        Assert.Equal(new RegexMatch(7, 26), plan.Matcher.Find(haystack));
-        Assert.Equal(1, count);
+        Assert.AreEqual(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.IsFalse(plan.Matcher.UsesParsedPatternSet);
+        Assert.IsTrue(plan.Matcher.CanSearchWholeHaystackWithFullMatches);
+        Assert.IsTrue(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.IsFalse(plan.Matcher.UsesSyntheticCaptureAlternationSet);
+        Assert.AreEqual(new RegexMatch(7, 26), plan.Matcher.Find(haystack));
+        Assert.AreEqual(1, count);
     }
 
     /// <summary>
     /// Verifies the exact common-prefix engine counts matches and observes a late NUL through one
     /// authoritative candidate scan.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LargeExactLiteralPlanFusesMatchCountingAndNulDetection()
     {
         byte[][] patterns = Enumerable.Range(0, 64)
@@ -253,20 +254,20 @@ public sealed class RegexSearchPlanTests
             "issue44_absent_pattern_099 issue44_absent_pattern_063 trailing\0"u8
                 .ToArray();
 
-        Assert.True(plan.Matcher.TryCountMatchesAndDetectNul(
+        Assert.IsTrue(plan.Matcher.TryCountMatchesAndDetectNul(
             haystack,
             out long count,
             out bool containsNul));
-        Assert.Equal(plan.Matcher.CountMatches(haystack), count);
-        Assert.Equal(1, count);
-        Assert.True(containsNul);
+        Assert.AreEqual(plan.Matcher.CountMatches(haystack), count);
+        Assert.AreEqual(1, count);
+        Assert.IsTrue(containsNul);
     }
 
     /// <summary>
     /// Verifies parsed exact-literal pattern sets fuse source-ordered counting and complete NUL
     /// detection without returning to raw-pattern recognition.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsedCommonPrefixPatternSetFusesOrderedCountingAndNulDetection()
     {
         byte[][] longerFirstPatterns = CreateCapturedCommonPrefixPatterns(shorterFirst: false);
@@ -286,7 +287,7 @@ public sealed class RegexSearchPlanTests
     /// <summary>
     /// Verifies a scope whose execution depends on syntax analysis retains parsed planning.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScopeDependentPlanningUsesParsedLiteralPath()
     {
         var plan = RegexSearchPlan.CreateScoped(
@@ -294,14 +295,14 @@ public sealed class RegexSearchPlanTests
             new RegexSearchPlanOptions(asciiCaseInsensitive: false),
             RegexSearchScopePolicy.StandardMultiline);
 
-        Assert.Equal(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
-        Assert.Equal(new RegexMatch(1, 7), plan.Matcher.Find(" literal "u8));
+        Assert.AreEqual(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.AreEqual(new RegexMatch(1, 7), plan.Matcher.Find(" literal "u8));
     }
 
     /// <summary>
     /// Verifies the literal-set common-prefix route preserves source order for overlapping exact literals.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CommonPrefixLiteralSetPreservesOrderedOverlaps()
     {
         byte[][] longerFirst = Enumerable.Range(0, 64)
@@ -320,20 +321,20 @@ public sealed class RegexSearchPlanTests
             shorterFirst,
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.Equal(RegexEngineKind.LiteralSet, longerPlan.Matcher.EngineKind);
-        Assert.False(longerPlan.Matcher.UsesParsedPatternSet);
-        Assert.True(longerPlan.Matcher.UsesCommonPrefixLiteralScanner);
-        Assert.Equal(new RegexMatch(0, longerFirst[0].Length), longerPlan.Matcher.Find(haystack));
-        Assert.Equal(2, longerPlan.Matcher.CountMatches(haystack));
-        Assert.Equal(
+        Assert.AreEqual(RegexEngineKind.LiteralSet, longerPlan.Matcher.EngineKind);
+        Assert.IsFalse(longerPlan.Matcher.UsesParsedPatternSet);
+        Assert.IsTrue(longerPlan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.AreEqual(new RegexMatch(0, longerFirst[0].Length), longerPlan.Matcher.Find(haystack));
+        Assert.AreEqual(2, longerPlan.Matcher.CountMatches(haystack));
+        Assert.AreEqual(
             longerFirst[0].Length + longerFirst[1].Length,
             longerPlan.Matcher.SumMatchSpans(haystack));
-        Assert.Equal(RegexEngineKind.LiteralSet, shorterPlan.Matcher.EngineKind);
-        Assert.False(shorterPlan.Matcher.UsesParsedPatternSet);
-        Assert.True(shorterPlan.Matcher.UsesCommonPrefixLiteralScanner);
-        Assert.Equal(new RegexMatch(0, shorterFirst[0].Length), shorterPlan.Matcher.Find(haystack));
-        Assert.Equal(2, shorterPlan.Matcher.CountMatches(haystack));
-        Assert.Equal(
+        Assert.AreEqual(RegexEngineKind.LiteralSet, shorterPlan.Matcher.EngineKind);
+        Assert.IsFalse(shorterPlan.Matcher.UsesParsedPatternSet);
+        Assert.IsTrue(shorterPlan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.AreEqual(new RegexMatch(0, shorterFirst[0].Length), shorterPlan.Matcher.Find(haystack));
+        Assert.AreEqual(2, shorterPlan.Matcher.CountMatches(haystack));
+        Assert.AreEqual(
             shorterFirst[0].Length * 2,
             shorterPlan.Matcher.SumMatchSpans(haystack));
     }
@@ -342,7 +343,7 @@ public sealed class RegexSearchPlanTests
     /// Verifies a rejected common-prefix occurrence does not hide a match beginning at an
     /// overlapping occurrence.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CommonPrefixLiteralSetRetriesOverlappingPrefixCandidates()
     {
         byte[][] patterns = Enumerable.Range(0, 16)
@@ -353,11 +354,11 @@ public sealed class RegexSearchPlanTests
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
         byte[] haystack = "aaaaaaaaaX00"u8.ToArray();
 
-        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
-        Assert.Equal(new RegexMatch(1, patterns[0].Length), plan.Matcher.Find(haystack));
-        Assert.Null(plan.Matcher.Find(haystack, startAt: 2));
-        Assert.Equal(1, plan.Matcher.CountMatches(haystack));
-        Assert.Equal(patterns[0].Length, plan.Matcher.SumMatchSpans(haystack));
+        Assert.IsTrue(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.AreEqual(new RegexMatch(1, patterns[0].Length), plan.Matcher.Find(haystack));
+        Assert.IsNull(plan.Matcher.Find(haystack, startAt: 2));
+        Assert.AreEqual(1, plan.Matcher.CountMatches(haystack));
+        Assert.AreEqual(patterns[0].Length, plan.Matcher.SumMatchSpans(haystack));
     }
 
     private static void AssertParsedFusedCount(
@@ -365,16 +366,16 @@ public sealed class RegexSearchPlanTests
         byte[] haystack,
         long expectedCount)
     {
-        Assert.Equal(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
-        Assert.True(plan.Matcher.UsesParsedPatternSet);
-        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
-        Assert.True(plan.Matcher.TryCountMatchesAndDetectNul(
+        Assert.AreEqual(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
+        Assert.IsTrue(plan.Matcher.UsesParsedPatternSet);
+        Assert.IsTrue(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.IsTrue(plan.Matcher.TryCountMatchesAndDetectNul(
             haystack,
             out long count,
             out bool containsNul));
-        Assert.Equal(plan.Matcher.CountMatches(haystack), count);
-        Assert.Equal(expectedCount, count);
-        Assert.True(containsNul);
+        Assert.AreEqual(plan.Matcher.CountMatches(haystack), count);
+        Assert.AreEqual(expectedCount, count);
+        Assert.IsTrue(containsNul);
     }
 
     private static byte[][] CreateCapturedCommonPrefixPatterns(bool shorterFirst)
@@ -393,7 +394,7 @@ public sealed class RegexSearchPlanTests
     /// <summary>
     /// Verifies large Unicode line plans are compiled without materializing temporary UTF-8 tries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BoundsUnicodeLinePlanConstructionAllocations()
     {
         const long AllocationLimit = 256 * 1024;
@@ -404,14 +405,14 @@ public sealed class RegexSearchPlanTests
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.NotNull(plan);
-        Assert.InRange(allocated, 0, AllocationLimit);
+        Assert.IsNotNull(plan);
+        Assert.IsInRange(0, AllocationLimit, allocated);
     }
 
     /// <summary>
     /// Verifies captures are numbered globally across the ordered combined expression.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExposesGlobalCaptureMetadata()
     {
         var plan = RegexSearchPlan.Create(
@@ -421,19 +422,19 @@ public sealed class RegexSearchPlanTests
         ],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(plan);
-        Assert.Equal(2, plan.CaptureCount);
-        Assert.Equal(2, plan.CaptureNames["right"]);
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(2, plan.CaptureCount);
+        Assert.AreEqual(2, plan.CaptureNames["right"]);
         RegexCaptures? captures = plan.Matcher.FindCaptures("b"u8);
-        Assert.NotNull(captures);
-        Assert.Null(captures.GetGroup(1));
-        Assert.Equal(new RegexMatch(0, 1), captures.GetGroup(2));
+        Assert.IsNotNull(captures);
+        Assert.IsNull(captures.GetGroup(1));
+        Assert.AreEqual(new RegexMatch(0, 1), captures.GetGroup(2));
     }
 
     /// <summary>
     /// Verifies absolute and effectively absolute anchors are derived from parsed syntax.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExposesParsedAnchorAndEmptyMatchMetadata()
     {
         var absolutePlan = RegexSearchPlan.Create(
@@ -443,16 +444,16 @@ public sealed class RegexSearchPlanTests
             ["(?-m:^)$"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(absolutePlan);
-        Assert.True(absolutePlan.HasAbsoluteAnchors);
-        Assert.False(absolutePlan.HasLineAnchors);
-        Assert.True(absolutePlan.HasHaystackAnchors);
-        Assert.False(absolutePlan.CanMatchEmpty);
-        Assert.NotNull(scopedPlan);
-        Assert.False(scopedPlan.HasAbsoluteAnchors);
-        Assert.True(scopedPlan.HasLineAnchors);
-        Assert.True(scopedPlan.HasHaystackAnchors);
-        Assert.True(scopedPlan.CanMatchEmpty);
+        Assert.IsNotNull(absolutePlan);
+        Assert.IsTrue(absolutePlan.HasAbsoluteAnchors);
+        Assert.IsFalse(absolutePlan.HasLineAnchors);
+        Assert.IsTrue(absolutePlan.HasHaystackAnchors);
+        Assert.IsFalse(absolutePlan.CanMatchEmpty);
+        Assert.IsNotNull(scopedPlan);
+        Assert.IsFalse(scopedPlan.HasAbsoluteAnchors);
+        Assert.IsTrue(scopedPlan.HasLineAnchors);
+        Assert.IsTrue(scopedPlan.HasHaystackAnchors);
+        Assert.IsTrue(scopedPlan.CanMatchEmpty);
     }
 
     /// <summary>
@@ -461,16 +462,16 @@ public sealed class RegexSearchPlanTests
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="canMatchEmpty">Whether the pattern can match an empty span.</param>
     /// <param name="requiresEndAssertion">Whether every empty path requires an end assertion.</param>
-    [Theory]
-    [InlineData(@"\z", true, true)]
-    [InlineData("$", true, true)]
-    [InlineData(@"foo|\z", true, true)]
-    [InlineData(@"(?:bar)?\z", true, true)]
-    [InlineData(@"(?:\z)?", true, false)]
-    [InlineData(@"\z|", true, false)]
-    [InlineData(@"(?s:.*?)", true, false)]
-    [InlineData(@"\b", true, false)]
-    [InlineData("foo", false, false)]
+    [TestMethod]
+    [DataRow(@"\z", true, true)]
+    [DataRow("$", true, true)]
+    [DataRow(@"foo|\z", true, true)]
+    [DataRow(@"(?:bar)?\z", true, true)]
+    [DataRow(@"(?:\z)?", true, false)]
+    [DataRow(@"\z|", true, false)]
+    [DataRow(@"(?s:.*?)", true, false)]
+    [DataRow(@"\b", true, false)]
+    [DataRow("foo", false, false)]
     public void ClassifiesEndRequiredEmptyPaths(
         string pattern,
         bool canMatchEmpty,
@@ -482,15 +483,15 @@ public sealed class RegexSearchPlanTests
                 asciiCaseInsensitive: false,
                 multiline: true));
 
-        Assert.NotNull(plan);
-        Assert.Equal(canMatchEmpty, plan.CanMatchEmpty);
-        Assert.Equal(requiresEndAssertion, plan.EmptyMatchRequiresEndAssertion);
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(canMatchEmpty, plan.CanMatchEmpty);
+        Assert.AreEqual(requiresEndAssertion, plan.EmptyMatchRequiresEndAssertion);
     }
 
     /// <summary>
     /// Verifies whole-line and whole-word policy is applied around the combined alternation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AppliesCombinedLineAndWordPolicy()
     {
         var linePlan = RegexSearchPlan.Create(
@@ -500,33 +501,33 @@ public sealed class RegexSearchPlanTests
             ["foo"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false, wordRegexp: true));
 
-        Assert.NotNull(linePlan);
-        Assert.Equal(new RegexMatch(0, 3), linePlan.Matcher.Find("foo\nbar"u8));
-        Assert.Null(linePlan.Matcher.Find("xfoo\nbarx"u8));
-        Assert.NotNull(wordPlan);
-        Assert.Equal(new RegexMatch(1, 3), wordPlan.Matcher.Find(" foo "u8));
-        Assert.Null(wordPlan.Matcher.Find("xfoo"u8));
+        Assert.IsNotNull(linePlan);
+        Assert.AreEqual(new RegexMatch(0, 3), linePlan.Matcher.Find("foo\nbar"u8));
+        Assert.IsNull(linePlan.Matcher.Find("xfoo\nbarx"u8));
+        Assert.IsNotNull(wordPlan);
+        Assert.AreEqual(new RegexMatch(1, 3), wordPlan.Matcher.Find(" foo "u8));
+        Assert.IsNull(wordPlan.Matcher.Find("xfoo"u8));
     }
 
     /// <summary>
     /// Verifies the authoritative matcher owns the required-literal prefilter.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CompilesRequiredLiteralInsideAuthoritativeMatcher()
     {
         var plan = RegexSearchPlan.Create(
             [@"\w+GeneratedRecord"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(plan);
-        Assert.Equal(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
-        Assert.Equal(new RegexMatch(0, 18), plan.Matcher.Find("abcGeneratedRecord"u8));
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(RegexPrefilterKind.RequiredLiteral, plan.Matcher.PrefilterKind);
+        Assert.AreEqual(new RegexMatch(0, 18), plan.Matcher.Find("abcGeneratedRecord"u8));
     }
 
     /// <summary>
     /// Verifies plans can be reused only when every semantic option agrees.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ChecksAllCompatibilityOptions()
     {
         var plan = RegexSearchPlan.Create(
@@ -540,8 +541,8 @@ public sealed class RegexSearchPlanTests
                 multiline: false,
                 multilineDotall: false));
 
-        Assert.NotNull(plan);
-        Assert.True(plan.IsCompatible(
+        Assert.IsNotNull(plan);
+        Assert.IsTrue(plan.IsCompatible(
             asciiCaseInsensitive: true,
             lineRegexp: false,
             wordRegexp: true,
@@ -549,7 +550,7 @@ public sealed class RegexSearchPlanTests
             nullData: false,
             multiline: false,
             multilineDotall: false));
-        Assert.False(plan.IsCompatible(
+        Assert.IsFalse(plan.IsCompatible(
             asciiCaseInsensitive: true,
             lineRegexp: false,
             wordRegexp: true,
@@ -562,7 +563,7 @@ public sealed class RegexSearchPlanTests
     /// <summary>
     /// Verifies the CRLF line-selection policy permits carriage returns without permitting line feeds.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PreservesOnlyTheCrlfCarriageReturnForLineSelection()
     {
         var plan = RegexSearchPlan.Create(
@@ -572,10 +573,10 @@ public sealed class RegexSearchPlanTests
                 crlf: true,
                 preserveCrlfCarriageReturn: true));
 
-        Assert.NotNull(plan);
-        Assert.True(plan.Options.PreserveCrlfCarriageReturn);
-        Assert.Equal(new RegexMatch(1, 1), plan.Matcher.Find("a\r\n"u8));
-        Assert.Null(plan.Matcher.Find("a\n"u8));
+        Assert.IsNotNull(plan);
+        Assert.IsTrue(plan.Options.PreserveCrlfCarriageReturn);
+        Assert.AreEqual(new RegexMatch(1, 1), plan.Matcher.Find("a\r\n"u8));
+        Assert.IsNull(plan.Matcher.Find("a\n"u8));
 
         var dotPlan = RegexSearchPlan.Create(
             ["."u8.ToArray()],
@@ -590,32 +591,32 @@ public sealed class RegexSearchPlanTests
                 crlf: true,
                 preserveCrlfCarriageReturn: true));
 
-        Assert.NotNull(dotPlan);
-        Assert.Null(dotPlan.Matcher.Find("\r\n"u8));
-        Assert.NotNull(whitespacePlan);
-        Assert.Equal(new RegexMatch(0, 1), whitespacePlan.Matcher.Find("\r\n"u8));
+        Assert.IsNotNull(dotPlan);
+        Assert.IsNull(dotPlan.Matcher.Find("\r\n"u8));
+        Assert.IsNotNull(whitespacePlan);
+        Assert.AreEqual(new RegexMatch(0, 1), whitespacePlan.Matcher.Find("\r\n"u8));
     }
 
     /// <summary>
     /// Verifies line-feed exclusion removes only the excluded class member.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void LineFeedExclusionPreservesTheRemainingClassRange()
     {
         var plan = RegexSearchPlan.Create(
             ["[a\n]+"u8.ToArray()],
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
-        Assert.NotNull(plan);
-        Assert.Equal(new RegexMatch(0, 1), plan.Matcher.Find("a\nb"u8));
-        Assert.Null(plan.Matcher.Find("b"u8));
+        Assert.IsNotNull(plan);
+        Assert.AreEqual(new RegexMatch(0, 1), plan.Matcher.Find("a\nb"u8));
+        Assert.IsNull(plan.Matcher.Find("b"u8));
     }
 
     /// <summary>
     /// Verifies a NUL-delimited record can contain and match across line feeds without a
     /// line-end candidate treating the first line feed as an uncrossable record boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NullDataAnchoredPatternCanCrossLineFeedsWithinARecord()
     {
         byte[][] patterns =
@@ -642,17 +643,17 @@ public sealed class RegexSearchPlanTests
             ref sink,
             nullData: true);
 
-        Assert.True(matched);
-        Assert.Equal(new RegexMatch(0, 80), plan.Matcher.Find(haystack.AsSpan(0, 80)));
-        Assert.Equal(1UL, sink.MatchedLines);
-        Assert.Equal(1, sink.LineNumber);
-        Assert.Equal(haystack, sink.Line);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(new RegexMatch(0, 80), plan.Matcher.Find(haystack.AsSpan(0, 80)));
+        Assert.AreEqual(1UL, sink.MatchedLines);
+        Assert.AreEqual(1, sink.LineNumber);
+        Assert.AreSequenceEqual(haystack, sink.Line);
     }
 
     /// <summary>
     /// Verifies Unicode atoms consume complete scalars while byte-oriented empty matches may begin within them.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PreservesUnicodeAtomsWithoutRestrictingEmptyMatchesToScalarBoundaries()
     {
         var dotPlan = RegexSearchPlan.Create(
@@ -663,16 +664,16 @@ public sealed class RegexSearchPlanTests
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
         ReadOnlySpan<byte> haystack = "\u00E9"u8;
 
-        Assert.NotNull(dotPlan);
-        Assert.NotNull(emptyPlan);
-        Assert.Equal(new RegexMatch(0, 2), dotPlan.Matcher.Find(haystack));
-        Assert.Equal(new RegexMatch(1, 0), emptyPlan.Matcher.Find(haystack, startAt: 1));
+        Assert.IsNotNull(dotPlan);
+        Assert.IsNotNull(emptyPlan);
+        Assert.AreEqual(new RegexMatch(0, 2), dotPlan.Matcher.Find(haystack));
+        Assert.AreEqual(new RegexMatch(1, 0), emptyPlan.Matcher.Find(haystack, startAt: 1));
     }
 
     /// <summary>
     /// Verifies flat capture replay preserves named, optional, zero-width, and CRLF-aware context.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReplaysOptionalNamedCapturesWithOriginalCrlfContext()
     {
         var plan = RegexSearchPlan.Create(
@@ -682,14 +683,14 @@ public sealed class RegexSearchPlanTests
                 crlf: true));
         byte[] haystack = "x\r\nfoo\r\nz"u8.ToArray();
 
-        Assert.NotNull(plan);
+        Assert.IsNotNull(plan);
         int[] captureSlots = new int[plan.CaptureSlotCount];
         Array.Fill(captureSlots, 42);
 
-        Assert.True(plan.TryReplayCaptures(haystack, 3, 6, captureSlots));
-        Assert.Equal(10, plan.CaptureSlotCount);
-        Assert.Equal(2, plan.CaptureNames["word"]);
-        Assert.Equal(3, plan.CaptureNames["suffix"]);
-        Assert.Equal([3, 6, 3, 3, 3, 6, -1, -1, 6, 6], captureSlots);
+        Assert.IsTrue(plan.TryReplayCaptures(haystack, 3, 6, captureSlots));
+        Assert.AreEqual(10, plan.CaptureSlotCount);
+        Assert.AreEqual(2, plan.CaptureNames["word"]);
+        Assert.AreEqual(3, plan.CaptureNames["suffix"]);
+        Assert.AreSequenceEqual<int>([3, 6, 3, 3, 3, 6, -1, -1, 6, 6], captureSlots);
     }
 }

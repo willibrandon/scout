@@ -3,6 +3,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the hot-path guard detects LINQ without confusing framework path and string APIs.
 /// </summary>
+[TestClass]
 public sealed class LinqUsageInspectorTests
 {
     /// <summary>
@@ -10,15 +11,15 @@ public sealed class LinqUsageInspectorTests
     /// </summary>
     /// <param name="expression">The expression to inspect.</param>
     /// <param name="expectedViolation">Whether the expression uses LINQ.</param>
-    [Theory]
-    [InlineData("Path.Join(\"root\", \"child\")", false)]
-    [InlineData("string.Join(\",\", new[] { \"a\", \"b\" })", false)]
-    [InlineData("new[] { 1 }.Join(new[] { 1 }, x => x, x => x, (x, y) => x)", true)]
-    [InlineData("Enumerable.Where(new[] { 1 }, x => x > 0)", true)]
-    [InlineData("from x in new[] { 1 } select x", true)]
+    [TestMethod]
+    [DataRow("Path.Join(\"root\", \"child\")", false)]
+    [DataRow("string.Join(\",\", new[] { \"a\", \"b\" })", false)]
+    [DataRow("new[] { 1 }.Join(new[] { 1 }, x => x, x => x, (x, y) => x)", true)]
+    [DataRow("Enumerable.Where(new[] { 1 }, x => x > 0)", true)]
+    [DataRow("from x in new[] { 1 } select x", true)]
     public void DistinguishesLinqFromOtherFrameworkMethods(string expression, bool expectedViolation)
     {
         string source = "using System; using System.IO; using System.Linq; class Example { object Run() => " + expression + "; }";
-        Assert.Equal(expectedViolation, LinqUsageInspector.Find(source).Any());
+        Assert.AreEqual(expectedViolation, LinqUsageInspector.Find(source).Any());
     }
 }

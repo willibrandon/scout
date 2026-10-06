@@ -6,7 +6,9 @@ namespace Scout;
 /// <summary>
 /// Verifies the generic API-key rule with its trailing end assertion.
 /// </summary>
-public sealed class GitleaksEndAssertionTests
+/// <param name="testContext">The context for the current test.</param>
+[TestClass]
+public sealed class GitleaksEndAssertionTests(TestContext testContext)
 {
     private const int InputLength = 4 * 1024 * 1024;
     private const int CandidateSpacing = 64;
@@ -16,10 +18,10 @@ public sealed class GitleaksEndAssertionTests
     /// Verifies the exact rule preserves delimiter, end-of-input, and capture semantics.
     /// </summary>
     /// <param name="engineMode">The public engine mode under test.</param>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void ExactRulePreservesEndAssertionCaptures(ByteRegexEngineMode engineMode)
     {
         var regex = ByteRegex.Compile(
@@ -43,12 +45,13 @@ public sealed class GitleaksEndAssertionTests
     /// Verifies the issue corpus completes through the primary contextual lazy DFA.
     /// </summary>
     /// <param name="invalid">Whether each candidate record ends in malformed UTF-8.</param>
-    [Theory(Timeout = 30_000)]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    [Timeout(30_000, CooperativeCancellation = true)]
     public void ExactRuleRejectsFourMiBCandidateCorpusThroughDfaFastPath(bool invalid)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
@@ -61,11 +64,11 @@ public sealed class GitleaksEndAssertionTests
         RegexAutomaton automaton = GetAutomaton(regex);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Equal(RegexEngineKind.PikeVm, automaton.EngineKind);
-        Assert.True(HasPrimaryUnanchoredDfaRunner(automaton));
-        Assert.Null(regex.FindCaptures(input));
-        Assert.Equal(invalid, HasActivatedPrimaryUnanchoredDfa(automaton));
-        Assert.True(HasActivatedAnyUnanchoredDfa(automaton));
+        Assert.AreEqual(RegexEngineKind.PikeVm, automaton.EngineKind);
+        Assert.IsTrue(HasPrimaryUnanchoredDfaRunner(automaton));
+        Assert.IsNull(regex.FindCaptures(input));
+        Assert.AreEqual(invalid, HasActivatedPrimaryUnanchoredDfa(automaton));
+        Assert.IsTrue(HasActivatedAnyUnanchoredDfa(automaton));
     }
 
     private static byte[] CreateCandidateCorpus(bool invalid)
@@ -90,10 +93,10 @@ public sealed class GitleaksEndAssertionTests
         byte[] input,
         int expectedMatchLength)
     {
-        Assert.NotNull(captures);
-        Assert.Equal(new ByteRegexMatch(0, expectedMatchLength), captures.Match);
-        ByteRegexMatch secret = Assert.IsType<ByteRegexMatch>(captures.GetGroup(1));
-        Assert.True(secret.Value(input).SequenceEqual("abcdefghijkl"u8));
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(new ByteRegexMatch(0, expectedMatchLength), captures.Match);
+        ByteRegexMatch secret = Assert.IsExactInstanceOfType<ByteRegexMatch>(captures.GetGroup(1));
+        Assert.IsTrue(secret.Value(input).SequenceEqual("abcdefghijkl"u8));
     }
 
     private static RegexAutomaton GetAutomaton(ByteRegex regex)

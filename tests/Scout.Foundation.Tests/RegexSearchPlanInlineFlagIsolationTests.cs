@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies each source pattern in an authoritative search plan has an independent inline-flag scope.
 /// </summary>
+[TestClass]
 public sealed class RegexSearchPlanInlineFlagIsolationTests
 {
     /// <summary>
     /// Verifies unscoped inline flags cannot affect a later source-pattern branch.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CombinedPatternBranchesIsolateSupportedInlineFlags()
     {
         AssertBranchIsolation(
@@ -73,10 +74,10 @@ public sealed class RegexSearchPlanInlineFlagIsolationTests
             secondPattern);
         byte[] bytes = Encoding.UTF8.GetBytes(haystack);
 
-        Assert.Equal(expected, FindAll(unscopedPlan, bytes));
-        Assert.Equal(expected, FindAll(scopedPlan, bytes));
-        Assert.Equal(scopedPlan.Matcher.CountMatches(bytes), unscopedPlan.Matcher.CountMatches(bytes));
-        Assert.Equal(scopedPlan.Matcher.SumMatchSpans(bytes), unscopedPlan.Matcher.SumMatchSpans(bytes));
+        Assert.AreSequenceEqual(expected, FindAll(unscopedPlan, bytes));
+        Assert.AreSequenceEqual(expected, FindAll(scopedPlan, bytes));
+        Assert.AreEqual(scopedPlan.Matcher.CountMatches(bytes), unscopedPlan.Matcher.CountMatches(bytes));
+        Assert.AreEqual(scopedPlan.Matcher.SumMatchSpans(bytes), unscopedPlan.Matcher.SumMatchSpans(bytes));
     }
 
     private static RegexSearchPlan CreatePlan(
