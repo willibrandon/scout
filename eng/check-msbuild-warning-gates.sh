@@ -62,11 +62,6 @@ json_item_full_paths() {
 normalize_json_path() {
     path="$1"
     unescaped="$(printf '%s' "$path" | sed 's/\\\\/\\/g')"
-    if [ -f "$unescaped" ]; then
-        printf '%s\n' "$unescaped"
-        return
-    fi
-
     if command -v cygpath >/dev/null 2>&1; then
         converted="$(cygpath -u "$unescaped" 2>/dev/null || true)"
         if [ -n "$converted" ]; then
