@@ -14,6 +14,8 @@ public sealed class MixedAlternationThroughputTests()
     [Fact(Timeout = 5000)]
     public void BuildSearchResultUsesWholeBufferMixedAlternationCandidates()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string Pattern =
             "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
         byte[][] patterns = [Encoding.UTF8.GetBytes(Pattern)];
@@ -26,14 +28,17 @@ public sealed class MixedAlternationThroughputTests()
             offset < haystack.Length - matchingLine.Length;
             offset += unrelatedLine.Length)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             unrelatedLine.CopyTo(haystack, offset);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         matchingLine.CopyTo(haystack, haystack.Length - matchingLine.Length);
         var regexPlan = RegexSearchPlan.Create(
             patterns,
             asciiCaseInsensitive: false);
 
+        cancellationToken.ThrowIfCancellationRequested();
         ContextSearchResult result = ContextSearchOperations.BuildSearchResult(
             haystack,
             patterns,
@@ -46,6 +51,7 @@ public sealed class MixedAlternationThroughputTests()
             stopOnNonmatch: false,
             regexPlan);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(350_001, result.Lines.Count);
         Assert.DoesNotContain(
             result.Lines.Take(350_000),
@@ -60,6 +66,8 @@ public sealed class MixedAlternationThroughputTests()
     [Fact(Timeout = 5000)]
     public void SearchMixedAlternationUsesConservativeCandidatesWithAuthoritativeVerification()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const string pattern =
             "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
         byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
@@ -68,15 +76,18 @@ public sealed class MixedAlternationThroughputTests()
         byte[] haystack = new byte[(unrelatedLine.Length * 350_000) + matchingLine.Length];
         for (int offset = 0; offset < haystack.Length - matchingLine.Length; offset += unrelatedLine.Length)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             unrelatedLine.CopyTo(haystack, offset);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         matchingLine.CopyTo(haystack, haystack.Length - matchingLine.Length);
         RegexSearchPlan plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
             asciiCaseInsensitive: false);
         var sink = new CapturingMatchLineSink();
 
+        cancellationToken.ThrowIfCancellationRequested();
         bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
             haystack,
             patterns,
@@ -95,6 +106,7 @@ public sealed class MixedAlternationThroughputTests()
             out long matchingLines,
             out long matches);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
         Assert.True(matched);
         Assert.Equal(1UL, sink.Matches);
@@ -103,6 +115,7 @@ public sealed class MixedAlternationThroughputTests()
         Assert.Equal(1, matchingLines);
         Assert.Equal(1, matches);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var rejectedSink = new CapturingMatchLineSink();
         Assert.False(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
             "CreateButNotAhoCorasick\n"u8,

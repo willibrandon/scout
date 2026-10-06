@@ -468,20 +468,25 @@ public sealed class ByteRegexInvalidUtf8Tests
     [InlineData(ByteRegexEngineMode.AutomataOnly)]
     public void AggregateAllocationsDoNotScaleWithInputLength(ByteRegexEngineMode engineMode)
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         byte[] small = CreateSparseInvalidInput(InvalidByteStride);
         byte[] large = CreateSparseInvalidInput(LargeAllocationInputLength);
         var regex = ByteRegex.Compile(@"\u{FFFD}", CreateOptions(engineMode));
 
+        cancellationToken.ThrowIfCancellationRequested();
         _ = MeasureCountAllocations(regex, small);
         _ = MeasureCountAllocations(regex, large);
         _ = MeasureIterationAllocations(regex, small);
         _ = MeasureIterationAllocations(regex, large);
 
+        cancellationToken.ThrowIfCancellationRequested();
         (long smallCount, long smallCountBytes) = MeasureCountAllocations(regex, small);
         (long largeCount, long largeCountBytes) = MeasureCountAllocations(regex, large);
         (long smallIterationCount, long smallIterationBytes) = MeasureIterationAllocations(regex, small);
         (long largeIterationCount, long largeIterationBytes) = MeasureIterationAllocations(regex, large);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(1, smallCount);
         Assert.Equal(LargeAllocationInputLength / InvalidByteStride, largeCount);
         Assert.Equal(smallCount, smallIterationCount);

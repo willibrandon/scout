@@ -271,7 +271,7 @@ scan_repository_suppression_files() {
     : > "$suppression_scan_output"
 
     find "$ROOT" \
-        \( -path "$ROOT/.git" -o -path "$ROOT/.git/*" -o -path "*/bin" -o -path "*/bin/*" \) -prune -o \
+        \( -path "$ROOT/.git" -o -path "$ROOT/.git/*" -o -path "*/bin" -o -path "*/bin/*" -o -path "*/obj" -o -path "*/obj/*" \) -prune -o \
         \( -name '*.cs' -o -name '*.props' -o -name '*.targets' -o -name '.editorconfig' -o -name '.globalconfig' -o -name 'GlobalSuppressions.cs' \) \
         -type f -print | sort | while IFS= read -r file; do
             relative="$(relative_path "$file")"

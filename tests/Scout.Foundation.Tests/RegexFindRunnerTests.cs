@@ -227,6 +227,8 @@ public sealed class RegexFindRunnerTests
     [Fact(Timeout = 30_000)]
     public void DenseAsciiMatchLineOutputCompletesWithinLinearWorkBudget()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const int RecordCount = 512 * 1_024;
         byte[] pattern = @"x[a-z]{50,1000}"u8.ToArray();
         byte[][] patterns = [pattern];
@@ -236,9 +238,11 @@ public sealed class RegexFindRunnerTests
         byte[] haystack = GC.AllocateUninitializedArray<byte>(record.Length * RecordCount);
         for (int offset = 0; offset < haystack.Length; offset += record.Length)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             record.CopyTo(haystack, offset);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var sink = new CapturingMatchLineSink();
         bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
             haystack,
@@ -246,6 +250,7 @@ public sealed class RegexFindRunnerTests
             plan,
             ref sink);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.True(matched);
         Assert.Equal((ulong)RecordCount, sink.Matches);
     }
@@ -393,6 +398,8 @@ public sealed class RegexFindRunnerTests
     [Fact(Timeout = 30_000)]
     public async Task ConcurrentFirstUsePublishesAsciiFastUnanchoredDfaPoolAsync()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const int OperationCount = 4;
         byte[] pattern = @"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray();
         RegexSearchPlan plan = CompileAsciiProjectedSearchPlan(pattern);
@@ -408,13 +415,14 @@ public sealed class RegexFindRunnerTests
             .Select(_ => Task.Run(() =>
             {
                 using RegexFindRunner runner = plan.Matcher.RentFindRunner();
-                if (!barrier.SignalAndWait(TimeSpan.FromSeconds(30)))
+                if (!barrier.SignalAndWait(TimeSpan.FromSeconds(30), cancellationToken))
                 {
                     throw new TimeoutException("Concurrent ASCII runner synchronization timed out.");
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 return runner.Find(haystack, startAt: 0);
-            }))
+            }, cancellationToken))
             .ToArray();
 
         RegexMatch?[] results = await Task.WhenAll(searches).ConfigureAwait(true);
@@ -461,6 +469,8 @@ public sealed class RegexFindRunnerTests
     [Fact(Timeout = 30_000)]
     public async Task ConcurrentFirstUsePublishesPrimaryUnanchoredDfaPoolAsync()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         const int OperationCount = 4;
         byte[] pattern = @"x.{50,1000}"u8.ToArray();
         RegexSearchPlan plan = CompileAsciiProjectedSearchPlan(pattern);
@@ -477,13 +487,14 @@ public sealed class RegexFindRunnerTests
             .Select(_ => Task.Run(() =>
             {
                 using RegexFindRunner runner = plan.Matcher.RentFindRunner();
-                if (!barrier.SignalAndWait(TimeSpan.FromSeconds(30)))
+                if (!barrier.SignalAndWait(TimeSpan.FromSeconds(30), cancellationToken))
                 {
                     throw new TimeoutException("Concurrent primary runner synchronization timed out.");
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 return runner.Find(haystack, startAt: 0);
-            }))
+            }, cancellationToken))
             .ToArray();
 
         RegexMatch?[] results = await Task.WhenAll(searches).ConfigureAwait(true);

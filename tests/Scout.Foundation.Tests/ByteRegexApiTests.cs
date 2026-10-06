@@ -126,13 +126,17 @@ public sealed class ByteRegexApiTests
     [Fact(Timeout = BoundedAssignmentSearchTimeoutMilliseconds)]
     public void FindsBoundedAssignmentCapturesWithoutStalling()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(BoundedAssignmentPattern);
         byte[] positive = Encoding.UTF8.GetBytes("adafruit_api_key = abc123def456ghi789jkl012mno345pq\n");
         byte[] negative = Encoding.UTF8.GetBytes("regex = '''(?i)[\\\\w.-]{0,50}?(?:adafruit)(?:[ \\\\t\\\\w.-]{0,20})''' keywords = [\"adafruit\"]");
 
+        cancellationToken.ThrowIfCancellationRequested();
         ByteRegexMatch? match = regex.Find(positive);
         ByteRegexCaptures? captures = regex.FindCaptures(positive);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.True(match.HasValue);
         Assert.NotNull(captures);
         Assert.Equal(match.Value, captures.Match);
@@ -150,9 +154,12 @@ public sealed class ByteRegexApiTests
     [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
     public void RejectsManyRepeatedBoundedAssignmentCandidatesWithoutRescanning()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(RepeatedBoundedAssignmentPattern);
         byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentStressCandidateCount);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Null(regex.Find(input));
     }
 
@@ -165,12 +172,15 @@ public sealed class ByteRegexApiTests
     [InlineData(ByteRegexEngineMode.AutomataOnly)]
     public void RejectsRepeatedBoundedAssignmentCandidatesAcrossEngineModes(ByteRegexEngineMode engineMode)
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
             new ByteRegexOptions { EngineMode = engineMode });
         byte[] terminalMatch = Encoding.UTF8.GetBytes("bitbucket = abc123def456ghi789jkl012mno345pq");
         byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentCandidateCount);
 
+        cancellationToken.ThrowIfCancellationRequested();
         ByteRegexCaptures? captures = regex.FindCaptures(terminalMatch);
         Assert.NotNull(captures);
         Assert.Equal(new ByteRegexMatch(0, terminalMatch.Length), captures.Match);
@@ -192,6 +202,8 @@ public sealed class ByteRegexApiTests
     [InlineData(ByteRegexEngineMode.AutomataOnly)]
     public void ReusesScratchForRepeatedBoundedAssignmentSearches(ByteRegexEngineMode engineMode)
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
             new ByteRegexOptions { EngineMode = engineMode });
@@ -199,14 +211,17 @@ public sealed class ByteRegexApiTests
         Assert.Null(regex.Find(input));
         Assert.Null(regex.FindCaptures(input));
 
+        cancellationToken.ThrowIfCancellationRequested();
         long findBefore = GC.GetAllocatedBytesForCurrentThread();
         ByteRegexMatch? match = regex.Find(input);
         long findAllocated = GC.GetAllocatedBytesForCurrentThread() - findBefore;
 
+        cancellationToken.ThrowIfCancellationRequested();
         long capturesBefore = GC.GetAllocatedBytesForCurrentThread();
         ByteRegexCaptures? captures = regex.FindCaptures(input);
         long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Null(match);
         Assert.Null(captures);
         Assert.InRange(findAllocated, 0, RepeatedBoundedAssignmentAllocationLimit);
@@ -347,12 +362,15 @@ public sealed class ByteRegexApiTests
     [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
     public void SharedBoundedAssignmentRegexRejectsCandidatesFromMultipleThreads()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             RepeatedBoundedAssignmentPattern,
             new ByteRegexOptions { EngineMode = ByteRegexEngineMode.AutomataOnly });
         byte[] input = CreateRepeatedBoundedAssignmentInput(16);
 
-        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        cancellationToken.ThrowIfCancellationRequested();
+        Parallel.For(0, ConcurrentSearchIterations, new ParallelOptions { CancellationToken = cancellationToken }, _ =>
         {
             Assert.Null(regex.Find(input));
             Assert.False(regex.IsMatch(input));

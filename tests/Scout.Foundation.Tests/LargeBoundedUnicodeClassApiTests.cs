@@ -19,12 +19,15 @@ public sealed class LargeBoundedUnicodeClassApiTests
     [Fact(Timeout = SearchTimeoutMilliseconds)]
     public void RejectsLargeBoundedUnicodeClassCandidatesWithoutStalling()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
             new ByteRegexOptions { EngineMode = ByteRegexEngineMode.AutomataOnly });
         byte[] input = Encoding.UTF8.GetBytes(string.Concat(
             Enumerable.Repeat(Pattern + "\n", CandidateCount)));
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Null(regex.Find(input));
     }
 }

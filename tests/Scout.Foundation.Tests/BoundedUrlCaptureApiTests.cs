@@ -25,23 +25,29 @@ public sealed class BoundedUrlCaptureApiTests()
     [InlineData(ByteRegexEngineMode.AutomataOnly)]
     public void ReusesCaptureStateForBoundedUrlMatch(ByteRegexEngineMode engineMode)
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
             new ByteRegexOptions { EngineMode = engineMode });
         byte[] input = Encoding.UTF8.GetBytes(Input);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(104, input.Length);
         Assert.Equal(new ByteRegexMatch(14, 90), regex.Find(input));
         AssertBoundedUrlCaptures(regex.FindCaptures(input), input);
 
+        cancellationToken.ThrowIfCancellationRequested();
         long findBefore = GC.GetAllocatedBytesForCurrentThread();
         ByteRegexMatch? match = regex.Find(input);
         long findAllocated = GC.GetAllocatedBytesForCurrentThread() - findBefore;
 
+        cancellationToken.ThrowIfCancellationRequested();
         long capturesBefore = GC.GetAllocatedBytesForCurrentThread();
         ByteRegexCaptures? captures = regex.FindCaptures(input);
         long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(new ByteRegexMatch(14, 90), match);
         AssertBoundedUrlCaptures(captures, input);
         Assert.InRange(findAllocated, 0, CaptureAllocationLimit);

@@ -724,6 +724,30 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the build scans repository sources without applying source policy to build outputs.
+    /// </summary>
+    [Fact]
+    public void MsBuildSuppressionScanExcludesBuildOutputs()
+    {
+        string root = FindRepositoryRoot();
+        (int exitCode, string output, string error) = RunProcess("dotnet", [
+            "msbuild",
+            Path.Join(root, "src", "Scout.Regex", "Scout.Regex.csproj"),
+            "-nologo",
+            "-getItem:ScoutSuppressionScanFile",
+        ]);
+
+        Assert.True(exitCode == 0, output + error);
+        using var document = JsonDocument.Parse(output);
+        string[] paths = document.RootElement.GetProperty("Items").GetProperty("ScoutSuppressionScanFile")
+            .EnumerateArray().Select(item => Path.GetRelativePath(root, item.GetProperty("FullPath").GetString()!)).ToArray();
+
+        Assert.Contains(Path.Join("src", "Scout.Regex", "RegexMatcher.cs"), paths);
+        Assert.Contains("Directory.Build.props", paths);
+        Assert.DoesNotContain(paths, static path => ContainsPathSegment(path, "bin") || ContainsPathSegment(path, "obj"));
+    }
+
+    /// <summary>
     /// Verifies Native AOT and trimming policy is explicit instead of SDK-defaulted.
     /// </summary>
     [Fact]
@@ -4459,7 +4483,7 @@ public sealed partial class PinnedConfigurationTests
         foreach (string path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
-            if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, ".git"))
+            if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, "obj") || ContainsPathSegment(relativePath, ".git"))
             {
                 continue;
             }
