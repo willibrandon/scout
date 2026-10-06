@@ -1073,13 +1073,26 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string sourceGeneratorDirectory = Path.Join(root, "src", "Scout.SourceGen");
-        string project = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "Scout.SourceGen.csproj"));
         string shipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md"));
         string unshipped = File.ReadAllText(Path.Join(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md"));
         string editorConfig = File.ReadAllText(Path.Join(root, ".editorconfig"));
 
-        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Shipped.md\" />", project, StringComparison.Ordinal);
-        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Unshipped.md\" />", project, StringComparison.Ordinal);
+        (int exitCode, string output, string error) = RunProcess("dotnet", [
+            "msbuild",
+            Path.Join(sourceGeneratorDirectory, "Scout.SourceGen.csproj"),
+            "-nologo",
+            "-getItem:AdditionalFiles",
+        ]);
+        Assert.AreEqual(0, exitCode, error);
+        using var document = JsonDocument.Parse(output);
+        string[] releaseFiles = document.RootElement.GetProperty("Items").GetProperty("AdditionalFiles")
+            .EnumerateArray()
+            .Select(static item => item.GetProperty("Identity").GetString())
+            .Where(static identity => identity is "AnalyzerReleases.Shipped.md" or "AnalyzerReleases.Unshipped.md")
+            .Select(static identity => identity!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.AreSequenceEqual<string>(["AnalyzerReleases.Shipped.md", "AnalyzerReleases.Unshipped.md"], releaseFiles);
         Assert.Contains("## Release 0.1.0", shipped, StringComparison.Ordinal);
         Assert.Contains("SCOUT0001 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
         Assert.Contains("SCOUT0002 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
