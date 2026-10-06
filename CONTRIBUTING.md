@@ -156,7 +156,7 @@ Dependabot checks NuGet packages and GitHub Actions weekly.
 
 `Release Gates` are the release contract: pinned ripgrep oracle builds, frozen
 corpora, preflight, full tests, native differentials, native link checks on all
-six release RIDs, and the `hyperfine` performance gate. Tag-based releases then
+seven release RIDs, and the `hyperfine` performance gate. Tag-based releases then
 publish standalone archives, Windows MSIs, the RID-aware .NET tool packages,
 Homebrew, Scoop, and winget metadata.
 

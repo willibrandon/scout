@@ -7,7 +7,7 @@ ignore matching, a parallel filesystem walker, static PCRE2 bindings, and the `s
 tool. The CLI is a ripgrep-compatible reference application and conformance harness for the same
 ported engine and traversal stack, not a wrapper around `rg`.
 
-> **Status:** v0.6.1, tracking ripgrep 15.2.0 (commit `e89fff89ac`). Functional and fully
+> **Status:** v0.7.0, tracking ripgrep 15.2.0 (commit `e89fff89ac`). Functional and fully
 > tested across all seven supported platforms. The release workflow publishes NuGet
 > library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
@@ -81,12 +81,12 @@ also include MSI installers for `win-x64` and `win-arm64`.
 
 ## Building
 
-The managed projects build with the pinned .NET 10 SDK; the `scout` binary additionally needs a C
-toolchain, since the launcher and PCRE2 are compiled and linked per platform.
+The managed projects build with the .NET 10 SDK selected by `global.json`; the `scout` binary
+additionally needs a C toolchain, since the launcher and PCRE2 are compiled and linked per platform.
 
 Prerequisites:
 
-- **.NET SDK 10.0.102** (pinned in `global.json`).
+- **.NET SDK 10** with the feature roll-forward configured in `global.json`.
 - **A C toolchain:** `clang` on Unix; a Visual Studio Developer Command Prompt (`cl.exe`,
   `link.exe`, `lib.exe`) on Windows.
 - **For native differentials on Windows:** MSYS/Git Bash plus the decompression tools installed
