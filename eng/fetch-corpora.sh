@@ -164,7 +164,7 @@ download_file() {
     download_tmp="$download_path.tmp"
     rm -f "$download_tmp"
     printf 'Downloading %s from %s\n' "$download_label" "$download_url" >&2
-    curl -L --fail --retry 3 --output "$download_tmp" "$download_url"
+    curl -L --fail --retry 6 --retry-all-errors --retry-max-time 300 --output "$download_tmp" "$download_url"
     mv "$download_tmp" "$download_path"
 }
 

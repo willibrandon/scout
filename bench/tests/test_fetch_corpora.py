@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import http.server
+import os
+import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -121,6 +125,66 @@ class CorpusArchiveVerificationTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("Verified corpus archive: opensubtitles-en", result.stderr)
         self.assertEqual(corpus, extracted)
+
+    def test_fetch_retries_interrupted_archive_and_decompresses(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        corpus = b"the complete release corpus\n"
+        archive = gzip.compress(corpus)
+        attempts = []
+
+        class ArchiveHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                attempts.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(archive)))
+                self.end_headers()
+                self.wfile.write(archive[:5] if len(attempts) == 1 else archive)
+                self.close_connection = True
+
+            def log_message(self, *_args: object) -> None:
+                pass
+
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), ArchiveHandler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    temporary_root = Path(temporary_directory)
+                    eng = temporary_root / "eng"
+                    tests = temporary_root / "tests"
+                    output = temporary_root / "corpora"
+                    eng.mkdir()
+                    tests.mkdir()
+                    script = (root / "eng" / "fetch-corpora.sh").read_text()
+                    script, replacements = re.subn(
+                        r'^OPENSUBTITLES_URL="[^"\n]+"',
+                        f'OPENSUBTITLES_URL="http://127.0.0.1:{server.server_port}/archive.gz"',
+                        script,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    self.assertEqual(1, replacements)
+                    (eng / "fetch-corpora.sh").write_text(script)
+                    shutil.copy2(root / "eng" / "verify-corpus-archive.sh", eng)
+                    self._write_lock(
+                        tests / "PREREQS.lock", "opensubtitles-en", hashlib.sha256(archive).hexdigest()
+                    )
+                    result = subprocess.run(
+                        [_SH, str(eng / "fetch-corpora.sh"), "--opensubtitles",
+                         "--output-dir", str(output), "--verify-lock"],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        env=os.environ | {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"},
+                    )
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertEqual(2, len(attempts))
+                    self.assertEqual(archive, (output / "opensubtitles" / "en.txt.gz").read_bytes())
+                    self.assertEqual(corpus, (output / "opensubtitles" / "en.txt").read_bytes())
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
 
     def test_release_gate_verifies_root_and_worktree_archives(self) -> None:
         root = Path(__file__).resolve().parents[2]
