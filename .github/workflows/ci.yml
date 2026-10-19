@@ -122,7 +122,7 @@ jobs:
             artifacts/prereqs/linux-musl-arm64
             artifacts/package-consumers/linux-musl-arm64/results.json
       - name: Check Native AOT size
-        uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
+        uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
         with:
           target: artifacts/bin/linux-musl-arm64/scout-real
           baseline-key: scout-linux-musl-arm64
@@ -277,7 +277,7 @@ jobs:
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/linux-arm64/scout --shell bash --shell zsh --shell fish
       - name: Check Native AOT size
-        uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
+        uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
         with:
           target: artifacts/bin/linux-arm64/scout-real
           baseline-key: scout-linux-arm64
@@ -411,7 +411,7 @@ jobs:
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Check Native AOT size
-        uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
+        uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
         with:
           target: artifacts/bin/${{ matrix.rid }}/scout-real
           baseline-key: scout-${{ matrix.rid }}
@@ -450,7 +450,7 @@ jobs:
           if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Check Native AOT size
-        uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
+        uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
         with:
           target: artifacts/bin/${{ matrix.rid }}/scout-real
           baseline-key: scout-${{ matrix.rid }}
@@ -502,7 +502,7 @@ jobs:
       - name: Build and run the Windows differential test host
         run: dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Check Native AOT size
-        uses: willibrandon/dotsider@a7f371e8785ee2820d86c2fe2e9b58fdbdda03a7 # v0.26.2
+        uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
         with:
           target: artifacts/bin/${{ matrix.rid }}/scout.exe
           baseline-key: scout-${{ matrix.rid }}
