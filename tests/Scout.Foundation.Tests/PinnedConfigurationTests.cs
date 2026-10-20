@@ -161,7 +161,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("workflow_run", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("actions: write", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("release gates dispatch", ciWorkflow, StringComparison.Ordinal);
-        Assert.Contains("gh workflow run release-gates.yml --repo \"${{ github.repository }}\" --ref main -f checkout_ref=\"${{ github.sha }}\"", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("gh workflow run release-gates.yml --repo \"${{ github.repository }}\" --ref main -f checkout_ref=\"${{ github.sha }}\" -f dedicated=\"${{ needs.runners.outputs.dedicated }}\"", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("dedicated: ${{ steps.select.outputs.dedicated }}", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("inputs.dedicated == true ||", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("checkout_ref:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u14\"", workflow, StringComparison.Ordinal);

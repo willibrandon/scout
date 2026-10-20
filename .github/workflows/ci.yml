@@ -32,12 +32,14 @@ jobs:
       windows-x64: ${{ steps.select.outputs.windows-x64 }}
       linux-x64: ${{ steps.select.outputs.linux-x64 }}
       oracle-environment: ${{ steps.select.outputs.oracle-environment }}
+      dedicated: ${{ steps.select.outputs.dedicated }}
     steps:
       - name: Route owner-triggered runs to the dedicated runners
         id: select
         env:
           DEDICATED: ${{ github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         run: |
+          printf 'dedicated=%s\n' "$DEDICATED" >> "$GITHUB_OUTPUT"
           if [ "$DEDICATED" = "true" ]; then
             printf '%s\n' macos-arm64=scout-macos-arm64 macos-x64=scout-macos-x64 windows-x64=scout-windows-x64 linux-x64=scout-linux-x64 oracle-environment=local >> "$GITHUB_OUTPUT"
           else
@@ -571,6 +573,7 @@ jobs:
       actions: write
       contents: read
     needs:
+      - runners
       - secret-scan
       - library-packages
       - linux-musl-arm64
@@ -585,4 +588,4 @@ jobs:
       - name: Dispatch Release Gates
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release-gates.yml --repo "${{ github.repository }}" --ref main -f checkout_ref="${{ github.sha }}"
+        run: gh workflow run release-gates.yml --repo "${{ github.repository }}" --ref main -f checkout_ref="${{ github.sha }}" -f dedicated="${{ needs.runners.outputs.dedicated }}"
