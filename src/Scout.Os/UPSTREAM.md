@@ -26,3 +26,9 @@ declarations for the exact OS APIs Scout uses.
 Windows raw standard-input reads follow the .NET runtime console-stream boundary:
 `ERROR_BROKEN_PIPE` and `ERROR_NO_DATA` report pipe EOF after the writer closes.
 Broken downstream output pipes retain their independent graceful-exit handling.
+
+Windows raw standard-output and standard-error writes follow the Rust standard
+library console boundary: a console handle whose output code page is not UTF-8
+receives UTF-16 through `WriteConsoleW`, a multi-byte sequence split across
+writes is held until it completes, and bytes that are not UTF-8 are rejected.
+Pipes, files, and consoles already on the UTF-8 code page keep `WriteFile`.

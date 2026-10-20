@@ -2895,9 +2895,9 @@ public sealed partial class PinnedConfigurationTests
         [
             ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["0f655a20639414497cd4ec5f614c41ee8bf329c2daa0ade0d6ae5e549b9c6f9e"]),
             ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["ade8a304cfcb33d8d2f4a5355d1c078712f8228cf079bc4982c3bb2e6316f885"]),
-            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"]),
+            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c", "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f"]),
             ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", ["9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"]),
-            ("osx-arm64", "lz4", "1.10.0", "/opt/homebrew/bin/lz4", ["583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d"]),
+            ("osx-arm64", "lz4", "1.10.0", "/opt/homebrew/bin/lz4", ["583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d", "eb76fbf9c06be6a02c344bb5624b29fdfee5bb16c97156178be3fe0b3d669a31"]),
             ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["66da7ddde3ab1c9f93d1307bae06086570e3aed3c72827ccef22c251f5b2d874"]),
             ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "dd440e34e25cb641b5db68cf2e14f9d1fef17c61cef984b920b8bc420c09b9dd"]),
             ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "18b3c72a2ade1bf79ffe25299620aa256d17f14e74c8311dec8b984588285176"]),
@@ -2941,8 +2941,9 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
         var expectedMultipleHashTables = new Dictionary<(string Rid, string Environment, string Name), int>
         {
-            [("osx-arm64", "github-actions", "xz")] = 2,
+            [("osx-arm64", "github-actions", "xz")] = 3,
             [("osx-arm64", "github-actions", "zstd")] = 2,
+            [("osx-arm64", "github-actions", "lz4")] = 2,
             [("osx-x64", "github-actions", "gzip")] = 2,
             [("osx-x64", "github-actions", "bzip2")] = 2,
             [("osx-x64", "github-actions", "xz")] = 2,
@@ -3319,7 +3320,7 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.IsGreaterThan(0, assignmentCount);
-        Assert.AreEqual(7, arrayAssignmentCount);
+        Assert.AreEqual(8, arrayAssignmentCount);
         Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 

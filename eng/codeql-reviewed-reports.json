@@ -7,10 +7,11 @@
     ],
     "sources": [
       "src/Scout.App/NativeArgumentReader.cs",
+      "src/Scout.Os/RawStandardStream.cs",
       "src/Scout.Pcre2/Pcre2Library.cs",
       "src/Scout.Pcre2/Pcre2Regex.cs"
     ],
-    "reason": "Scout requires the OS raw-argument boundary and PCRE2 native engine. Replacing these calls with managed alternatives changes its supported behavior."
+    "reason": "Scout requires the OS raw-argument boundary, the raw console-output boundary, and the PCRE2 native engine. Replacing these calls with managed alternatives changes its supported behavior."
   },
   "false_positives": [
     {

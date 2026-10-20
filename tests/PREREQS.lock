@@ -258,7 +258,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "5.8.3"
 path = "/opt/homebrew/bin/xz"
-sha256 = ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"]
+sha256 = ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c", "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f"]
 
 [[tool.macos]]
 name = "zstd"
@@ -274,7 +274,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "1.10.0"
 path = "/opt/homebrew/bin/lz4"
-sha256 = "583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d"
+sha256 = ["583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d", "eb76fbf9c06be6a02c344bb5624b29fdfee5bb16c97156178be3fe0b3d669a31"]
 
 [[tool.macos]]
 name = "brotli"
