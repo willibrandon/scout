@@ -108,7 +108,8 @@ archive for the hosted RID. The performance driver restores the exact locked
 Hyperfine bottle into its private state, fetches the pinned corpora into
 `artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
 before measuring. Cancelled, failed, or stale CI
-completions do not queue release work. It does not require any personal machine,
+completions do not queue release work.
+Runs that are not owner-triggered do not require any personal machine,
 privately managed runner, or repository secret.
 
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
@@ -192,7 +193,9 @@ workload measures general alternation and prefilter behavior, and the
 replacement workload measures the same class of search through capture output.
 All four Linux-tree workloads pass `--threads 3` to both rg and Scout. The fixed
 worker count makes search concurrency identical. The manifest records the host
-hardware and OS build; the hosted `macos-26` result is the release decision.
+hardware and OS build. An owner-triggered run executes on the dedicated
+`scout-macos-arm64` runner and any other actor's run on the GitHub-hosted
+`macos-26` runner; the result of that run is the release decision.
 Tree commands run from the corpus root with `.` as the argument, giving local
 and hosted runs the same output paths.
 
