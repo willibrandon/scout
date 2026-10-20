@@ -160,6 +160,15 @@ seven release RIDs, and the `hyperfine` performance gate. Tag-based releases the
 publish standalone archives, Windows MSIs, the RID-aware .NET tool packages,
 Homebrew, Scoop, and winget metadata.
 
+Each workflow starts with a `runners` job that routes the macOS, Windows x64,
+and Linux x64 container jobs. When the repository owner triggered the run, and
+any rerun, and the pull request comes from this repository, those jobs use the
+dedicated `scout-macos-arm64`, `scout-macos-x64`, `scout-windows-x64`, and
+`scout-linux-x64` runners and read the `local` rows of `tests/PREREQS.lock`.
+Every other run, including Dependabot and forks, stays on GitHub-hosted runners
+with the `github-actions` rows. ARM64 Linux and Windows jobs always use hosted
+runners.
+
 NuGet publishing uses OIDC in the GitHub `release` environment. The NuGet
 trusted publisher policy must allow `willibrandon/scout`, workflow `release.yml`,
 environment `release`, and package patterns `Scout` and `Scout.*`. Set the

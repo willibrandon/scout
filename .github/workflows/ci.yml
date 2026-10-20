@@ -23,6 +23,27 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  runners:
+    name: select runners
+    runs-on: ubuntu-24.04
+    outputs:
+      macos-arm64: ${{ steps.select.outputs.macos-arm64 }}
+      macos-x64: ${{ steps.select.outputs.macos-x64 }}
+      windows-x64: ${{ steps.select.outputs.windows-x64 }}
+      linux-x64: ${{ steps.select.outputs.linux-x64 }}
+      oracle-environment: ${{ steps.select.outputs.oracle-environment }}
+    steps:
+      - name: Route owner-triggered runs to the dedicated runners
+        id: select
+        env:
+          DEDICATED: ${{ github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: |
+          if [ "$DEDICATED" = "true" ]; then
+            printf '%s\n' macos-arm64=scout-macos-arm64 macos-x64=scout-macos-x64 windows-x64=scout-windows-x64 linux-x64=scout-linux-x64 oracle-environment=local >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' macos-arm64=macos-26 macos-x64=macos-26-intel windows-x64=windows-2025-vs2026 linux-x64=ubuntu-24.04 oracle-environment=github-actions >> "$GITHUB_OUTPUT"
+          fi
+
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-24.04
@@ -51,6 +72,7 @@ jobs:
 
   library-packages:
     name: package consumers (${{ matrix.rid }})
+    needs: runners
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
@@ -59,11 +81,20 @@ jobs:
         include:
           - { rid: linux-x64, runner: ubuntu-24.04 }
           - { rid: linux-arm64, runner: ubuntu-24.04-arm }
-          - { rid: osx-x64, runner: macos-26-intel }
-          - { rid: osx-arm64, runner: macos-26 }
-          - { rid: win-x64, runner: windows-2025-vs2026, vsarch: x64 }
+          - { rid: osx-x64, runner: '${{ needs.runners.outputs.macos-x64 }}' }
+          - { rid: osx-arm64, runner: '${{ needs.runners.outputs.macos-arm64 }}' }
+          - { rid: win-x64, runner: '${{ needs.runners.outputs.windows-x64 }}', vsarch: x64 }
           - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
       - name: Use the Windows build drive for NuGet caches
         if: matrix.rid == 'win-x64'
@@ -84,7 +115,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.Tools.ARM64 -requiresAny -property installationPath`) do set "VSINSTALL=%%i"
           if not defined VSINSTALL (
             echo Visual Studio installation not found.
             exit /b 1
@@ -132,6 +163,7 @@ jobs:
 
   portable-build-linux:
     name: portable build (${{ matrix.rid }})
+    needs: runners
     runs-on: ${{ matrix.runner }}
     container:
       image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
@@ -140,7 +172,7 @@ jobs:
       matrix:
         include:
           - rid: linux-x64
-            runner: ubuntu-24.04
+            runner: ${{ needs.runners.outputs.linux-x64 }}
     steps:
       - name: Pinned snapshot apt prerequisites
         shell: sh
@@ -287,20 +319,30 @@ jobs:
 
   portable-build-host:
     name: portable build (${{ matrix.rid }})
+    needs: runners
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - rid: osx-x64
-            runner: macos-26-intel
+            runner: ${{ needs.runners.outputs.macos-x64 }}
           - rid: osx-arm64
-            runner: macos-26
+            runner: ${{ needs.runners.outputs.macos-arm64 }}
           - rid: win-x64
-            runner: windows-2025-vs2026
+            runner: ${{ needs.runners.outputs.windows-x64 }}
           - rid: win-arm64
             runner: windows-11-arm
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
       - name: Use the Windows build drive for NuGet caches
         if: matrix.rid == 'win-x64'
@@ -344,6 +386,7 @@ jobs:
 
   native-linux:
     name: native Unix link (${{ matrix.rid }})
+    needs: runners
     permissions:
       actions: read
       contents: read
@@ -355,7 +398,7 @@ jobs:
       matrix:
         include:
           - rid: linux-x64
-            runner: ubuntu-24.04
+            runner: ${{ needs.runners.outputs.linux-x64 }}
     steps:
       - name: Pinned snapshot apt prerequisites
         shell: sh
@@ -408,7 +451,7 @@ jobs:
       - name: Verify Unix shell completions
         shell: bash
         run: |
-          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          if [ "$(uname -s)" = Darwin ]; then command -v fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Check Native AOT size
         uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
@@ -421,6 +464,7 @@ jobs:
 
   native-macos:
     name: native Unix link (${{ matrix.rid }})
+    needs: runners
     permissions:
       actions: read
       contents: read
@@ -430,9 +474,9 @@ jobs:
       matrix:
         include:
           - rid: osx-x64
-            runner: macos-26-intel
+            runner: ${{ needs.runners.outputs.macos-x64 }}
           - rid: osx-arm64
-            runner: macos-26
+            runner: ${{ needs.runners.outputs.macos-arm64 }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -447,7 +491,7 @@ jobs:
       - name: Verify Unix shell completions
         shell: bash
         run: |
-          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          if [ "$(uname -s)" = Darwin ]; then command -v fish >/dev/null 2>&1 || brew install fish; fi
           python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Check Native AOT size
         uses: willibrandon/dotsider@3559e5b42de5df007328796e63ed1db2fa383ab2 # v0.26.4
@@ -460,6 +504,7 @@ jobs:
 
   native-windows:
     name: native Windows link (${{ matrix.rid }})
+    needs: runners
     permissions:
       actions: read
       contents: read
@@ -469,12 +514,21 @@ jobs:
       matrix:
         include:
           - rid: win-x64
-            runner: windows-2025-vs2026
+            runner: ${{ needs.runners.outputs.windows-x64 }}
             vsarch: amd64
           - rid: win-arm64
             runner: windows-11-arm
             vsarch: arm64
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
       - name: Use the Windows build drive for NuGet caches
         if: matrix.rid == 'win-x64'
@@ -488,7 +542,7 @@ jobs:
       - name: Link native executable
         shell: cmd
         run: |
-          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.Tools.ARM64 -requiresAny -property installationPath`) do set "VSINSTALL=%%i"
           if not defined VSINSTALL (
             echo Visual Studio installation not found.
             exit /b 1
