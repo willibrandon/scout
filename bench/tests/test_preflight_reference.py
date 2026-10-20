@@ -36,7 +36,7 @@ class PreflightReferenceTests(unittest.TestCase):
         (self.root / "eng").mkdir()
         (self.root / "tests").mkdir()
         (self.root / "upstream").mkdir()
-        for helper in ("sha256-set.sh", "read-ripgrep-oracle.sh"):
+        for helper in ("read-ripgrep-oracle.sh",):
             shutil.copyfile(_ROOT / "eng" / helper, self.root / "eng" / helper)
         (self.root / "native").mkdir()
         shutil.copyfile(

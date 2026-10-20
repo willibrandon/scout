@@ -154,7 +154,7 @@ class PerformanceEnvironmentTests(unittest.TestCase):
             [
                 _SH,
                 "-c",
-                '. "$1"; exec_clean_performance_gate "github-actions" "$2" -c env',
+                '. "$1"; exec_clean_performance_gate "$2" -c env',
                 "sh",
                 str(self._helper()),
                 _SH,

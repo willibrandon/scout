@@ -124,7 +124,6 @@ class PerformanceProcessStateTests(unittest.TestCase):
                 f"OUT_DIR={shlex.quote(temporary_directory)}\n"
                 f"PYTHON={shlex.quote(sys.executable)}\n"
                 "HOST_ORACLE_ENVIRONMENT=github-actions\n"
-                "HOST_TOOL_ENVIRONMENT=github-actions\n"
                 "WORKLOAD=\nGATE_GENERATED_THREADS=1\nGATE_LARGE_FILE_THREADS=4\nGATE_TREE_THREADS=3\n"
                 "OPENSUBTITLES_WARMUP=6\nOPENSUBTITLES_RUNS=6\n"
                 "TREE_WARMUP=6\nTREE_RUNS=6\nCOLD_WARMUP=6\nCOLD_RUNS=6\n"

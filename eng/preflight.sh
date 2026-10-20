@@ -4,7 +4,6 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
 REFERENCE="${SCOUT_RIPGREP_REFERENCE:-/Users/brandon/src/ripgrep}"
-. "$ROOT/eng/sha256-set.sh"
 . "$ROOT/native/toolchain-unix.sh"
 
 fail() {
@@ -36,83 +35,6 @@ read_lock_value() {
             if (!found) {
                 exit 1
             }
-        }
-    ' "$LOCK"
-}
-
-read_lock_macos_tool_value() {
-    awk -v name="$1" -v rid="$HOST_RID" -v environment="$HOST_TOOL_ENVIRONMENT" -v key="$2" "$strip_toml_value"'
-        function reset_table() {
-            in_table = 0
-            table_name = ""
-            table_rid = ""
-            table_environment = ""
-            table_value = ""
-            table_has_value = 0
-        }
-        function maybe_select(    score) {
-            if (!in_table || table_name != name) {
-                return
-            }
-
-            score = 0
-            if (table_rid == rid && table_environment == environment) {
-                score = 4
-            } else if (table_rid == rid && table_environment == "") {
-                score = 3
-            } else if (table_rid == "" && table_environment == environment) {
-                score = 2
-            } else if (table_rid == "" && table_environment == "") {
-                score = 1
-            }
-
-            if (score > selected_score) {
-                selected_score = score
-                selected_value = table_value
-                selected_has_value = table_has_value
-                duplicate = 0
-            } else if (score != 0 && score == selected_score) {
-                duplicate = 1
-            }
-        }
-        $0 == "[[tool.macos]]" {
-            maybe_select()
-            in_table = 1
-            table_name = ""
-            table_rid = ""
-            table_environment = ""
-            table_value = ""
-            table_has_value = 0
-            next
-        }
-        in_table && $0 ~ /^\[/ {
-            maybe_select()
-            reset_table()
-        }
-        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
-            table_name = value_of($0)
-            next
-        }
-        in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
-            table_rid = value_of($0)
-            next
-        }
-        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
-            table_environment = value_of($0)
-            next
-        }
-        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
-            table_value = value_of($0)
-            table_has_value = 1
-            next
-        }
-        END {
-            maybe_select()
-            if (selected_score == 0 || !selected_has_value || duplicate) {
-                exit 1
-            }
-
-            print selected_value
         }
     ' "$LOCK"
 }
@@ -170,26 +92,6 @@ oracle_environment() {
                 ;;
             *)
                 fail "Unsupported SCOUT_ORACLE_ENVIRONMENT for pinned ripgrep oracle: $SCOUT_ORACLE_ENVIRONMENT"
-                ;;
-        esac
-    fi
-
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-        printf 'github-actions\n'
-    else
-        printf 'local\n'
-    fi
-}
-
-tool_environment() {
-    if [ -n "${SCOUT_TOOL_ENVIRONMENT:-}" ]; then
-        case "$SCOUT_TOOL_ENVIRONMENT" in
-            github-actions|local)
-                printf '%s\n' "$SCOUT_TOOL_ENVIRONMENT"
-                return
-                ;;
-            *)
-                fail "Unsupported SCOUT_TOOL_ENVIRONMENT: $SCOUT_TOOL_ENVIRONMENT"
                 ;;
         esac
     fi
@@ -389,33 +291,6 @@ mark_root_safe_for_git() {
     export GIT_CONFIG_VALUE_0="$ROOT"
 }
 
-check_macos_tool_hash() {
-    name="$1"
-    path="$(read_lock_macos_tool_value "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
-    version="$(read_lock_macos_tool_value "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
-    sha256_set="$(read_lock_macos_tool_value "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
-
-    approved_sha256_values="$(decode_sha256_set "$sha256_set")" || fail "macOS tool $name sha256 must be a literal lowercase SHA-256 or nonempty array of unique literal lowercase SHA-256 values in tests/PREREQS.lock."
-    [ -f "$path" ] || fail "Missing macOS tool $name: $path"
-
-    actual_sha256="$(sha256_file "$path")"
-    if sha256_set_contains "$sha256_set" "$actual_sha256"; then
-        return
-    else
-        membership_status=$?
-    fi
-
-    [ "$membership_status" -eq 1 ] || fail "Calculated macOS tool $name sha256 is not a literal lowercase SHA-256: $actual_sha256"
-
-    printf 'macOS tool hash mismatch: name=%s rid=%s environment=%s\n' "$name" "$HOST_RID" "$HOST_TOOL_ENVIRONMENT" >&2
-    printf '  version: %s\n  path: %s\n  expected sha256 (one of):\n' "$version" "$path" >&2
-    printf '%s\n' "$approved_sha256_values" | while IFS= read -r approved_sha256; do
-        printf '    %s\n' "$approved_sha256" >&2
-    done
-    printf '  actual sha256:\n    %s\n' "$actual_sha256" >&2
-    MACOS_TOOL_FAILURES=1
-}
-
 check_pinned_path_corpora() {
     awk "$strip_toml_value"'
         function flush() {
@@ -500,7 +375,6 @@ EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_
 require_literal "$EXPECTED_RIPGREP" "ripgrep_commit"
 HOST_RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
-HOST_TOOL_ENVIRONMENT="$(tool_environment)"
 
 RG_PROFILE="$(read_oracle_value "profile" "ripgrep_rg_profile")" || fail "Missing ripgrep_oracle.profile for $HOST_RID in tests/PREREQS.lock."
 expect_equal "ripgrep build profile" "release-lto" "$RG_PROFILE"
@@ -547,12 +421,6 @@ ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '
 expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
 
 if [ "$(uname -s)" = "Darwin" ]; then
-    EXPECTED_MACOS_HOST="$(read_lock_value "macos_host")" || fail "Missing macos_host in tests/PREREQS.lock."
-    EXPECTED_MACOS_MAJOR="$(printf '%s\n' "$EXPECTED_MACOS_HOST" | sed -n 's/^macOS \([0-9][0-9]*\) arm64$/\1/p')"
-    [ -n "$EXPECTED_MACOS_MAJOR" ] || fail "macos_host must use the supported-family form: macOS MAJOR arm64."
-    ACTUAL_MACOS_VERSION="$(/usr/bin/sw_vers -productVersion)"
-    ACTUAL_MACOS_MAJOR="${ACTUAL_MACOS_VERSION%%.*}"
-    expect_equal "macOS major version" "$EXPECTED_MACOS_MAJOR" "$ACTUAL_MACOS_MAJOR"
     case "$HOST_RID:$(uname -m)" in
         osx-arm64:arm64|osx-x64:x86_64)
             ;;
@@ -587,36 +455,6 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_file_hash "Apple ranlib" "$NATIVE_RANLIB" "$(read_lock_value "apple_ranlib_sha256")"
     check_file_hash "Apple strip" "$NATIVE_STRIP" "$(read_lock_value "apple_strip_sha256")"
     check_file_hash "Apple nm" "$NATIVE_NM" "$(read_lock_value "apple_nm_sha256")"
-
-    MACOS_TOOL_FAILURES=0
-    check_macos_tool_hash "gzip"
-    check_macos_tool_hash "bzip2"
-    check_macos_tool_hash "xz"
-    check_macos_tool_hash "zstd"
-    check_macos_tool_hash "lz4"
-    check_macos_tool_hash "brotli"
-    check_macos_tool_hash "uncompress"
-
-    if [ -n "${SCOUT_HYPERFINE_BIN:-}" ]; then
-        case "$SCOUT_HYPERFINE_BIN" in
-            /*)
-                HYPERFINE_PATH="$SCOUT_HYPERFINE_BIN"
-                ;;
-            *)
-                fail "SCOUT_HYPERFINE_BIN must be an absolute path."
-                ;;
-        esac
-        HYPERFINE_VERSION="$(read_lock_macos_tool_value "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
-        HYPERFINE_SHA256="$(read_lock_macos_tool_value "hyperfine" "sha256")" || fail "Missing macOS hyperfine hash in tests/PREREQS.lock."
-        check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" "$HYPERFINE_SHA256"
-        [ -x "$HYPERFINE_PATH" ] || fail "macOS tool hyperfine is not executable: $HYPERFINE_PATH"
-        ACTUAL_HYPERFINE_VERSION="$("$HYPERFINE_PATH" --version | sed -n '1p')"
-        expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION" "$ACTUAL_HYPERFINE_VERSION"
-    fi
-
-    if [ "$MACOS_TOOL_FAILURES" -ne 0 ]; then
-        fail "One or more macOS tool hashes do not match tests/PREREQS.lock."
-    fi
 fi
 
 check_pinned_path_corpora

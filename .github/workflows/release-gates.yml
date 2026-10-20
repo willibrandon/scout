@@ -74,7 +74,6 @@ jobs:
       - name: Restore release reference
         env:
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
-          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/restore-ripgrep-oracle.sh
       - name: Verify output and measure compilation and traversal
         env:
@@ -281,6 +280,8 @@ jobs:
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    env:
+      SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
     strategy:
       fail-fast: false
       matrix:
@@ -305,7 +306,6 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
-          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/restore-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
@@ -316,7 +316,6 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
-          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/preflight.sh
       - name: Test
         run: dotnet test --solution Scout.slnx --no-restore
@@ -338,6 +337,8 @@ jobs:
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    env:
+      SCOUT_ORACLE_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
     strategy:
       fail-fast: false
       matrix:
@@ -391,7 +392,6 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
-          SCOUT_TOOL_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
         run: eng/preflight.sh
       - name: Test
         run: dotnet test --solution Scout.slnx --no-restore
@@ -409,11 +409,12 @@ jobs:
       - name: Record performance checkout
         id: performance-checkout
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install hyperfine
+        run: command -v hyperfine >/dev/null 2>&1 || brew install hyperfine
       - name: Run performance gate
         run: bench/run-hyperfine.sh --gate
         env:
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
-          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
       - name: Upload hyperfine gate aggregates
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
