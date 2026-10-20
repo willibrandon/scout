@@ -112,6 +112,30 @@ public sealed class ByteRegexSet
     }
 
     /// <summary>
+    /// Enumerates all non-overlapping set matches in an input at or after a byte offset.
+    /// </summary>
+    /// <param name="input">The input bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>An enumerator for use in a <see langword="foreach" /> statement.</returns>
+    public ByteRegexSetMatchEnumerator EnumerateMatches(ReadOnlySpan<byte> input, int startAt = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(startAt);
+        return new ByteRegexSetMatchEnumerator(patternSet, input, startAt);
+    }
+
+    /// <summary>
+    /// Enumerates all non-overlapping set matches in an input at or after a byte offset as whole-pattern captures.
+    /// </summary>
+    /// <param name="input">The input bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>An enumerator for use in a <see langword="foreach" /> statement.</returns>
+    public ByteRegexSetCapturesEnumerator EnumerateCaptures(ReadOnlySpan<byte> input, int startAt = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(startAt);
+        return new ByteRegexSetCapturesEnumerator(patternSet, input, startAt);
+    }
+
+    /// <summary>
     /// Finds the first whole-pattern capture synthesized by the set.
     /// </summary>
     /// <param name="input">The input bytes.</param>

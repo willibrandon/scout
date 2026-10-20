@@ -11,6 +11,15 @@ ByteRegexCaptures? captures = regex.FindCaptures(data);
 
 The engine is backed by Scout's automata implementation and is designed for Native AOT, trimming, and linear-time search.
 
+Enumerate every non-overlapping match, or every match with its capture groups, with `foreach`. Empty matches are stepped over the way Rust's `find_iter` steps over them, and `ByteRegexSet` offers the same pair of enumerators:
+
+```csharp
+foreach (ByteRegexMatch match in regex.EnumerateMatches(data))
+{
+    // match.Start and match.Length index into data.
+}
+```
+
 Compiled `ByteRegex` and `ByteRegexSet` instances are safe to share across threads for matching. Callback state passed to iteration APIs remains caller-owned.
 
 Unanchored searches use leftmost-first semantics: the earliest possible start is selected before greedy or lazy repetition determines the preferred match at that start. Match and capture offsets remain consistent across PikeVM and DFA execution.

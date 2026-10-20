@@ -36,11 +36,30 @@ ByteRegex regex = ByteRegex.Compile(@"error:\s+([A-Z0-9_]+)", options);
 
 Set `MatchInvalidUtf8 = true` when Unicode scalar operations should treat each malformed or truncated UTF-8 byte as one `U+FFFD`, following Go's byte-regexp behavior. The default remains ripgrep-compatible. Matches and captures always retain offsets into the original bytes; valid encoded `U+FFFD` remains three bytes, and raw byte mode is unchanged.
 
-`ByteRegexSet` compiles ordered multi-pattern searches:
+Enumerate every non-overlapping match, or every match with its capture groups, with `foreach`. Both enumerators step over empty matches the way Rust's `find_iter` does: a search resumes at the end of the previous match, and an empty match ending there is skipped by moving one byte forward.
+
+```csharp
+foreach (ByteRegexMatch match in regex.EnumerateMatches(data))
+{
+    // match.Start and match.Length index into data.
+}
+
+foreach (ByteRegexCaptures captures in regex.EnumerateCaptures(data))
+{
+    ByteRegexMatch? status = captures.GetGroup(1);
+}
+```
+
+`ByteRegexSet` compiles ordered multi-pattern searches and offers the same pair of enumerators, yielding `ByteRegexSetMatch` with the pattern identifier:
 
 ```csharp
 ByteRegexSet set = ByteRegexSet.Compile(["struct", "enum", "union"]);
 ByteRegexSetMatch? match = set.Find(data);
+
+foreach (ByteRegexSetMatch each in set.EnumerateMatches(data))
+{
+    // each.PatternId and each.Match
+}
 ```
 
 Compiled `ByteRegex`, `ByteRegexSet`, `RegexAutomaton`, and `PatternSet` instances are safe to share across threads for matching. Callback state passed to iteration APIs remains caller-owned.

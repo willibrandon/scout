@@ -111,6 +111,30 @@ public sealed class ByteRegex
     }
 
     /// <summary>
+    /// Enumerates all non-overlapping matches in an input at or after a byte offset.
+    /// </summary>
+    /// <param name="input">The input bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>An enumerator for use in a <see langword="foreach" /> statement.</returns>
+    public ByteRegexMatchEnumerator EnumerateMatches(ReadOnlySpan<byte> input, int startAt = 0)
+    {
+        ThrowIfNegative(startAt);
+        return new ByteRegexMatchEnumerator(_automaton, input, startAt);
+    }
+
+    /// <summary>
+    /// Enumerates all non-overlapping matches in an input at or after a byte offset together with their capture groups.
+    /// </summary>
+    /// <param name="input">The input bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>An enumerator for use in a <see langword="foreach" /> statement.</returns>
+    public ByteRegexCapturesEnumerator EnumerateCaptures(ReadOnlySpan<byte> input, int startAt = 0)
+    {
+        ThrowIfNegative(startAt);
+        return new ByteRegexCapturesEnumerator(_automaton, input, startAt);
+    }
+
+    /// <summary>
     /// Iterates all non-overlapping matches in an input.
     /// </summary>
     /// <typeparam name="TState">The caller-owned state type.</typeparam>
