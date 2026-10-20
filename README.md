@@ -7,7 +7,7 @@ ignore matching, a parallel filesystem walker, static PCRE2 bindings, and the `s
 tool. The CLI is a ripgrep-compatible reference application and conformance harness for the same
 ported engine and traversal stack, not a wrapper around `rg`.
 
-> **Status:** v0.7.0, tracking ripgrep 15.2.0 (commit `e89fff89ac`). Functional and fully
+> **Status:** v0.8.0, tracking ripgrep 15.2.0 (commit `e89fff89ac`). Functional and fully
 > tested across all seven supported platforms. The release workflow publishes NuGet
 > library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
