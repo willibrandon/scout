@@ -386,6 +386,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("tool_environment()", preflight, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/setup-python@", workflow, StringComparison.Ordinal);
+        Assert.Contains("run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\\Program Files\\Git\\bin'", workflow, StringComparison.Ordinal);
         Assert.Contains("timeout-minutes: 30", workflow, StringComparison.Ordinal);
         Assert.Contains("win-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);

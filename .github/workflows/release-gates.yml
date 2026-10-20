@@ -104,6 +104,15 @@ jobs:
           - { rid: win-x64, runner: '${{ needs.runners.outputs.windows-x64 }}', vsarch: x64 }
           - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
@@ -300,6 +309,7 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/preflight.sh
       - name: Test
         run: dotnet test --solution Scout.slnx --no-restore
@@ -330,6 +340,15 @@ jobs:
           - rid: win-arm64
             runner: windows-11-arm
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
@@ -365,6 +384,7 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
+          SCOUT_TOOL_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
         run: eng/preflight.sh
       - name: Test
         run: dotnet test --solution Scout.slnx --no-restore
@@ -538,6 +558,15 @@ jobs:
             runner: windows-11-arm
             vsarch: arm64
     steps:
+      - name: Put Git Bash ahead of WSL on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\Program Files\Git\bin'
+      - name: Install Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
