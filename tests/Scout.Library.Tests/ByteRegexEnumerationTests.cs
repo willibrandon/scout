@@ -47,10 +47,11 @@ public sealed class ByteRegexEnumerationTests
     public void EnumeratorsAgreeWithCallbackIteration(string pattern, string input)
     {
         byte[] haystack = Encoding.UTF8.GetBytes(input);
+        var reported = new StringBuilder();
         foreach (ByteRegexEngineMode mode in Enum.GetValues<ByteRegexEngineMode>())
         {
             var regex = ByteRegex.Compile(pattern, new ByteRegexOptions { EngineMode = mode });
-            var reported = new StringBuilder();
+            reported.Clear();
             int count = regex.ForEachMatch(haystack, ref reported, AppendSpan);
 
             Assert.AreEqual(reported.ToString(), Spans(regex, haystack), $"matches for {pattern} in {mode}.");
