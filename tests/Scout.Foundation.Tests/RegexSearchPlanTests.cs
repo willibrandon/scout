@@ -401,9 +401,8 @@ public sealed class RegexSearchPlanTests
         byte[][] patterns = [@"\w{5}\s+\w{5}\s+\w{5}"u8.ToArray()];
         _ = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        RegexSearchPlan? plan = null;
+        long allocated = AllocationMeter.Measure(() => plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false));
 
         Assert.IsNotNull(plan);
         Assert.IsInRange(0, AllocationLimit, allocated);

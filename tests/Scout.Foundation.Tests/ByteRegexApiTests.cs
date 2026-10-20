@@ -218,14 +218,12 @@ public sealed class ByteRegexApiTests(TestContext testContext)
         Assert.IsNull(regex.FindCaptures(input));
 
         cancellationToken.ThrowIfCancellationRequested();
-        long findBefore = GC.GetAllocatedBytesForCurrentThread();
-        ByteRegexMatch? match = regex.Find(input);
-        long findAllocated = GC.GetAllocatedBytesForCurrentThread() - findBefore;
+        ByteRegexMatch? match = null;
+        long findAllocated = AllocationMeter.Measure(() => match = regex.Find(input));
 
         cancellationToken.ThrowIfCancellationRequested();
-        long capturesBefore = GC.GetAllocatedBytesForCurrentThread();
-        ByteRegexCaptures? captures = regex.FindCaptures(input);
-        long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
+        ByteRegexCaptures? captures = null;
+        long capturesAllocated = AllocationMeter.Measure(() => captures = regex.FindCaptures(input));
 
         cancellationToken.ThrowIfCancellationRequested();
         Assert.IsNull(match);

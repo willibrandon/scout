@@ -180,9 +180,7 @@ public sealed class RegexNfaCompilerTests()
         _ = RegexNfaCompiler.Compile(tree.Root, options);
         _ = RegexNfaCompiler.Compile(tree.Root, options);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        _ = RegexNfaCompiler.Compile(tree.Root, options);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = AllocationMeter.Measure(() => RegexNfaCompiler.Compile(tree.Root, options));
 
         Assert.IsLessThanOrEqualTo(
             AllocationLimit, allocated,

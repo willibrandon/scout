@@ -405,19 +405,25 @@ public sealed class RegexCaptureEngineTests(TestContext testContext)
 
         bool replayed = true;
         int checksum = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 1_024; index++)
+        long replays = 0;
+        long allocated = AllocationMeter.Measure(() =>
         {
-            replayed &= engine.TryReplayCaptures(haystack, 3, 13, captureSlots);
-            checksum += captureSlots[5];
-        }
+            long replaysBefore = engine.OnePassReplayCount;
+            replayed = true;
+            checksum = 0;
+            for (int index = 0; index < 1_024; index++)
+            {
+                replayed &= engine.TryReplayCaptures(haystack, 3, 13, captureSlots);
+                checksum += captureSlots[5];
+            }
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            replays = engine.OnePassReplayCount - replaysBefore;
+        });
 
         Assert.IsTrue(replayed);
         Assert.AreEqual(13 * 1_024, checksum);
         Assert.AreSequenceEqual<int>([3, 13, 3, 9, 10, 13], captureSlots);
-        Assert.AreEqual(1_056, engine.OnePassReplayCount);
+        Assert.AreEqual(1_024, replays);
         Assert.IsTrue(engine.IsOnePassReplayEnabled);
         Assert.AreEqual(0, allocated);
     }
@@ -709,29 +715,24 @@ public sealed class RegexCaptureEngineTests(TestContext testContext)
         }
 
         const int ReplayCount = 1_024;
-        const int MeasurementSampleCount = 4;
-        _ = GC.GetAllocatedBytesForCurrentThread();
 
         bool replayed = true;
         int checksum = 0;
-        long minimumAllocated = long.MaxValue;
-        for (int sample = 0; sample < MeasurementSampleCount; sample++)
+        long allocated = AllocationMeter.Measure(() =>
         {
-            long before = GC.GetAllocatedBytesForCurrentThread();
+            replayed = true;
+            checksum = 0;
             for (int index = 0; index < ReplayCount; index++)
             {
                 replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
                 checksum += captureSlots[5];
             }
-
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            minimumAllocated = Math.Min(minimumAllocated, allocated);
-        }
+        });
 
         Assert.IsTrue(replayed);
-        Assert.AreEqual(13 * ReplayCount * MeasurementSampleCount, checksum);
+        Assert.AreEqual(13 * ReplayCount, checksum);
         Assert.AreSequenceEqual<int>([3, 13, 3, 9, 10, 13], captureSlots);
-        Assert.AreEqual(0, minimumAllocated);
+        Assert.AreEqual(0, allocated);
     }
 
     /// <summary>
