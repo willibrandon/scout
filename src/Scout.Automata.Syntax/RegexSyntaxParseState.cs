@@ -872,6 +872,11 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             return ParseUnicodePropertyClass(position, negated: escaped == (byte)'P');
         }
 
+        if (RegexSpecialEscape.TryDecode(escaped, out byte special))
+        {
+            return CreateEscapedLiteral(position, special, RegexLiteralKind.Special);
+        }
+
         RegexSyntaxNode? recognized = escaped switch
         {
             (byte)'A' => new RegexAtomNode(RegexSyntaxKind.AbsoluteStartAnchor, ReadOnlyMemory<byte>.Empty, position),
@@ -886,12 +891,6 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             (byte)'W' => new RegexAtomNode(RegexSyntaxKind.NotWordClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'s' => new RegexAtomNode(RegexSyntaxKind.WhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'S' => new RegexAtomNode(RegexSyntaxKind.NotWhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
-            (byte)'a' => CreateEscapedLiteral(position, 0x07, RegexLiteralKind.Special),
-            (byte)'f' => CreateEscapedLiteral(position, 0x0C, RegexLiteralKind.Special),
-            (byte)'t' => CreateEscapedLiteral(position, '\t', RegexLiteralKind.Special),
-            (byte)'n' => CreateEscapedLiteral(position, '\n', RegexLiteralKind.Special),
-            (byte)'r' => CreateEscapedLiteral(position, '\r', RegexLiteralKind.Special),
-            (byte)'v' => CreateEscapedLiteral(position, 0x0B, RegexLiteralKind.Special),
             _ => null,
         };
         if (recognized is not null)

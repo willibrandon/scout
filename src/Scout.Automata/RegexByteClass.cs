@@ -1086,24 +1086,12 @@ internal static class RegexByteClass
                     literal = escaped;
                     index += 2;
                     return true;
-                case (byte)'t':
-                    literal = (byte)'\t';
-                    index += 2;
-                    return true;
-                case (byte)'n':
-                    literal = (byte)'\n';
-                    index += 2;
-                    return true;
-                case (byte)'r':
-                    literal = (byte)'\r';
-                    index += 2;
-                    return true;
-                case (byte)'f':
-                    literal = (byte)'\f';
-                    index += 2;
-                    return true;
                 default:
-                    literal = escaped;
+                    if (!RegexSpecialEscape.TryDecode(escaped, out literal))
+                    {
+                        literal = escaped;
+                    }
+
                     index += 2;
                     return true;
             }
@@ -1215,24 +1203,8 @@ internal static class RegexByteClass
                     literal = escaped;
                     index += 2;
                     return true;
-                case (byte)'t':
-                    literal = '\t';
-                    index += 2;
-                    return true;
-                case (byte)'n':
-                    literal = '\n';
-                    index += 2;
-                    return true;
-                case (byte)'r':
-                    literal = '\r';
-                    index += 2;
-                    return true;
-                case (byte)'f':
-                    literal = '\f';
-                    index += 2;
-                    return true;
                 default:
-                    literal = escaped;
+                    literal = RegexSpecialEscape.TryDecode(escaped, out byte special) ? special : escaped;
                     index += 2;
                     return true;
             }

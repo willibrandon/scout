@@ -3861,19 +3861,7 @@ internal sealed class RegexPrefilter(
 
     private static bool TryGetEscapedClassLiteralByte(byte escaped, out byte value)
     {
-        value = escaped switch
-        {
-            (byte)'n' => (byte)'\n',
-            (byte)'t' => (byte)'\t',
-            (byte)'r' => (byte)'\r',
-            (byte)'f' => (byte)'\f',
-            (byte)'\\' => (byte)'\\',
-            (byte)']' => (byte)']',
-            (byte)'[' => (byte)'[',
-            (byte)'-' => (byte)'-',
-            (byte)'^' => (byte)'^',
-            _ => escaped,
-        };
+        value = RegexSpecialEscape.TryDecode(escaped, out byte special) ? special : escaped;
 
         return escaped is not ((byte)'d' or (byte)'D' or (byte)'w' or (byte)'W' or (byte)'s' or (byte)'S' or (byte)'p' or (byte)'P');
     }
