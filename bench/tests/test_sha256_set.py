@@ -143,7 +143,8 @@ class Sha256SetTests(unittest.TestCase):
                 "github-actions",
                 "xz",
                 "16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381\n"
-                "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c\n",
+                "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c\n"
+                "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f\n",
             ),
             (
                 "osx-arm64",
