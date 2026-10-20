@@ -15,6 +15,11 @@ on:
         options:
           - all
           - performance
+      dedicated:
+        description: Use the dedicated runners. CI sets this when the repository owner triggered the run it dispatches from; a dispatch under the Actions token otherwise carries the bot identity.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -45,7 +50,7 @@ jobs:
       - name: Route owner-triggered runs to the dedicated runners
         id: select
         env:
-          DEDICATED: ${{ github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+          DEDICATED: ${{ inputs.dedicated == true || (github.actor == github.repository_owner && github.triggering_actor == github.repository_owner && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) }}
         run: |
           if [ "$DEDICATED" = "true" ]; then
             printf '%s\n' macos-arm64=scout-macos-arm64 macos-x64=scout-macos-x64 windows-x64=scout-windows-x64 linux-x64=scout-linux-x64 oracle-environment=local >> "$GITHUB_OUTPUT"
