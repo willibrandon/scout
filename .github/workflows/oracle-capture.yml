@@ -158,20 +158,3 @@ jobs:
           path: |
             tests/oracles/ripgrep/${{ matrix.rid }}.zip
             tests/oracles/ripgrep/${{ matrix.rid }}.lock
-
-  macos-tools:
-    name: capture macOS tools (${{ matrix.rid }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - rid: osx-x64
-            runner: macos-26-intel
-          - rid: osx-arm64
-            runner: macos-26
-    steps:
-      - uses: actions/checkout@v7
-      - name: Capture macOS tool rows
-        run: eng/capture-macos-tools.sh

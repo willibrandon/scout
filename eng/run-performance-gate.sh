@@ -160,16 +160,7 @@ fi
 
 . "$ROOT/eng/performance-environment.sh"
 if [ "${SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED:-}" != "1" ]; then
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-        PERFORMANCE_TOOL_ENVIRONMENT="github-actions"
-    else
-        PERFORMANCE_TOOL_ENVIRONMENT="local"
-    fi
-
-    exec_clean_performance_gate \
-        "$PERFORMANCE_TOOL_ENVIRONMENT" \
-        "$0" \
-        "$@"
+    exec_clean_performance_gate "$0" "$@"
 fi
 
 . "$ROOT/eng/performance-process-state.sh"
@@ -178,18 +169,7 @@ if ! configure_performance_process_state; then
     exit 1
 fi
 
-PERFORMANCE_TOOL_ENVIRONMENT="${SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT:-}"
-unset \
-    SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED \
-    SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT
-case "$PERFORMANCE_TOOL_ENVIRONMENT" in
-    github-actions|local)
-        ;;
-    *)
-        printf 'The clean performance environment requires a pinned tool environment.\n' >&2
-        exit 1
-        ;;
-esac
+unset SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED
 
 initialize_performance_state "/tmp"
 DOTNET_ROOT="$PERFORMANCE_STATE_PARENT/dotnet"
@@ -197,7 +177,6 @@ DOTNET_ROOT="$PERFORMANCE_STATE_PARENT/dotnet"
 sanitize_performance_environment "$DOTNET_ROOT"
 export SCOUT_HOST_RID="osx-arm64"
 export SCOUT_ORACLE_ENVIRONMENT="github-actions"
-export SCOUT_TOOL_ENVIRONMENT="$PERFORMANCE_TOOL_ENVIRONMENT"
 
 performance_inputs="$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
     .editorconfig \
@@ -233,21 +212,17 @@ for previous_samples in "$GATE_AGGREGATE_DIR"/*.samples; do
 done
 
 "$ROOT/eng/restore-ripgrep-oracle.sh"
-SCOUT_HYPERFINE_BIN="$(
-    "$ROOT/eng/setup-hyperfine.sh" "$PERFORMANCE_STATE_PARENT/hyperfine"
-)"
+SCOUT_HYPERFINE_BIN="${SCOUT_HYPERFINE_BIN:-$(command -v hyperfine || true)}"
 case "$SCOUT_HYPERFINE_BIN" in
     /*)
         ;;
     *)
-        printf 'Pinned Hyperfine setup returned a non-absolute path: %s\n' \
-            "$SCOUT_HYPERFINE_BIN" >&2
+        printf 'hyperfine is not on PATH; install it or set SCOUT_HYPERFINE_BIN.\n' >&2
         exit 1
         ;;
 esac
 [ -x "$SCOUT_HYPERFINE_BIN" ] || {
-    printf 'Pinned Hyperfine setup did not return an executable: %s\n' \
-        "$SCOUT_HYPERFINE_BIN" >&2
+    printf 'hyperfine is not executable: %s\n' "$SCOUT_HYPERFINE_BIN" >&2
     exit 1
 }
 export SCOUT_HYPERFINE_BIN

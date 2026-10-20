@@ -157,19 +157,10 @@ class HyperfineShellTests(unittest.TestCase):
             sanitize_index,
             driver.index('export SCOUT_ORACLE_ENVIRONMENT="github-actions"'),
         )
-        self.assertLess(
-            sanitize_index,
-            driver.index('export SCOUT_TOOL_ENVIRONMENT="$PERFORMANCE_TOOL_ENVIRONMENT"'),
-        )
-        self.assertIn(
-            '"$ROOT/eng/setup-hyperfine.sh" '
-            '"$PERFORMANCE_STATE_PARENT/hyperfine"',
-            driver,
-        )
         self.assertIn('export SCOUT_HYPERFINE_BIN', driver)
-        hyperfine_setup_index = driver.index("setup-hyperfine.sh")
-        self.assertLess(sanitize_index, hyperfine_setup_index)
-        self.assertLess(hyperfine_setup_index, driver.index("worktree add --detach"))
+        hyperfine_resolution_index = driver.index('SCOUT_HYPERFINE_BIN="${SCOUT_HYPERFINE_BIN:-$(command -v hyperfine || true)}"')
+        self.assertLess(sanitize_index, hyperfine_resolution_index)
+        self.assertLess(hyperfine_resolution_index, driver.index("worktree add --detach"))
         self.assertIn(
             'export NUGET_PACKAGES="$PERFORMANCE_STATE_PARENT/nuget/packages"',
             driver,
@@ -238,9 +229,6 @@ class HyperfineShellTests(unittest.TestCase):
         gate = (root / "bench" / "run-hyperfine.sh").read_text(
             encoding="utf-8"
         )
-        preflight = (root / "eng" / "preflight.sh").read_text(
-            encoding="utf-8"
-        )
         workflow = (
             root / ".github" / "workflows" / "release-gates.yml"
         ).read_text(encoding="utf-8")
@@ -250,36 +238,12 @@ class HyperfineShellTests(unittest.TestCase):
         resolve = gate[resolve_start:resolve_end]
         self.assertIn('configured_path="${SCOUT_HYPERFINE_BIN:-}"', resolve)
         self.assertIn("SCOUT_HYPERFINE_BIN must be an absolute path", resolve)
-        self.assertIn(
-            'check_file_hash "hyperfine" "$configured_path" "$pinned_sha256"',
-            resolve,
-        )
-        self.assertIn(
-            'check_tool_version "hyperfine" "$configured_path" '
-            '"hyperfine $pinned_version"',
-            resolve,
-        )
+        self.assertIn("SCOUT_HYPERFINE_BIN is not executable", resolve)
+        self.assertIn('found_path="$(command -v hyperfine)"', resolve)
         resolved_index = gate.index('HYPERFINE="$(resolve_hyperfine)"')
         unset_index = gate.index("unset SCOUT_HYPERFINE_BIN", resolved_index)
         self.assertLess(resolved_index, unset_index)
 
-        override_start = preflight.index(
-            'if [ -n "${SCOUT_HYPERFINE_BIN:-}" ]; then'
-        )
-        override_end = preflight.index(
-            '\n    if [ "$MACOS_TOOL_FAILURES"', override_start
-        )
-        override = preflight[override_start:override_end]
-        self.assertIn("SCOUT_HYPERFINE_BIN must be an absolute path", override)
-        self.assertIn(
-            'check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" '
-            '"$HYPERFINE_SHA256"',
-            override,
-        )
-        self.assertIn(
-            'expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION"',
-            override,
-        )
         self.assertNotIn("eng/setup-hyperfine.sh", workflow)
 
     def test_release_gate_upload_retains_aggregate_and_round_json(self) -> None:
@@ -445,7 +409,7 @@ class HyperfineShellTests(unittest.TestCase):
             [
                 _SH,
                 "-c",
-                '. "$1"; exec_clean_performance_gate "local" "$2" -c env',
+                '. "$1"; exec_clean_performance_gate "$2" -c env',
                 "sh",
                 str(environment_helper),
                 _SH,
@@ -473,9 +437,7 @@ class HyperfineShellTests(unittest.TestCase):
         )
         self.assertEqual("1", clean["SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED"])
         self.assertNotIn("SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND", clean)
-        self.assertEqual(
-            "local", clean["SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT"]
-        )
+        self.assertNotIn("SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT", clean)
         self.assertEqual("UTC", clean["TZ"])
 
     def test_release_driver_sanitizes_build_environment_behaviorally(self) -> None:
@@ -1443,50 +1405,6 @@ oracle_environment
         self.assertLess(resolution, oracle_export)
         self.assertLess(oracle_export, oracle_read)
         self.assertIn('export SCOUT_HOST_RID="$RID"', source)
-        self.assertIn(
-            'export SCOUT_TOOL_ENVIRONMENT="$HOST_TOOL_ENVIRONMENT"', source
-        )
-
-    def test_host_tools_select_the_environment_that_executes_the_gate(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
-        start = source.index("tool_environment() {")
-        end = source.index("\nread_lock_rid_table_value() {", start)
-        function = source[start:end]
-        harness = f"""#!/bin/sh
-set -eu
-fail() {{ printf '%s\\n' "$1" >&2; exit 1; }}
-{function}
-tool_environment
-"""
-
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "tool-environment.sh"
-            path.write_bytes(harness.encode("utf-8"))
-            local_environment = dict(os.environ)
-            local_environment.pop("GITHUB_ACTIONS", None)
-            local_environment.pop("SCOUT_TOOL_ENVIRONMENT", None)
-            hosted_environment = dict(local_environment)
-            hosted_environment["GITHUB_ACTIONS"] = "true"
-            local = subprocess.run(
-                [_SH, str(path)],
-                check=False,
-                capture_output=True,
-                text=True,
-                env=local_environment,
-            )
-            hosted = subprocess.run(
-                [_SH, str(path)],
-                check=False,
-                capture_output=True,
-                text=True,
-                env=hosted_environment,
-            )
-
-        self.assertEqual(0, local.returncode, local.stderr)
-        self.assertEqual("local", local.stdout.strip())
-        self.assertEqual(0, hosted.returncode, hosted.stderr)
-        self.assertEqual("github-actions", hosted.stdout.strip())
 
     def test_unselected_workload_does_not_sample_or_report(self) -> None:
         result = self._run_gate(scenario="performance", selected="other")

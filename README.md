@@ -163,8 +163,7 @@ bench/run-hyperfine.sh --gate
 ```
 
 The driver builds from a detached worktree and keeps NuGet packages in a disposable state
-directory outside that worktree. It provisions the Hyperfine binary from the versioned and
-hash-verified bottle recorded in `tests/PREREQS.lock`. Generated benchmark inputs are also
+directory outside that worktree. It uses the Hyperfine on the path. Generated benchmark inputs are
 locked and verified. Every aggregate embeds their manifest together with the host, runner
 image, process state, binary hashes, and Native AOT build provenance.
 

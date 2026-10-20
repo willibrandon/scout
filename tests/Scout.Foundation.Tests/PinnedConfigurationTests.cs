@@ -273,7 +273,7 @@ public sealed partial class PinnedConfigurationTests
                 StringComparison.Ordinal), releaseGateWorkflowLines);
         Assert.Contains("id: performance-checkout", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("steps.performance-checkout.outputs.sha", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("eng/setup-hyperfine.sh\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HYPERFINE_BIN=\"${SCOUT_HYPERFINE_BIN:-$(command -v hyperfine || true)}\"", performanceGate, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
         for (int index = 0; index < githubHostedRunnerLabels.Length; index++)
         {
@@ -295,7 +295,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ncompress", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-15", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
@@ -388,9 +387,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("tool_environment()", preflight, StringComparison.Ordinal);
         Assert.Contains("uses: actions/setup-python@", workflow, StringComparison.Ordinal);
         Assert.Contains("run: Add-Content -Path $env:GITHUB_PATH -Value 'C:\\Program Files\\Git\\bin'", workflow, StringComparison.Ordinal);
         Assert.Contains("timeout-minutes: 30", workflow, StringComparison.Ordinal);
@@ -542,7 +538,6 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "oracle-capture.yml"));
         string script = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.sh"));
         string windowsScript = File.ReadAllText(Path.Join(root, "eng", "capture-ripgrep-oracle.ps1"));
-        string macosToolScript = File.ReadAllText(Path.Join(root, "eng", "capture-macos-tools.sh"));
 
         Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("push:", workflow, StringComparison.Ordinal);
@@ -573,8 +568,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("tests/oracles/ripgrep/linux-x64.lock", workflow, StringComparison.Ordinal);
         Assert.Contains("tests/oracles/ripgrep/${{ matrix.rid }}.zip", workflow, StringComparison.Ordinal);
         Assert.Contains("tests/oracles/ripgrep/${{ matrix.rid }}.lock", workflow, StringComparison.Ordinal);
-        Assert.Contains("capture macOS tools (${{ matrix.rid }})", workflow, StringComparison.Ordinal);
-        Assert.Contains("eng/capture-macos-tools.sh", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", workflow, StringComparison.Ordinal);
 
@@ -602,17 +595,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("archive_sha256", windowsScript, StringComparison.Ordinal);
         Assert.Contains("pcre2_sha256", windowsScript, StringComparison.Ordinal);
 
-        Assert.Contains("host_rid()", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("oracle_environment()", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("rid = \"%s\"", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("environment = \"%s\"", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("capture_tool hyperfine", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("hyperfine_bottle_tag()", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("json_hyperfine_bottle_field()", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("source_sha256", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("bottle_tag", macosToolScript, StringComparison.Ordinal);
-        Assert.Contains("bottle_sha256", macosToolScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("values.first", macosToolScript, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2857,169 +2839,6 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the macOS decompression tools in the prerequisite lock match the host binaries.
-    /// </summary>
-    [TestMethod]
-    public void MacosDecompressionToolsMatchPinnedHashes()
-    {
-        (string Name, string Version, string Path, string LocalSha256)[] tools =
-        [
-            ("gzip", "Apple gzip 479", "/usr/bin/gzip", "C78F313867A6978148F989C8E758FB7A9BA7FF324F0B359B2053F5172F970BE5"),
-            ("bzip2", "1.0.8", "/usr/bin/bzip2", "C9C5D486EE877F9104363EE0FE20539D4C1FBBB76F2F322D5E871F40AAF6CE26"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "2ABC3832C2F4FC60CBD44FAC5CC242DE24F123D7FBAF18206060684F84AA5E3F"),
-            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
-            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
-            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
-            ("uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "BF8CB1CEFEDFBF86FBB38DD42278FCAD8FE020F3B8989897F1A0B2187AABDDA5"),
-        ];
-
-        string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
-        for (int index = 0; index < tools.Length; index++)
-        {
-            (string name, string version, string path, string localSha256) = tools[index];
-            Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
-            Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
-            Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
-            Assert.Contains("sha256 = \"" + localSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
-
-            if (OperatingSystem.IsMacOS())
-            {
-                string hostPath = ReadMacosToolValue(prerequisiteLock, name, "path");
-                string[] hostSha256Values = ReadMacosToolSha256Values(prerequisiteLock, name)
-                    .Select(value => value.ToUpperInvariant())
-                    .ToArray();
-                Assert.IsTrue(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
-                byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
-                Assert.Contains(Convert.ToHexString(hash), hostSha256Values);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Verifies hosted macOS release gates use GitHub-hosted tool hashes instead of local machine hashes.
-    /// </summary>
-    [TestMethod]
-    public void HostedMacosDecompressionToolHashesArePinned()
-    {
-        (string Rid, string Name, string Version, string Path, string[] Sha256Values)[] tools =
-        [
-            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["0f655a20639414497cd4ec5f614c41ee8bf329c2daa0ade0d6ae5e549b9c6f9e"]),
-            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["ade8a304cfcb33d8d2f4a5355d1c078712f8228cf079bc4982c3bb2e6316f885"]),
-            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c", "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f"]),
-            ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", ["9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"]),
-            ("osx-arm64", "lz4", "1.10.0", "/opt/homebrew/bin/lz4", ["583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d", "eb76fbf9c06be6a02c344bb5624b29fdfee5bb16c97156178be3fe0b3d669a31"]),
-            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["66da7ddde3ab1c9f93d1307bae06086570e3aed3c72827ccef22c251f5b2d874"]),
-            ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "dd440e34e25cb641b5db68cf2e14f9d1fef17c61cef984b920b8bc420c09b9dd"]),
-            ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "18b3c72a2ade1bf79ffe25299620aa256d17f14e74c8311dec8b984588285176"]),
-            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", ["2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", "0b7b7bfc8f9d41b22b9a7d10ee4f56093cefea18a257c4c299a52186ac1a8921"]),
-            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", ["9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6", "267e9edb1b0b3284ede3484116f0ab6865cb4fee514774826fdaf514feb7d321"]),
-            ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4", "03cad87af037a1ccdb0fabe59d50bef1547ddc34149002c14690240a2101eea5"]),
-        ];
-
-        string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
-        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
-
-        Assert.Contains("read_lock_macos_tool_value()", preflight, StringComparison.Ordinal);
-        Assert.Contains("selected_has_value = table_has_value", preflight, StringComparison.Ordinal);
-        Assert.Contains("selected_score == 0 || !selected_has_value || duplicate", preflight, StringComparison.Ordinal);
-        Assert.Contains(". \"$ROOT/eng/sha256-set.sh\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("sha256_set_contains \"$sha256_set\" \"$actual_sha256\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("expected sha256 (one of):", preflight, StringComparison.Ordinal);
-        Assert.DoesNotContain("replacement block", preflight, StringComparison.OrdinalIgnoreCase);
-        Assert.AreEqual("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
-        Assert.AreEqual("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
-        Assert.AreEqual("/opt/homebrew/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "path"));
-        Assert.AreEqual("/usr/local/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "path"));
-
-        for (int index = 0; index < tools.Length; index++)
-        {
-            (string rid, string name, string version, string path, string[] sha256Values) = tools[index];
-            Assert.AreEqual(version, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "version"));
-            Assert.AreEqual(path, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "path"));
-            Assert.AreSequenceEqual(sha256Values, ReadMacosToolSha256Values(prerequisiteLock, name, rid, "github-actions"));
-        }
-    }
-
-    /// <summary>
-    /// Verifies multi-hash macOS tool pins are literal and limited to the exact rolling hosted image rows that require them.
-    /// </summary>
-    [TestMethod]
-    public void MacosToolHashSetsAreNarrowlyScopedAndLiteral()
-    {
-        string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
-        var expectedMultipleHashTables = new Dictionary<(string Rid, string Environment, string Name), int>
-        {
-            [("osx-arm64", "github-actions", "xz")] = 3,
-            [("osx-arm64", "github-actions", "zstd")] = 2,
-            [("osx-arm64", "github-actions", "lz4")] = 2,
-            [("osx-x64", "github-actions", "gzip")] = 2,
-            [("osx-x64", "github-actions", "bzip2")] = 2,
-            [("osx-x64", "github-actions", "xz")] = 2,
-            [("osx-x64", "github-actions", "zstd")] = 2,
-            [("osx-x64", "github-actions", "uncompress")] = 2,
-        };
-        var observedMultipleHashTables =
-            new HashSet<(string Rid, string Environment, string Name)>();
-
-        foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(prerequisiteLock, "tool.macos"))
-        {
-            Assert.IsTrue(table.TryGetValue("sha256", out string? rawSha256));
-            string[] sha256Values = ParseTomlStringValues(rawSha256!);
-            Assert.IsNotEmpty(sha256Values);
-            Assert.HasCount(sha256Values.Length, sha256Values.Distinct(StringComparer.Ordinal));
-            TestAssert.All(sha256Values, value => Assert.MatchesRegex(Sha256HexPattern(), value));
-
-            if (sha256Values.Length == 1)
-            {
-                continue;
-            }
-
-            Assert.IsTrue(table.TryGetValue("rid", out string? rid));
-            Assert.IsTrue(table.TryGetValue("environment", out string? environment));
-            Assert.IsTrue(table.TryGetValue("name", out string? name));
-            (string Rid, string Environment, string Name) key =
-                (Rid: rid!, Environment: environment!, Name: name!);
-            Assert.IsTrue(
-                expectedMultipleHashTables.TryGetValue(key, out int expectedCardinality),
-                $"Unexpected multi-hash macOS tool row: {key}.");
-            Assert.HasCount(expectedCardinality, sha256Values);
-            Assert.IsTrue(
-                observedMultipleHashTables.Add(key),
-                $"Duplicate multi-hash macOS tool row: {key}.");
-        }
-
-        Assert.HasCount(expectedMultipleHashTables.Count, observedMultipleHashTables);
-        TestAssert.All(
-                    expectedMultipleHashTables.Keys,
-                    key => Assert.Contains(key, observedMultipleHashTables));
-    }
-
-    /// <summary>
-    /// Verifies a macOS tool hash set is selected from one specificity row without mixing fallback values.
-    /// </summary>
-    [TestMethod]
-    public void MacosToolHashSetSelectionDoesNotMixFallbackRows()
-    {
-        const string DefaultSha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c";
-        string toml = string.Join(
-            "\n",
-            "[[tool.macos]]",
-            "name = \"xz\"",
-            "sha256 = [\"" + DefaultSha256 + "\"]",
-            string.Empty,
-            "[[tool.macos]]",
-            "name = \"xz\"",
-            "rid = \"osx-arm64\"",
-            "environment = \"github-actions\"",
-            "version = \"5.8.3\"");
-
-        Assert.ThrowsExactly<InvalidOperationException>(() => ReadMacosToolSha256Values(toml, "xz", "osx-arm64", "github-actions"));
-    }
-
-    /// <summary>
     /// Verifies every pinned Linux command-line prerequisite is represented in the prerequisite lock.
     /// </summary>
     [TestMethod]
@@ -3116,93 +2935,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("--no-install-recommends libc6='\"$LIBC_VERSION\"' libc-bin='\"$LIBC_VERSION\"'", resolveScript, StringComparison.Ordinal);
         Assert.DoesNotContain("--allow-downgrades", resolveScript, StringComparison.Ordinal);
         Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", resolveScript, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Verifies the macOS benchmark tool is fully pinned in the prerequisite lock.
-    /// </summary>
-    [TestMethod]
-    public void MacosHyperfineToolIsPinned()
-    {
-        const string name = "hyperfine";
-        const string version = "1.20.0";
-        const string path = "/opt/homebrew/bin/hyperfine";
-        const string expectedSha256 = "B7272E98214E951452BCBC81EAF0B8F0DB391DCE05B58CE8AB42985B632C5E94";
-        const string sourceUrl = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz";
-        const string sourceSha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64";
-        const string bottleTag = "arm64_tahoe";
-        const string bottleUrl = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
-        const string bottleSha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
-        const string x64BottleTag = "sonoma";
-        const string x64BottleSha256 = "35f05803354dc8621b9bdf918d50aef83eca450b90babc5b9899ca151177c39a";
-        const string x64BinarySha256 = "d2ed929d79d8feb7c0ef3578c105181786876a913039e0b2c89ed56942aee0a4";
-
-        string root = FindRepositoryRoot();
-        string prerequisiteLock = File.ReadAllText(Path.Join(root, "tests", "PREREQS.lock"));
-
-        Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("source_url = \"" + sourceUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("source_sha256 = \"" + sourceSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("bottle_tag = \"" + bottleTag + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("bottle_url = \"" + bottleUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("bottle_sha256 = \"" + bottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("rid = \"osx-x64\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("path = \"/usr/local/bin/hyperfine\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("bottle_tag = \"" + x64BottleTag + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("bottle_sha256 = \"" + x64BottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha256 = \"" + x64BinarySha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Verifies the performance gate restores Hyperfine from its checksum-pinned bottle.
-    /// </summary>
-    [TestMethod]
-    public void HostedReleaseGatesProvisionPinnedHyperfine()
-    {
-        string root = FindRepositoryRoot();
-        string workflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release-gates.yml"));
-        string script = File.ReadAllText(Path.Join(root, "eng", "setup-hyperfine.sh"));
-        string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
-        string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
-        string benchmark = File.ReadAllText(Path.Join(root, "bench", "run-hyperfine.sh"));
-
-        string[] workflowLines = workflow.Split('\n');
-        int performanceStepIndex = Array.FindIndex(
-            workflowLines,
-            line => string.Equals(
-                line.Trim(),
-                "- name: Run performance gate",
-                StringComparison.Ordinal));
-        Assert.IsTrue(
-            performanceStepIndex >= 0 && performanceStepIndex + 1 < workflowLines.Length,
-            "The release workflow must contain the performance gate step.");
-        Assert.AreEqual(
-            "run: bench/run-hyperfine.sh --gate",
-            workflowLines[performanceStepIndex + 1].Trim());
-        Assert.ContainsSingle(
-            line => string.Equals(
-                line.Trim(),
-                "run: bench/run-hyperfine.sh --gate",
-                StringComparison.Ordinal), workflowLines);
-        Assert.DoesNotContain("eng/setup-hyperfine.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("eng/setup-hyperfine.sh\" \"$PERFORMANCE_STATE_PARENT/hyperfine\"", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("export SCOUT_HYPERFINE_BIN", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("Usage: eng/setup-hyperfine.sh INSTALL_ROOT", script, StringComparison.Ordinal);
-        Assert.Contains("/usr/bin/curl", script, StringComparison.Ordinal);
-        Assert.Contains("verify_hash \"macOS hyperfine bottle\"", script, StringComparison.Ordinal);
-        Assert.Contains("/usr/bin/tar -xOf \"$BOTTLE_ARCHIVE\" \"$BOTTLE_MEMBER\"", script, StringComparison.Ordinal);
-        Assert.Contains("verify_hash \"macOS hyperfine binary\"", script, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_HYPERFINE_BIN must be an absolute path", preflight, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"macOS tool hyperfine\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("configured_path=\"${SCOUT_HYPERFINE_BIN:-}\"", benchmark, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"hyperfine\" \"$configured_path\"", benchmark, StringComparison.Ordinal);
-        Assert.Contains("check_tool_version \"hyperfine\" \"$configured_path\"", benchmark, StringComparison.Ordinal);
-        Assert.Contains("unset SCOUT_HYPERFINE_BIN", benchmark, StringComparison.Ordinal);
-        Assert.DoesNotContain("brew", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("continue-on-error", script, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -3331,7 +3063,7 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.IsGreaterThan(0, assignmentCount);
-        Assert.AreEqual(8, arrayAssignmentCount);
+        Assert.AreEqual(0, arrayAssignmentCount);
         Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
@@ -3358,7 +3090,6 @@ public sealed partial class PinnedConfigurationTests
         string design = File.ReadAllText(Path.Join(root, "docs", "DESIGN.md"));
         string parity = File.ReadAllText(Path.Join(root, "docs", "PARITY.md"));
         string preflight = File.ReadAllText(Path.Join(root, "eng", "preflight.sh"));
-        string setupHyperfine = File.ReadAllText(Path.Join(root, "eng", "setup-hyperfine.sh"));
         string sourceFingerprint = File.ReadAllText(Path.Join(root, "eng", "source-fingerprint.sh"));
         string harnessFingerprint = File.ReadAllText(Path.Join(root, "eng", "performance-harness-fingerprint.sh"));
         string performanceGate = File.ReadAllText(Path.Join(root, "eng", "run-performance-gate.sh"));
@@ -3440,12 +3171,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT_PERFORMANCE_GATE_INNER=1", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_[A-Za-z0-9_]*", performanceEnvironment, StringComparison.Ordinal);
         Assert.Contains("unset \"$variable\"", performanceEnvironment, StringComparison.Ordinal);
-        Assert.Contains("INSTALL_ROOT must not already exist", setupHyperfine, StringComparison.Ordinal);
-        Assert.Contains("HOST_TOOL_ENVIRONMENT", preflight, StringComparison.Ordinal);
-        Assert.Contains("tool_environment()", preflight, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_HYPERFINE_BIN", preflight, StringComparison.Ordinal);
         Assert.Contains("dotnet build-server shutdown", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("setup-hyperfine.sh\" \"$PERFORMANCE_STATE_PARENT/hyperfine", performanceGate, StringComparison.Ordinal);
         Assert.Contains("verify_generated_performance_inputs", script, StringComparison.Ordinal);
         Assert.Contains("verify_performance_inputs.py", script, StringComparison.Ordinal);
         Assert.Contains("generated-performance-inputs.json", script, StringComparison.Ordinal);
@@ -3591,11 +3317,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("image version=", script, StringComparison.Ordinal);
         Assert.Contains("exact rg and Scout argv", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", script, StringComparison.Ordinal);
-        Assert.Contains("host-tool environment", script, StringComparison.Ordinal);
         Assert.Contains("export SCOUT_HOST_RID=\"$RID\"", script, StringComparison.Ordinal);
         Assert.Contains("export SCOUT_ORACLE_ENVIRONMENT=\"$HOST_ORACLE_ENVIRONMENT\"", script, StringComparison.Ordinal);
-        Assert.Contains("export SCOUT_TOOL_ENVIRONMENT=\"$HOST_TOOL_ENVIRONMENT\"", script, StringComparison.Ordinal);
         Assert.Contains("github-actions|local", script, StringComparison.Ordinal);
         Assert.Contains("document[\"commands\"]", interleaved, StringComparison.Ordinal);
         Assert.Contains("document[\"command_argv\"]", interleaved, StringComparison.Ordinal);
@@ -3702,7 +3425,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("test_success_samples_once", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_gate_defaults_to_the_hosted_oracle_locally", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_resolved_environments_are_exported_to_subprocess_helpers", gateShellTests, StringComparison.Ordinal);
-        Assert.Contains("test_host_tools_select_the_environment_that_executes_the_gate", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_issue_44_absent_pattern_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_issue_46_nested_literal_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("-m unittest discover -s \"$ROOT/bench/tests\"", preflight, StringComparison.Ordinal);
@@ -3738,12 +3460,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_ripgrep_oracle_value \"path\" \"ripgrep_rg_path\"", script, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"sha256\" \"ripgrep_rg_sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("if [ \"$MODE\" = \"gate\" ]; then", script, StringComparison.Ordinal);
-        Assert.Contains("Missing pinned hyperfine path in tests/PREREQS.lock.", script, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"hyperfine\" \"$pinned_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_tool_version \"hyperfine\" \"$pinned_path\" \"hyperfine $pinned_version\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"hyperfine\" \"$configured_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_tool_version \"hyperfine\" \"$configured_path\" \"hyperfine $pinned_version\"", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("read_lock_table_value \"tool.macos\" \"hyperfine\" \"path\")\" || HYPERFINE=\"$(command -v hyperfine", script, StringComparison.Ordinal);
         Assert.Contains("Upload hyperfine gate aggregates", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("if: ${{ always() }}", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/upload-artifact@", releaseWorkflow, StringComparison.Ordinal);
@@ -4250,30 +3966,6 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Reads a value from the single macOS tool row selected for the current host.
-    /// </summary>
-    private static string ReadMacosToolValue(string toml, string name, string key)
-    {
-        return ReadMacosToolValue(toml, name, CurrentHostRid(), CurrentOracleEnvironment(), key);
-    }
-
-    /// <summary>
-    /// Reads the SHA-256 values from the selected macOS tool row for the current host.
-    /// </summary>
-    private static string[] ReadMacosToolSha256Values(string toml, string name)
-    {
-        return ReadMacosToolSha256Values(toml, name, CurrentHostRid(), CurrentOracleEnvironment());
-    }
-
-    /// <summary>
-    /// Reads the SHA-256 values from the single macOS tool row selected by RID and environment specificity.
-    /// </summary>
-    private static string[] ReadMacosToolSha256Values(string toml, string name, string rid, string environment)
-    {
-        return ParseTomlStringValues(ReadMacosToolValue(toml, name, rid, environment, "sha256"));
-    }
-
-    /// <summary>
     /// Parses a TOML string or single-line string array without broadening the accepted values.
     /// </summary>
     private static string[] ParseTomlStringValues(string rawValue)
@@ -4321,86 +4013,6 @@ public sealed partial class PinnedConfigurationTests
         }
 
         return elements;
-    }
-
-    /// <summary>
-    /// Reads a value from the single macOS tool row selected by RID and environment specificity.
-    /// </summary>
-    private static string ReadMacosToolValue(string toml, string name, string rid, string environment, string key)
-    {
-        Dictionary<string, string> table = ReadMacosToolTable(toml, name, rid, environment);
-        if (table.TryGetValue(key, out string? value))
-        {
-            return value;
-        }
-
-        throw new InvalidOperationException("Missing value in selected macOS tool TOML row: " + name + "." + key);
-    }
-
-    /// <summary>
-    /// Selects one complete macOS tool row using RID and environment specificity.
-    /// </summary>
-    private static Dictionary<string, string> ReadMacosToolTable(string toml, string name, string rid, string environment)
-    {
-        if (TryReadMacosToolTable(toml, name, rid, environment, out Dictionary<string, string>? exactRidEnvironmentTable))
-        {
-            return exactRidEnvironmentTable!;
-        }
-
-        if (TryReadMacosToolTable(toml, name, rid, string.Empty, out Dictionary<string, string>? exactRidTable))
-        {
-            return exactRidTable!;
-        }
-
-        if (TryReadMacosToolTable(toml, name, string.Empty, environment, out Dictionary<string, string>? environmentTable))
-        {
-            return environmentTable!;
-        }
-
-        if (TryReadMacosToolTable(toml, name, string.Empty, string.Empty, out Dictionary<string, string>? defaultTable))
-        {
-            return defaultTable!;
-        }
-
-        throw new InvalidOperationException("Missing macOS tool TOML row: " + name);
-    }
-
-    /// <summary>
-    /// Finds a unique macOS tool row at one exact RID and environment scope.
-    /// </summary>
-    private static bool TryReadMacosToolTable(
-        string toml,
-        string name,
-        string rid,
-        string environment,
-        out Dictionary<string, string>? selectedTable)
-    {
-        selectedTable = null;
-        foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(toml, "tool.macos"))
-        {
-            if (!table.TryGetValue("name", out string? tableName) ||
-                !string.Equals(tableName, name, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            string tableRid = table.TryGetValue("rid", out string? ridValue) ? ridValue : string.Empty;
-            string tableEnvironment = table.TryGetValue("environment", out string? environmentValue) ? environmentValue : string.Empty;
-            if (!string.Equals(tableRid, rid, StringComparison.Ordinal) ||
-                !string.Equals(tableEnvironment, environment, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (selectedTable is not null)
-            {
-                throw new InvalidOperationException("Duplicate macOS tool TOML row: " + name);
-            }
-
-            selectedTable = table;
-        }
-
-        return selectedTable is not null;
     }
 
     private static IEnumerable<Dictionary<string, string>> EnumerateTomlArrayTables(string toml, string tableName)

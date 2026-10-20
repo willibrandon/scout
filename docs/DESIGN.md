@@ -392,7 +392,7 @@ Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quar
 
 **Decompression tools** for the `-z`/`--pre` matrix — exactly the set upstream invokes, **derived mechanically from the default command table in `crates/cli/src/decompress.rs`** at the pin (not a guessed list): `gzip`, `bzip2`, `xz` (for both `xz` and `lzma` streams), `zstd`, `lz4`, `brotli`, and `uncompress` (`ncompress` on Linux), plus any others present in that table. Each resolves to a single exact version via the pinned snapshot date and is frozen in `PREREQS.lock`.
 
-**Benchmark & differential tooling:** `hyperfine` installed from a checksum-verified release pinned in `PREREQS.lock`; the **reference `rg`** is **captured from a build of the pinned upstream commit** (§0) with `--profile release-lto`, archived per hosted RID, and recorded in `PREREQS.lock` by both archive SHA-256 and individual binary SHA-256. Release Gates restore those exact archived bytes and fail on any archive or binary hash mismatch; new oracle bytes are produced only by the Oracle Capture workflow, not by Release Gates. BenchmarkDotNet pinned via central package management (§5.1).
+**Benchmark & differential tooling:** `hyperfine` from the host; the **reference `rg`** is **captured from a build of the pinned upstream commit** (§0) with `--profile release-lto`, archived per hosted RID, and recorded in `PREREQS.lock` by both archive SHA-256 and individual binary SHA-256. Release Gates restore those exact archived bytes and fail on any archive or binary hash mismatch; new oracle bytes are produced only by the Oracle Capture workflow, not by Release Gates. BenchmarkDotNet pinned via central package management (§5.1).
 
 **Corpora:** OpenSubtitles `en.txt` (the canonical ripgrep benchmark corpus) and a pinned linux-kernel source snapshot, each **fetched by pinned URL + SHA-256** recorded in `PREREQS.lock` and cached; the Linux tree is verified by a deterministic per-file manifest hash. CI fails on hash mismatch.
 
@@ -972,6 +972,6 @@ result = "PASS; needs libRuntime.VxsortEnabled.a"
 
 **No remaining `resolved@*` values:** `tests/PREREQS.lock` now contains literal hashes for both external benchmark corpora. `eng/fetch-corpora.sh` fetches those inputs, writes the cached artifacts under `artifacts/corpora`, and prints the replacement lockfile blocks with literal hashes.
 
-This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and macOS decompression tools: pin the determining **inputs**, capture each resulting **hash**, and verify exact membership thereafter.
+This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, and regex/encoding corpora: pin the determining **inputs**, capture each resulting **hash**, and verify exact membership thereafter.
 
 > Library names/extra link libraries (`Scout.Entry.a`/`.lib`, runtime archive set) are finalized against the pinned SDK's ILCompiler output during the M0 spike; the shape above is the contract.

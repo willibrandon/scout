@@ -20,8 +20,7 @@ else
             BASH_ENV \
             ENV \
             SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED \
-            SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND \
-            SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT
+            SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND
         exec /usr/bin/env -u BASHOPTS -u SHELLOPTS \
             "$ROOT/eng/run-performance-gate.sh" "$@"
     fi
@@ -79,9 +78,8 @@ usage() {
         '  SCOUT_BUILD_PROVENANCE            Native build provenance sidecar. Defaults to <scout-real>.provenance.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
-        '  SCOUT_HYPERFINE_BIN               Absolute Hyperfine binary. Hash and version must match tests/PREREQS.lock.' \
+        '  SCOUT_HYPERFINE_BIN               Absolute Hyperfine binary. Defaults to the hyperfine on PATH.' \
         '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: github-actions or local. Gate default: github-actions.' \
-        '  SCOUT_TOOL_ENVIRONMENT            Pinned host-tool environment: github-actions or local. Defaults from the host.' \
         '' \
         'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.' \
         'Use --gate --workload NAME to run one listed release-gate workload.'
@@ -163,26 +161,6 @@ oracle_environment() {
     fi
 }
 
-tool_environment() {
-    if [ -n "${SCOUT_TOOL_ENVIRONMENT:-}" ]; then
-        case "$SCOUT_TOOL_ENVIRONMENT" in
-            github-actions|local)
-                printf '%s\n' "$SCOUT_TOOL_ENVIRONMENT"
-                return
-                ;;
-            *)
-                fail "Unsupported SCOUT_TOOL_ENVIRONMENT for pinned host tools: $SCOUT_TOOL_ENVIRONMENT"
-                ;;
-        esac
-    fi
-
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-        printf 'github-actions\n'
-    else
-        printf 'local\n'
-    fi
-}
-
 read_lock_rid_table_value() {
     awk -v header="[[${1}]]" -v name="$2" -v rid="$3" -v environment="$4" -v key="$5" "$strip_toml_value"'
         function reset_table() {
@@ -239,79 +217,6 @@ read_lock_rid_table_value() {
             }
         }
     ' "$LOCK"
-}
-
-read_lock_environment_table_value() {
-    awk -v header="[[${1}]]" -v name="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
-        function reset_table() {
-            in_table = 0
-            table_name = ""
-            table_environment = ""
-            table_value = ""
-        }
-        function maybe_emit() {
-            if (found) {
-                return
-            }
-            if (in_table && table_name == name && table_environment == environment && table_value != "") {
-                print table_value
-                found = 1
-                exit 0
-            }
-        }
-        $0 == header {
-            maybe_emit()
-            in_table = 1
-            table_name = ""
-            table_environment = ""
-            table_value = ""
-            next
-        }
-        in_table && $0 ~ /^\[/ {
-            maybe_emit()
-            reset_table()
-        }
-        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
-            table_name = value_of($0)
-            next
-        }
-        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
-            table_environment = value_of($0)
-            next
-        }
-        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
-            table_value = value_of($0)
-            next
-        }
-        END {
-            maybe_emit()
-            if (!found) {
-                exit 1
-            }
-        }
-    ' "$LOCK"
-}
-
-read_macos_tool_value() {
-    name="$1"
-    key="$2"
-
-    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    read_lock_table_value "tool.macos" "$name" "$key"
 }
 
 read_corpus_value() {
@@ -573,7 +478,6 @@ print_repro_manifest() {
         --value "harness.script_sha256=$manifest_script_sha256" \
         --value "generated_inputs.manifest_sha256=$manifest_performance_inputs_sha256" \
         --value "oracle.environment=$HOST_ORACLE_ENVIRONMENT" \
-        --value "host_tools.environment=$HOST_TOOL_ENVIRONMENT" \
         --value "tool.rg_version=$manifest_rg_version" \
         --value "tool.rg_sha256=$manifest_rg_sha256" \
         --value "tool.scout_version=$manifest_scout_version" \
@@ -615,7 +519,6 @@ print_repro_manifest() {
     printf 'selection: %s\n' "$manifest_selection"
     printf 'rg: %s; sha256: %s; oracle environment: %s\n' \
         "$manifest_rg_version" "$manifest_rg_sha256" "$HOST_ORACLE_ENVIRONMENT"
-    printf 'host-tool environment: %s\n' "$HOST_TOOL_ENVIRONMENT"
     printf 'Scout: %s; launcher sha256: %s; payload sha256: %s\n' \
         "$manifest_scout_version" "$manifest_scout_sha256" "$manifest_scout_payload_sha256"
     printf 'Scout source: commit=%s; fingerprint=%s; dirty=%s\n' \
@@ -755,18 +658,7 @@ check_tree_hash() {
     [ "$actual" = "$expected" ] || fail "$label tree hash mismatch: expected $expected, got $actual"
 }
 
-check_tool_version() {
-    label="$1"
-    path="$2"
-    expected="$3"
-    actual="$("$path" --version | sed -n '1p')"
-    [ "$actual" = "$expected" ] || fail "$label version mismatch: expected $expected, got $actual"
-}
-
 resolve_hyperfine() {
-    pinned_path="$(read_macos_tool_value "hyperfine" "path")" || pinned_path=""
-    pinned_sha256="$(read_macos_tool_value "hyperfine" "sha256")" || pinned_sha256=""
-    pinned_version="$(read_macos_tool_value "hyperfine" "version")" || pinned_version=""
     configured_path="${SCOUT_HYPERFINE_BIN:-}"
 
     if [ -n "$configured_path" ]; then
@@ -777,37 +669,19 @@ resolve_hyperfine() {
                 fail "SCOUT_HYPERFINE_BIN must be an absolute path."
                 ;;
         esac
-        [ -n "$pinned_sha256" ] || fail "Missing pinned hyperfine hash in tests/PREREQS.lock."
-        [ -n "$pinned_version" ] || fail "Missing pinned hyperfine version in tests/PREREQS.lock."
         [ -x "$configured_path" ] || fail "SCOUT_HYPERFINE_BIN is not executable: $configured_path"
-        check_file_hash "hyperfine" "$configured_path" "$pinned_sha256"
-        check_tool_version "hyperfine" "$configured_path" "hyperfine $pinned_version"
         printf '%s\n' "$configured_path"
         return
     fi
 
+    if found_path="$(command -v hyperfine)"; then
+        printf '%s\n' "$found_path"
+        return
+    fi
+
     if [ "$MODE" = "gate" ]; then
-        [ -n "$pinned_path" ] || fail "Missing pinned hyperfine path in tests/PREREQS.lock."
-        [ -n "$pinned_sha256" ] || fail "Missing pinned hyperfine hash in tests/PREREQS.lock."
-        [ -n "$pinned_version" ] || fail "Missing pinned hyperfine version in tests/PREREQS.lock."
-        check_file_hash "hyperfine" "$pinned_path" "$pinned_sha256"
-        check_tool_version "hyperfine" "$pinned_path" "hyperfine $pinned_version"
-        printf '%s\n' "$pinned_path"
-        return
+        fail "hyperfine is not on PATH; install it or set SCOUT_HYPERFINE_BIN."
     fi
-
-    if [ -n "$pinned_path" ] && [ -x "$pinned_path" ]; then
-        if [ -n "$pinned_sha256" ]; then
-            check_file_hash "hyperfine" "$pinned_path" "$pinned_sha256"
-        fi
-        if [ -n "$pinned_version" ]; then
-            check_tool_version "hyperfine" "$pinned_path" "hyperfine $pinned_version"
-        fi
-        printf '%s\n' "$pinned_path"
-        return
-    fi
-
-    command -v hyperfine || true
 }
 
 resolve_python() {
@@ -1654,10 +1528,8 @@ fi
 
 RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
-HOST_TOOL_ENVIRONMENT="$(tool_environment)"
 export SCOUT_HOST_RID="$RID"
 export SCOUT_ORACLE_ENVIRONMENT="$HOST_ORACLE_ENVIRONMENT"
-export SCOUT_TOOL_ENVIRONMENT="$HOST_TOOL_ENVIRONMENT"
 DEFAULT_SCOUT_BIN="$ROOT/artifacts/bin/$RID/scout"
 SCOUT_BIN="${SCOUT_BIN:-$DEFAULT_SCOUT_BIN}"
 RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missing ripgrep oracle path in tests/PREREQS.lock."

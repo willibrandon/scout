@@ -24,9 +24,8 @@ validate_performance_metadata_value() {
 }
 
 exec_clean_performance_gate() {
-    tool_environment="$1"
-    driver="$2"
-    shift 2
+    driver="$1"
+    shift 1
 
     metadata_runner_name="$(validate_performance_metadata_value \
         "${RUNNER_NAME:-local}" "RUNNER_NAME")" || return 1
@@ -43,7 +42,6 @@ exec_clean_performance_gate() {
         SCOUT_PERFORMANCE_GATE_IMAGE_OS="$metadata_image_os" \
         SCOUT_PERFORMANCE_GATE_IMAGE_VERSION="$metadata_image_version" \
         SCOUT_PERFORMANCE_GATE_RUNNER_NAME="$metadata_runner_name" \
-        SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT="$tool_environment" \
         TZ="UTC" \
         "$driver" "$@"
 }

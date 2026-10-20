@@ -70,8 +70,8 @@ accepted names. Gate mode selects the hosted pinned rg binary by default.
 The workflow and local release gate both invoke `bench/run-hyperfine.sh --gate`.
 Every gate form delegates to a shared driver that restores the oracle,
 provisions the SHA-512-pinned macOS arm64 .NET SDK in disposable state,
-validates the exact SDK and runtime inventory, restores the checksum-pinned
-Hyperfine bottle into disposable state, validates the corpora, runs preflight,
+validates the exact SDK and runtime inventory, takes the Hyperfine on the path,
+validates the corpora, runs preflight,
 builds Native AOT, and invokes the gate. A complete
 gate requires committed and clean performance inputs; a focused workload uses
 the same release-equivalent preparation while developing a change.
@@ -84,7 +84,7 @@ use disposable state outside it. The aggregate JSON and raw per-round sample
 directories are copied back when the run ends.
 Oracle restoration, corpus materialization, and build orchestration use fresh
 home, temporary, XDG, .NET CLI, and Python user state for every run. The driver
-selects the pinned host-tool set, then clears inherited CI, runner, Homebrew,
+clears inherited CI, runner, Homebrew,
 Git, native-toolchain, .NET, NuGet, allocator, and Python configuration.
 The rg oracle is the hosted release-LTO binary in both environments. Host tools
 use the frozen local or GitHub Actions hash set for the machine that executes
@@ -104,10 +104,9 @@ The hyperfine performance gate runs on GitHub-hosted `macos-26` arm64. The
 pinned CI runner labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel,
 macos-26, windows-2025-vs2026, and windows-11-arm`; those are the only labels
 the configuration allows. The workflow restores the captured pinned release-LTO `rg` oracle
-archive for the hosted RID. The performance driver restores the exact locked
-Hyperfine bottle into its private state, fetches the pinned corpora into
-`artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
-before measuring. Cancelled, failed, or stale CI
+archive for the hosted RID. The performance driver takes the Hyperfine on the
+path, fetches the pinned corpora into `artifacts/corpora`, and verifies the
+frozen corpus and oracle hashes from `tests/PREREQS.lock` before measuring. Cancelled, failed, or stale CI
 completions do not queue release work.
 Runs that are not owner-triggered do not require any personal machine,
 privately managed runner, or repository secret.

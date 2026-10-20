@@ -14,7 +14,7 @@ revision, and make the evidence easy to review.
 - Bash on Windows when running differential/native release checks.
 
 The full differential and performance suites also need the pinned ripgrep
-oracle, decompression tools, and corpora recorded in `tests/PREREQS.lock`. CI
+oracle and corpora recorded in `tests/PREREQS.lock`. CI
 restores the captured hosted oracle archives; local setup uses
 `eng/setup-ripgrep-oracle.*`, `eng/fetch-corpora.sh --all`, and
 `eng/preflight.sh`.
