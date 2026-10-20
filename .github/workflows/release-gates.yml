@@ -281,6 +281,9 @@ jobs:
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    env:
+      SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+      SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
     strategy:
       fail-fast: false
       matrix:
@@ -338,6 +341,9 @@ jobs:
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    env:
+      SCOUT_ORACLE_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
+      SCOUT_TOOL_ENVIRONMENT: ${{ matrix.rid == 'win-x64' && needs.runners.outputs.oracle-environment || 'github-actions' }}
     strategy:
       fail-fast: false
       matrix:
@@ -414,6 +420,7 @@ jobs:
         env:
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
           SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+          SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
       - name: Upload hyperfine gate aggregates
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
