@@ -69,6 +69,7 @@ jobs:
       - name: Restore release reference
         env:
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/restore-ripgrep-oracle.sh
       - name: Verify output and measure compilation and traversal
         env:
@@ -299,6 +300,7 @@ jobs:
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
         run: eng/restore-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
@@ -406,6 +408,7 @@ jobs:
         run: bench/run-hyperfine.sh --gate
         env:
           SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
+          SCOUT_TOOL_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}
       - name: Upload hyperfine gate aggregates
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
