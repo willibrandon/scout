@@ -1300,22 +1300,6 @@ internal sealed class RegexStartPredicate(
                     : WhitespaceByteVariants();
                 sealedToken = options.UnicodeClasses;
                 return true;
-            case (byte)'n':
-                variants = [[(byte)'\n']];
-                rangeLiteral = (byte)'\n';
-                return true;
-            case (byte)'t':
-                variants = [[(byte)'\t']];
-                rangeLiteral = (byte)'\t';
-                return true;
-            case (byte)'r':
-                variants = [[(byte)'\r']];
-                rangeLiteral = (byte)'\r';
-                return true;
-            case (byte)'f':
-                variants = [[(byte)'\f']];
-                rangeLiteral = (byte)'\f';
-                return true;
             case (byte)'x':
             case (byte)'u':
                 if (RegexByteClass.TryReadEscapedHexByte(expression, ref index, escaped, out byte hexLiteral))
@@ -1335,10 +1319,11 @@ internal sealed class RegexStartPredicate(
             case (byte)'P':
                 return false;
             default:
+                byte literal = RegexSpecialEscape.TryDecode(escaped, out byte special) ? special : escaped;
                 var bytes = new List<byte>();
-                AddClassLiteralFirstByte(bytes, escaped, options);
+                AddClassLiteralFirstByte(bytes, literal, options);
                 variants = ToSingleByteVariants(bytes);
-                rangeLiteral = escaped;
+                rangeLiteral = literal;
                 return true;
         }
     }
@@ -1825,22 +1810,6 @@ internal sealed class RegexStartPredicate(
 
                 bytes = WhitespaceBytes();
                 return true;
-            case (byte)'n':
-                bytes = [(byte)'\n'];
-                rangeLiteral = (byte)'\n';
-                return true;
-            case (byte)'t':
-                bytes = [(byte)'\t'];
-                rangeLiteral = (byte)'\t';
-                return true;
-            case (byte)'r':
-                bytes = [(byte)'\r'];
-                rangeLiteral = (byte)'\r';
-                return true;
-            case (byte)'f':
-                bytes = [(byte)'\f'];
-                rangeLiteral = (byte)'\f';
-                return true;
             case (byte)'x':
             case (byte)'u':
                 if (RegexByteClass.TryReadEscapedHexByte(expression, ref index, escaped, out byte hexLiteral))
@@ -1858,8 +1827,9 @@ internal sealed class RegexStartPredicate(
             case (byte)'P':
                 return false;
             default:
-                bytes = [escaped];
-                rangeLiteral = escaped;
+                byte literal = RegexSpecialEscape.TryDecode(escaped, out byte special) ? special : escaped;
+                bytes = [literal];
+                rangeLiteral = literal;
                 return true;
         }
     }

@@ -417,14 +417,7 @@ internal sealed class RegexTabbedLogCaptureEngine
                 return false;
             }
 
-            value = expression[1] switch
-            {
-                (byte)'t' => (byte)'\t',
-                (byte)'n' => (byte)'\n',
-                (byte)'r' => (byte)'\r',
-                (byte)'f' => (byte)'\f',
-                _ => expression[1],
-            };
+            value = RegexSpecialEscape.TryDecode(expression[1], out byte special) ? special : expression[1];
             return true;
         }
 

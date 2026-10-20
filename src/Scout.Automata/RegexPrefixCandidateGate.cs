@@ -255,13 +255,7 @@ internal sealed class RegexPrefixCandidateGate
         }
 
         byte escaped = expression[index++];
-        literal = escaped switch
-        {
-            (byte)'t' => (byte)'\t',
-            (byte)'r' => (byte)'\r',
-            (byte)'f' => (byte)'\f',
-            _ => escaped,
-        };
+        literal = RegexSpecialEscape.TryDecode(escaped, out byte special) ? special : escaped;
         return escaped is not ((byte)'d' or (byte)'D' or (byte)'w' or (byte)'W' or (byte)'s' or (byte)'S' or (byte)'p' or (byte)'P');
     }
 
