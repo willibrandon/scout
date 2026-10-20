@@ -21,7 +21,7 @@ internal sealed unsafe partial class RawStandardStream(
     private readonly int _unixFileDescriptor = unixFileDescriptor;
     private readonly bool _canRead = access == FileAccess.Read || access == FileAccess.ReadWrite;
     private readonly bool _canWrite = access == FileAccess.Write || access == FileAccess.ReadWrite;
-    private readonly WindowsConsoleWriter? _windowsConsole = OpenWindowsConsole(windowsHandle, access);
+    private readonly WindowsConsoleWriter? _consoleWriter = OpenWindowsConsole(windowsHandle, access);
 
     /// <inheritdoc />
     public override bool CanRead => _canRead;
@@ -213,9 +213,9 @@ internal sealed unsafe partial class RawStandardStream(
 
     private int WriteWindows(byte* buffer, int length)
     {
-        if (_windowsConsole is not null)
+        if (_consoleWriter is not null)
         {
-            return _windowsConsole.Write(new ReadOnlySpan<byte>(buffer, length));
+            return _consoleWriter.Write(new ReadOnlySpan<byte>(buffer, length));
         }
 
         if (WriteFile(_windowsHandle, buffer, length, out int bytesWritten, IntPtr.Zero) == 0)
