@@ -241,12 +241,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
         Assert.Contains("runs-on: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
+        Assert.Contains("github.actor == github.repository_owner && github.triggering_actor == github.repository_owner", workflow, StringComparison.Ordinal);
+        Assert.Contains("github.event.pull_request.head.repo.full_name == github.repository", workflow, StringComparison.Ordinal);
+        Assert.Contains("macos-arm64=scout-macos-arm64 macos-x64=scout-macos-x64 windows-x64=scout-windows-x64 linux-x64=scout-linux-x64 oracle-environment=local", workflow, StringComparison.Ordinal);
+        Assert.Contains("macos-arm64=macos-26 macos-x64=macos-26-intel windows-x64=windows-2025-vs2026 linux-x64=ubuntu-24.04 oracle-environment=github-actions", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: ${{ needs.runners.outputs.macos-x64 }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: ${{ needs.runners.outputs.macos-arm64 }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: ${{ needs.runners.outputs.windows-x64 }}", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh\" --gate", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("runs-on: macos-26", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ${{ needs.runners.outputs.macos-arm64 }}", releaseGateWorkflow, StringComparison.Ordinal);
         string[] releaseGateWorkflowLines = releaseGateWorkflow.Split('\n');
         int performanceStepIndex = Array.FindIndex(
             releaseGateWorkflowLines,
@@ -277,7 +281,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("exact successful commit SHA", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("pinned release-LTO `rg` oracle", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("stale CI", benchmarkReadme, StringComparison.Ordinal);
-        Assert.Contains("It does not require any personal machine", benchmarkReadme, StringComparison.Ordinal);
+        Assert.Contains("Runs that are not owner-triggered do not require any personal machine", benchmarkReadme, StringComparison.Ordinal);
         Assert.DoesNotContain("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", releaseGateWorkflow, StringComparison.Ordinal);
@@ -381,7 +385,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("oracle_environment()", script, StringComparison.Ordinal);
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT: github-actions", workflow, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT: ${{ needs.runners.outputs.oracle-environment }}", workflow, StringComparison.Ordinal);
         Assert.Contains("timeout-minutes: 30", workflow, StringComparison.Ordinal);
         Assert.Contains("win-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
@@ -3639,7 +3643,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("aggregate, output-verification, and raw per-round JSON", readme, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate --workload linux_heldout_capture_general", readme, StringComparison.Ordinal);
         Assert.Contains("worker count makes search concurrency identical", readme, StringComparison.Ordinal);
-        Assert.Contains("hosted `macos-26` result is the release decision", readme, StringComparison.Ordinal);
+        Assert.Contains("result of that run is the release decision", readme, StringComparison.Ordinal);
         Assert.Contains("all six hosted release RIDs", readme, StringComparison.Ordinal);
         Assert.Contains("timer-resolution artifact", readme, StringComparison.Ordinal);
         Assert.Contains("ten valid", readme, StringComparison.Ordinal);
