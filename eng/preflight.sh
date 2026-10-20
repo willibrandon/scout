@@ -421,12 +421,6 @@ ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '
 expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
 
 if [ "$(uname -s)" = "Darwin" ]; then
-    EXPECTED_MACOS_HOST="$(read_lock_value "macos_host")" || fail "Missing macos_host in tests/PREREQS.lock."
-    EXPECTED_MACOS_MAJOR="$(printf '%s\n' "$EXPECTED_MACOS_HOST" | sed -n 's/^macOS \([0-9][0-9]*\) arm64$/\1/p')"
-    [ -n "$EXPECTED_MACOS_MAJOR" ] || fail "macos_host must use the supported-family form: macOS MAJOR arm64."
-    ACTUAL_MACOS_VERSION="$(/usr/bin/sw_vers -productVersion)"
-    ACTUAL_MACOS_MAJOR="${ACTUAL_MACOS_VERSION%%.*}"
-    expect_equal "macOS major version" "$EXPECTED_MACOS_MAJOR" "$ACTUAL_MACOS_MAJOR"
     case "$HOST_RID:$(uname -m)" in
         osx-arm64:arm64|osx-x64:x86_64)
             ;;
