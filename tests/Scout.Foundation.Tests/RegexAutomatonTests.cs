@@ -5573,13 +5573,15 @@ public sealed class RegexAutomatonTests(TestContext testContext)
         }
 
         long count = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int iteration = 0; iteration < 128; iteration++)
+        long allocated = AllocationMeter.Measure(() =>
         {
-            count += plan.Matcher.CountMatches(matchingLine);
-        }
+            count = 0;
+            for (int iteration = 0; iteration < 128; iteration++)
+            {
+                count += plan.Matcher.CountMatches(matchingLine);
+            }
+        });
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.AreEqual(128, count);
         Assert.AreEqual(0, allocated);
         Assert.IsFalse(HasCreatedUnanchoredLazyDfaPool(plan.Matcher));
@@ -5685,26 +5687,29 @@ public sealed class RegexAutomatonTests(TestContext testContext)
         }
 
         bool allMatched = true;
-        int totalLength = 0;
-        long beforeDense = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 1_024; index++)
+        int denseLength = 0;
+        int sparseLength = 0;
+        long denseAllocations = AllocationMeter.Measure(() =>
         {
-            allMatched &= denseDfa!.TryMatchAt(denseHaystack, start: 0, out int length);
-            totalLength += length;
-        }
-
-        long denseAllocations = GC.GetAllocatedBytesForCurrentThread() - beforeDense;
-        long beforeSparse = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 1_024; index++)
+            denseLength = 0;
+            for (int index = 0; index < 1_024; index++)
+            {
+                allMatched &= denseDfa!.TryMatchAt(denseHaystack, start: 0, out int length);
+                denseLength += length;
+            }
+        });
+        long sparseAllocations = AllocationMeter.Measure(() =>
         {
-            allMatched &= sparseDfa!.TryMatchAt(sparseHaystack, start: 0, out int length);
-            totalLength += length;
-        }
-
-        long sparseAllocations = GC.GetAllocatedBytesForCurrentThread() - beforeSparse;
+            sparseLength = 0;
+            for (int index = 0; index < 1_024; index++)
+            {
+                allMatched &= sparseDfa!.TryMatchAt(sparseHaystack, start: 0, out int length);
+                sparseLength += length;
+            }
+        });
 
         Assert.IsTrue(allMatched);
-        Assert.AreEqual(1_024 * (6 + 11), totalLength);
+        Assert.AreEqual(1_024 * (6 + 11), denseLength + sparseLength);
         Assert.AreEqual(0, denseAllocations);
         Assert.AreEqual(0, sparseAllocations);
     }
@@ -6128,9 +6133,8 @@ public sealed class RegexAutomatonTests(TestContext testContext)
             excludedLineTerminator: (byte)'\n');
         Assert.IsNotNull(RegexPrefilter.Compile(tree.Root, options));
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        RegexPrefilter? prefilter = null;
+        long allocated = AllocationMeter.Measure(() => prefilter = RegexPrefilter.Compile(tree.Root, options));
 
         Assert.IsNotNull(prefilter);
         Assert.AreEqual(RegexPrefilterKind.RequiredLiteral, prefilter.Kind);
@@ -7195,9 +7199,9 @@ public sealed class RegexAutomatonTests(TestContext testContext)
             Assert.AreEqual(haystack.Length - 1, warmLength);
         }
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        bool matched = engine.TryMatchAt(haystack, start: 0, out int length);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        bool matched = false;
+        int length = 0;
+        long allocated = AllocationMeter.Measure(() => matched = engine.TryMatchAt(haystack, start: 0, out length));
 
         Assert.IsTrue(matched);
         Assert.AreEqual(haystack.Length - 1, length);

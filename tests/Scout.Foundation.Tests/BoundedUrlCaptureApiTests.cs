@@ -41,14 +41,12 @@ public sealed class BoundedUrlCaptureApiTests(TestContext testContext)
         AssertBoundedUrlCaptures(regex.FindCaptures(input), input);
 
         cancellationToken.ThrowIfCancellationRequested();
-        long findBefore = GC.GetAllocatedBytesForCurrentThread();
-        ByteRegexMatch? match = regex.Find(input);
-        long findAllocated = GC.GetAllocatedBytesForCurrentThread() - findBefore;
+        ByteRegexMatch? match = null;
+        long findAllocated = AllocationMeter.Measure(() => match = regex.Find(input));
 
         cancellationToken.ThrowIfCancellationRequested();
-        long capturesBefore = GC.GetAllocatedBytesForCurrentThread();
-        ByteRegexCaptures? captures = regex.FindCaptures(input);
-        long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
+        ByteRegexCaptures? captures = null;
+        long capturesAllocated = AllocationMeter.Measure(() => captures = regex.FindCaptures(input));
 
         cancellationToken.ThrowIfCancellationRequested();
         Assert.AreEqual(new ByteRegexMatch(14, 90), match);

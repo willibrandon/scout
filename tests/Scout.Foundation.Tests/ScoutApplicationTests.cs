@@ -4756,21 +4756,21 @@ public sealed class ScoutApplicationTests
                 captureSlots);
         }
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int index = 0; index < 1_024; index++)
+        long allocated = AllocationMeter.Measure(() =>
         {
-            ReplacementFormatter.WriteExpanded(
-                output,
-                "$kind:$name:$suffix:$9"u8,
-                haystack,
-                matchStart: 3,
-                matchLength: 10,
-                plan,
-                template,
-                captureSlots);
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int index = 0; index < 1_024; index++)
+            {
+                ReplacementFormatter.WriteExpanded(
+                    output,
+                    "$kind:$name:$suffix:$9"u8,
+                    haystack,
+                    matchStart: 3,
+                    matchLength: 10,
+                    plan,
+                    template,
+                    captureSlots);
+            }
+        });
 
         Assert.AreEqual(0, allocated);
     }

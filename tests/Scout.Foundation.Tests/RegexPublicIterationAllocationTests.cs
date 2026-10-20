@@ -197,30 +197,34 @@ public sealed class RegexPublicIterationAllocationTests
 
     private static long MeasureIterationAllocation(
         ByteRegex regex,
-        ReadOnlySpan<byte> input,
+        byte[] input,
         out int count)
     {
         int callbackCount = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        count = regex.ForEachMatch(input, ref callbackCount, CountMatch);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.AreEqual(count, callbackCount);
+        int matches = 0;
+        long allocated = AllocationMeter.Measure(() =>
+        {
+            callbackCount = 0;
+            matches = regex.ForEachMatch(input, ref callbackCount, CountMatch);
+        });
+        Assert.AreEqual(matches, callbackCount);
+        count = matches;
         return allocated;
     }
 
     private static long MeasureOneShotFindAllocation(
         RegexMatcher matcher,
-        ReadOnlySpan<byte> input,
+        byte[] input,
         int iterationCount)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
         MatcherMatch? match = null;
-        for (int index = 0; index < iterationCount; index++)
+        long allocated = AllocationMeter.Measure(() =>
         {
-            match = matcher.Find(input);
-        }
-
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            for (int index = 0; index < iterationCount; index++)
+            {
+                match = matcher.Find(input);
+            }
+        });
         Assert.IsNull(match);
         return allocated;
     }

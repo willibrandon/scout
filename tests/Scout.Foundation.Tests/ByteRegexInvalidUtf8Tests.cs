@@ -695,9 +695,9 @@ public sealed class ByteRegexInvalidUtf8Tests(TestContext testContext)
         ByteRegex regex,
         byte[] input)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        long count = regex.Count(input);
-        return (count, GC.GetAllocatedBytesForCurrentThread() - before);
+        long count = 0;
+        long allocatedBytes = AllocationMeter.Measure(() => count = regex.Count(input));
+        return (count, allocatedBytes);
     }
 
     private static (long Count, long AllocatedBytes) MeasureIterationAllocations(
@@ -705,9 +705,12 @@ public sealed class ByteRegexInvalidUtf8Tests(TestContext testContext)
         byte[] input)
     {
         long state = 0;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        int count = regex.ForEachMatch(input, ref state, CountMatch);
-        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        int count = 0;
+        long allocatedBytes = AllocationMeter.Measure(() =>
+        {
+            state = 0;
+            count = regex.ForEachMatch(input, ref state, CountMatch);
+        });
         Assert.AreEqual(state, count);
         return (count, allocatedBytes);
     }

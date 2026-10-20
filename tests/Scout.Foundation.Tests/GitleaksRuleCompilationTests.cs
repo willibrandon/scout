@@ -78,9 +78,8 @@ public sealed class GitleaksRuleCompilationTests()
         _ = ByteRegex.Compile(Pattern, options);
         _ = ByteRegex.Compile(Pattern, options);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var regex = ByteRegex.Compile(Pattern, options);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        ByteRegex? regex = null;
+        long allocated = AllocationMeter.Measure(() => regex = ByteRegex.Compile(Pattern, options));
 
         GC.KeepAlive(regex);
         Assert.IsLessThanOrEqualTo(
