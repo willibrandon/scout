@@ -205,6 +205,13 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
 
     private RegexSyntaxNode ParseGroup(int position)
     {
+        // regex-syntax calls bump_space right after the opening parenthesis, so under x whitespace
+        // and comments may come before the question mark, although ?P< itself stays together.
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
+
         if (_index < Pattern.Length && Pattern[_index] == (byte)'?')
         {
             _index++;
@@ -1285,14 +1292,8 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
     {
         while (_index < Pattern.Length)
         {
-            byte value = Pattern[_index];
-            if (IsExtendedWhitespaceByte(value))
-            {
-                _index++;
-                continue;
-            }
-
-            if (value == (byte)'#')
+            SkipWhitespace();
+            if (_index < Pattern.Length && Pattern[_index] == (byte)'#')
             {
                 _index++;
                 while (_index < Pattern.Length && Pattern[_index] != (byte)'\n')
@@ -1307,6 +1308,31 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         }
     }
 
+    /// <summary>
+    /// Skips whitespace the way regex-syntax's <c>char::is_whitespace</c> sees it, regardless of the x flag.
+    /// </summary>
+    private void SkipWhitespace()
+    {
+        while (_index < Pattern.Length)
+        {
+            byte value = Pattern[_index];
+            if (IsExtendedWhitespaceByte(value))
+            {
+                _index++;
+                continue;
+            }
+
+            if (value < 0x80 ||
+                Rune.DecodeFromUtf8(Pattern[_index..], out Rune rune, out int length) != OperationStatus.Done ||
+                !Rune.IsWhiteSpace(rune))
+            {
+                break;
+            }
+
+            _index += length;
+        }
+    }
+
     private void ParseCountedRepetition(out int minimum, out int? maximum)
     {
         _index++;
@@ -1315,11 +1341,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             SkipExtendedPatternWhitespace();
         }
 
-        if (!TryReadDecimal(out minimum))
-        {
-            Throw("repetition quantifier expects a valid decimal");
-        }
-
+        minimum = ParseRepetitionDecimal();
         maximum = minimum;
         if (_index < Pattern.Length && Pattern[_index] == (byte)',')
         {
@@ -1329,16 +1351,11 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
                 SkipExtendedPatternWhitespace();
             }
 
-            maximum = null;
-            if (_index < Pattern.Length && IsAsciiDigitByte(Pattern[_index]))
-            {
-                if (!TryReadDecimal(out int parsedMaximum))
-                {
-                    Throw("invalid repetition maximum");
-                }
-
-                maximum = parsedMaximum;
-            }
+            // regex-syntax reads a second number whenever the next byte is not the closing brace, so
+            // a{2, } without x is an empty decimal rather than an open range.
+            maximum = _index < Pattern.Length && Pattern[_index] != (byte)'}'
+                ? ParseRepetitionDecimal()
+                : null;
         }
 
         if (_index >= Pattern.Length || Pattern[_index] != (byte)'}')
@@ -1352,6 +1369,27 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         }
 
         _index++;
+    }
+
+    /// <summary>
+    /// Reads one repetition count the way regex-syntax's <c>parse_decimal</c> does: whitespace is skipped
+    /// around the digits whether or not the x flag is set, and comments only when it is.
+    /// </summary>
+    private int ParseRepetitionDecimal()
+    {
+        SkipWhitespace();
+        if (!TryReadDecimal(out int value))
+        {
+            Throw("repetition quantifier expects a valid decimal");
+        }
+
+        SkipWhitespace();
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
+
+        return value;
     }
 
     private bool TryReadDecimal(out int value)
