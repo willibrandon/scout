@@ -15,10 +15,13 @@ internal sealed unsafe partial class RawStandardStream(
     int unixFileDescriptor,
     FileAccess access) : Stream
 {
+    private const uint WindowsCodePageUtf8 = 65001;
+
     private readonly IntPtr _windowsHandle = windowsHandle;
     private readonly int _unixFileDescriptor = unixFileDescriptor;
     private readonly bool _canRead = access == FileAccess.Read || access == FileAccess.ReadWrite;
     private readonly bool _canWrite = access == FileAccess.Write || access == FileAccess.ReadWrite;
+    private readonly WindowsConsoleWriter? _windowsConsole = OpenWindowsConsole(windowsHandle, access);
 
     /// <inheritdoc />
     public override bool CanRead => _canRead;
@@ -138,6 +141,36 @@ internal sealed unsafe partial class RawStandardStream(
         }
     }
 
+    private static WindowsConsoleWriter? OpenWindowsConsole(IntPtr handle, FileAccess access)
+    {
+        if (!OperatingSystem.IsWindows() || access == FileAccess.Read)
+        {
+            return null;
+        }
+
+        // GetConsoleMode only succeeds for a real console, not for pipes or MSYS terminals, and a
+        // console already on the UTF-8 code page takes the bytes through WriteFile unchanged.
+        if (GetConsoleMode(handle, out _) == 0 || GetConsoleOutputCP() == WindowsCodePageUtf8)
+        {
+            return null;
+        }
+
+        return new WindowsConsoleWriter(units => WriteWindowsConsole(handle, units));
+    }
+
+    private static int WriteWindowsConsole(IntPtr handle, ReadOnlySpan<char> units)
+    {
+        fixed (char* pointer = units)
+        {
+            if (WriteConsoleW(handle, pointer, units.Length, out int unitsWritten, IntPtr.Zero) == 0)
+            {
+                ThrowIoException(Marshal.GetLastPInvokeError());
+            }
+
+            return unitsWritten;
+        }
+    }
+
     private int ReadUnix(byte* buffer, int length)
     {
         nint result = Read(_unixFileDescriptor, buffer, (nuint)length);
@@ -180,6 +213,11 @@ internal sealed unsafe partial class RawStandardStream(
 
     private int WriteWindows(byte* buffer, int length)
     {
+        if (_windowsConsole is not null)
+        {
+            return _windowsConsole.Write(new ReadOnlySpan<byte>(buffer, length));
+        }
+
         if (WriteFile(_windowsHandle, buffer, length, out int bytesWritten, IntPtr.Zero) == 0)
         {
             int error = Marshal.GetLastPInvokeError();
@@ -210,4 +248,16 @@ internal sealed unsafe partial class RawStandardStream(
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial int WriteFile(IntPtr file, byte* buffer, int bytesToWrite, out int bytesWritten, IntPtr overlapped);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial int GetConsoleMode(IntPtr handle, out uint mode);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll")]
+    private static partial uint GetConsoleOutputCP();
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial int WriteConsoleW(IntPtr console, char* buffer, int unitsToWrite, out int unitsWritten, IntPtr reserved);
 }
