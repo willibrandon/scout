@@ -355,8 +355,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The MSI install check needs an administrator session, which the dedicated runner service does not have.
           - rid: win-x64
-            runner: ${{ needs.runners.outputs.windows-x64 }}
+            runner: windows-2025-vs2026
             vsarch: amd64
             wixarch: x64
           - rid: win-arm64

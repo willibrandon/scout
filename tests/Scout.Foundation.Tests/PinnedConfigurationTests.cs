@@ -1844,6 +1844,19 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the win-x64 release package builds on a hosted runner, where the MSI install check has an administrator session.
+    /// </summary>
+    [TestMethod]
+    public void WindowsReleasePackageBuildsOnHostedRunner()
+    {
+        string root = FindRepositoryRoot();
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release.yml"));
+
+        Assert.Contains("- rid: win-x64\n            runner: windows-2025-vs2026\n", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("name: Verify MSI installs correctly", releaseWorkflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies tagged releases publish the supported library packages as well as the CLI tool packages.
     /// </summary>
     [TestMethod]
