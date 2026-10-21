@@ -409,33 +409,58 @@ jobs:
             -out artifacts\packages\scout-$rid.msi
           $hash = (Get-FileHash -Algorithm SHA256 -Path "artifacts\packages\scout-$rid.msi").Hash.ToLowerInvariant()
           Set-Content -Encoding ascii -Path "artifacts\packages\scout-$rid.msi.sha256" -Value "$hash  scout-$rid.msi"
-      - name: Verify MSI installs correctly
+      # The dedicated Windows runner runs as NETWORK SERVICE, which may not launch the
+      # Windows Installer service (msiexec exits 1601), so read the package in process
+      # instead of installing it on the host.
+      - name: Verify MSI contents
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: |
-          $logFile = "artifacts\packages\msi-install.log"
-          $installMsi = "artifacts\packages\scout-win-x64-install-smoke.msi"
-          Copy-Item "artifacts\packages\scout-win-x64.msi" $installMsi -Force
-          try {
-            $proc = Start-Process msiexec.exe -ArgumentList "/i", $installMsi, "/qn", "/l*v", $logFile -Wait -NoNewWindow -PassThru
-            if ($proc.ExitCode -ne 0) {
-              Write-Error "MSI installation failed with exit code: $($proc.ExitCode)"
-              if (Test-Path $logFile) {
-                Get-Content $logFile | Select-Object -Last 50
-              }
-              exit 1
-            }
-            $exePath = "${env:ProgramFiles}\scout\scout.exe"
-            if (-not (Test-Path $exePath)) {
-              Write-Error "scout.exe not found at $exePath"
-              exit 1
-            }
-            & $exePath -V
+          $ErrorActionPreference = "Stop"
+          $work = Join-Path $env:RUNNER_TEMP "scout-msi-verify"
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          wix msi decompile artifacts\packages\scout-win-x64.msi -x "$work\export" -o "$work\scout.wxs"
+          if ($LASTEXITCODE -ne 0) {
+            throw "wix msi decompile failed with exit code $LASTEXITCODE"
           }
-          finally {
-            Start-Process msiexec.exe -ArgumentList "/x", $installMsi, "/qn" -Wait -NoNewWindow
-            Start-Sleep -Seconds 2
-            Remove-Item $installMsi -Force -ErrorAction SilentlyContinue
+          $ns = @{ w = "http://wixtoolset.org/schemas/v4/wxs" }
+          $wxs = [xml](Get-Content -Raw "$work\scout.wxs")
+          $installDir = Select-Xml -Xml $wxs -Namespace $ns -XPath "//w:StandardDirectory[@Id='ProgramFiles64Folder']/w:Directory[@Id='INSTALLFOLDER' and @Name='scout']" |
+            Select-Object -First 1 -ExpandProperty Node
+          if ($null -eq $installDir) {
+            throw "MSI does not install into ProgramFiles64Folder\scout"
+          }
+          if (-not (Select-Xml -Xml $installDir -Namespace $ns -XPath ".//w:Environment[@Name='PATH' and @System='yes' and @Action='set' and @Value='[INSTALLFOLDER]']")) {
+            throw "MSI does not add the install folder to the system PATH"
+          }
+          $layout = Join-Path $work "layout"
+          $packaged = @{}
+          foreach ($file in (Select-Xml -Xml $installDir -Namespace $ns -XPath ".//w:File" | ForEach-Object Node)) {
+            $relative = $file.GetAttribute("Name")
+            for ($parent = $file.ParentNode; -not [object]::ReferenceEquals($parent, $installDir); $parent = $parent.ParentNode) {
+              if ($parent.LocalName -eq "Directory") {
+                $relative = Join-Path $parent.GetAttribute("Name") $relative
+              }
+            }
+            $target = Join-Path $layout $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+            Copy-Item (Join-Path "$work\export\File" $file.GetAttribute("Id")) $target
+            $packaged[$relative] = (Get-FileHash -Algorithm SHA256 -Path $target).Hash
+          }
+          $stage = (Resolve-Path "artifacts\packages\stage\scout-win-x64").Path
+          $staged = Get-ChildItem -Path $stage -Recurse -File
+          if ($staged.Count -ne $packaged.Count) {
+            throw "MSI holds $($packaged.Count) files but the stage holds $($staged.Count)"
+          }
+          foreach ($file in $staged) {
+            $relative = [IO.Path]::GetRelativePath($stage, $file.FullName)
+            if ($packaged[$relative] -ne (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash) {
+              throw "MSI copy of $relative is missing or differs from the stage"
+            }
+          }
+          & "$layout\scout.exe" -V
+          if ($LASTEXITCODE -ne 0) {
+            throw "scout.exe -V from the MSI failed with exit code $LASTEXITCODE"
           }
       - name: Pack RID-specific dotnet tool
         shell: pwsh

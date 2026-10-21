@@ -1844,6 +1844,22 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the release MSI check reads the package in process, because the NETWORK SERVICE runner
+    /// cannot launch the Windows Installer service that msiexec needs.
+    /// </summary>
+    [TestMethod]
+    public void WindowsReleaseWorkflowVerifiesMsiWithoutInstalling()
+    {
+        string root = FindRepositoryRoot();
+        string releaseWorkflow = File.ReadAllText(Path.Join(root, ".github", "workflows", "release.yml"));
+
+        Assert.Contains("wix msi decompile artifacts\\packages\\scout-win-x64.msi -x \"$work\\export\" -o \"$work\\scout.wxs\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("throw \"MSI copy of $relative is missing or differs from the stage\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("""& "$layout\scout.exe" -V""", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("msiexec.exe", releaseWorkflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies tagged releases publish the supported library packages as well as the CLI tool packages.
     /// </summary>
     [TestMethod]
