@@ -78,7 +78,8 @@ def main() -> None:
                 run([str(executable)], f"{framework}-{mode}-execute", consumer)
                 receipts.append({"framework": framework, "mode": mode, "executed": True,
                                  "sha256": hashlib.sha256(executable.read_bytes()).hexdigest()})
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    commit = subprocess.check_output(
+        ["git", "-c", f"safe.directory={root}", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     packages = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(feed.glob("*.nupkg"))}
     (output / "results.json").write_text(json.dumps({"commit": commit, "rid": args.rid,
         "packages": packages, "consumers": receipts}, indent=2) + "\n")
